@@ -6,7 +6,7 @@ import { useLocale, useTranslations } from 'next-intl'
 import { Globe } from 'lucide-react'
 
 interface LanguageSwitcherProps {
- 
+
   variant?: 'pill' | 'compact'
 }
 
@@ -40,7 +40,7 @@ export default function LanguageSwitcher({ variant = 'pill' }: LanguageSwitcherP
   return (
     <button type="button" onClick={switchLanguage} disabled={pending}
       aria-label={t('ariaLabel')}
-      className="inline-flex items-center gap-1.5 text-sm font-semibold border rounded-full px-3 py-1 transition-colors">
+      className="inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-sm font-semibold transition-colors">
       <Globe className="h-3.5 w-3.5" />
       <span>{t('switchTo')}</span>
     </button>
