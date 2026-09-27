@@ -1,5 +1,6 @@
 'use client'
 import { useTranslations } from 'next-intl';
+import { useLocale } from 'next-intl'
 import Link from 'next/link'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { useParams, usePathname, useRouter } from 'next/navigation'
@@ -26,6 +27,7 @@ function isNeutralRoute(pathname: string) {
 
 export function AppShell({ children }: { children: ReactNode }) {
   const t = useTranslations('components.layout.app-shell');
+  const locale = useLocale()
   const params = useParams()
   const pathname = usePathname()
   const router = useRouter()
@@ -39,7 +41,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   const wearBrand = Boolean(currentBrandId) && !isNeutralRoute(pathname)
   const accent = currentBrandId ? accents[currentBrandId] : undefined
-  const crumbBrand = brands.find((b) => b.id === currentBrandId)
+  const crumbBrand = brands.find((b) => b.id === currentBrandId) ?? (pathname === '/account' ? brands[0] : undefined)
 
   useEffect(() => {
     setNavOpen(false)
@@ -106,28 +108,38 @@ export function AppShell({ children }: { children: ReactNode }) {
             TRENDY AI
           </span>
 
-          {/* مسار التنقل + مبدّل اللغة على طرف الشريط (مثل الفيجما) */}
-          <div className="ms-auto">
-            <div dir="ltr" className="flex items-center gap-[10px] font-readex">
-              <nav
-                aria-label="breadcrumb"
-                className="hidden items-center gap-[5px] text-[13px] md:flex"
+          <div dir="ltr" className="flex min-w-0 flex-1 items-center justify-between gap-3">
+            <LanguageSwitcher />
+            <nav
+              dir={locale}
+              aria-label={t('breadcrumb_label')}
+              className="hidden items-center gap-[5px] font-readex text-[13px] md:flex"
+            >
+              <Link
+                href="/brands"
+                className="font-medium text-brand-headline/80 no-underline hover:underline"
               >
-                <Link
-                  href="/brands"
-                  className="font-medium text-brand-headline/80 no-underline hover:underline"
-                >
-                  {t('breadcrumb_brands')}
-                </Link>
-                {crumbBrand && (
-                  <>
-                    <span className="text-brand-headline/40">/</span>
-                    <span className="text-brand-headline/50">{crumbBrand.name}</span>
-                  </>
-                )}
-              </nav>
-              <LanguageSwitcher variant="compact" />
-            </div>
+                {t('breadcrumb_brands')}
+              </Link>
+              {crumbBrand && (
+                <>
+                  <span className="text-brand-headline/40">/</span>
+                  <span className="text-brand-headline/50">{crumbBrand.name}</span>
+                </>
+              )}
+              {pathname.endsWith('/settings') && (
+                <>
+                  <span className="text-brand-headline/40">/</span>
+                  <span className="font-semibold text-brand-primary">{t('breadcrumb_settings')}</span>
+                </>
+              )}
+              {pathname === '/account' && (
+                <>
+                  <span className="text-brand-headline/40">/</span>
+                  <span className="font-semibold text-brand-primary">{t('breadcrumb_account')}</span>
+                </>
+              )}
+            </nav>
           </div>
         </header>
         <main className="min-w-0 flex-1 overflow-y-auto px-4 py-5 md:px-[30px] md:py-6">
