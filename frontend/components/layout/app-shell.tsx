@@ -108,7 +108,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             TRENDY AI
           </span>
 
-          <div dir="ltr" className="flex min-w-0 flex-1 items-center justify-between gap-3">
+          <div dir={locale === 'ar' ? 'ltr' : 'rtl'} className="flex min-w-0 flex-1 items-center justify-between gap-3">
             <LanguageSwitcher />
             <nav
               dir={locale}
