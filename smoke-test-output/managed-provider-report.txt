@@ -1,0 +1,16 @@
+Sprint 4 Managed Provider Smoke Test
+Image output: D:\Level4\TREND\smoke-test-output\managed-image.png
+Configuration: PASS
+Image model: gpt-image-2
+Text model: gpt-5-mini
+Image generation: PASS
+Image bytes: 1598241
+Image request id: req_2a96356ded4a460b912f08abfde6acd6
+Image validation: PASS
+Storage upload: PASS
+Signed URL retrieval: PASS
+Temporary object cleanup: PASS
+Caption generation: PASS
+Caption request id: req_33680a7eb9cf44c1a19b892dc9c25241
+Caption preview: قهوة مثلجة فاخرة — رفاهية في كل رشفة
+Overall: PASS

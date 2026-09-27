@@ -238,7 +238,7 @@ class TargetAudience(BaseModel):
         return self
     segments: list[AudienceSegmentEnum] = Field(
         default_factory=list,
-        max_length=2,
+        max_length=3,
     )
     location: str | None = Field(default=None, max_length=100)
     age_range: AgeRangeEnum | None = None

@@ -5,7 +5,9 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel
 import jwt
-from jwt import PyJWKClient, PyJWTError
+from jwt import PyJWKClient
+from jwt.exceptions import PyJWKClientError, PyJWTError
+
 
 from app.config import settings
 
@@ -77,13 +79,14 @@ def get_current_user(credentials: Optional[HTTPAuthorizationCredentials] = Depen
 
         return User(id=user_id, email=email, access_token=credentials.credentials)
 
-    except PyJWTError:
-        logger.exception("JWT decode failed")
+    except (PyJWTError, PyJWKClientError):
+        logger.warning("JWT validation failed")
         raise _auth_error(
             status.HTTP_401_UNAUTHORIZED,
             "INVALID_TOKEN",
             "Invalid authentication token",
         )
+
 
 
 def get_current_admin_user(user: User = Depends(get_current_user)) -> User:

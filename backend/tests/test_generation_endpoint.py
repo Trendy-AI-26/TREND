@@ -8,6 +8,8 @@ from app.core.auth import User, get_current_user
 from app.routers import generations
 from app.models.generation import GenerateRequest, ProviderEnum, PlatformPresetEnum, LogoModeEnum
 
+from pydantic import ValidationError
+
 # Sample valid brief for the payload
 VALID_BRIEF = {
     "campaign_goal": "product_launch",
@@ -279,4 +281,61 @@ async def test_generate_endpoint_persists_language(
 
     assert inserted["language"] == "en"
 
+
+def test_generate_request_accepts_three_audience_segments():
+    payload = {
+        "brief": {
+            "campaign_goal": "product_launch",
+            "content_type": "product_showcase",
+            "target_audience": {
+                "segments": [
+                    "small_business_owners",
+                    "marketers_creators",
+                    "online_shoppers",
+                ],
+                "location": "Amman",
+                "age_range": "25_34",
+                "gender_focus": "all",
+                "details": "أصحاب مشاريع صغيرة",
+            },
+            "core_idea": "إطلاق منتج جديد",
+            "voice_tone": "friendly",
+        },
+        "provider": "openai",
+        "platform_preset": "instagram_post",
+        "logo_mode": "none",
+    }
+
+    request = GenerateRequest.model_validate(payload)
+
+    assert len(request.brief.target_audience.segments) == 3
+
+
+def test_generate_request_rejects_four_audience_segments():
+    payload = {
+        "brief": {
+            "campaign_goal": "product_launch",
+            "content_type": "product_showcase",
+            "target_audience": {
+                "segments": [
+                    "small_business_owners",
+                    "marketers_creators",
+                    "online_shoppers",
+                    "professionals",
+                ],
+                "location": "Amman",
+                "age_range": "25_34",
+                "gender_focus": "all",
+                "details": "أصحاب مشاريع صغيرة",
+            },
+            "core_idea": "إطلاق منتج جديد",
+            "voice_tone": "friendly",
+        },
+        "provider": "openai",
+        "platform_preset": "instagram_post",
+        "logo_mode": "none",
+    }
+
+    with pytest.raises(ValidationError):
+        GenerateRequest.model_validate(payload)
 

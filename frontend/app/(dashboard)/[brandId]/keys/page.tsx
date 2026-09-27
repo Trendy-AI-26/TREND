@@ -1,4 +1,12 @@
-// 'use client'
+// BYOK UI is temporarily disabled while provider-key management is being redesigned.
+export default function KeysPage() {
+  return (
+    <div className="space-y-2">
+      <h1 className="text-[30px] font-semibold leading-[1.16] tracking-tight">Provider keys</h1>
+      <p className="text-muted-foreground">Provider key management is temporarily unavailable.</p>
+    </div>
+  )
+}
 
 // import { useTranslations } from 'next-intl';
 // import { useState } from 'react'

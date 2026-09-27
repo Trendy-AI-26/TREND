@@ -11,6 +11,7 @@ from app.models.generation import (
     GenerateRequest,
     PlatformPresetEnum,
     ProviderEnum,
+    TargetAudience,
     TextLanguageEnum,
     VoiceToneEnum,
 )
@@ -56,23 +57,6 @@ def test_generation_brief_serializes_to_json_compatible_values():
 
 def test_generation_brief_rejects_unknown_campaign_goal():
     payload = {**VALID_BRIEF, "campaign_goal": "not_a_real_goal"}
-
-    with pytest.raises(ValidationError):
-        GenerationBrief.model_validate(payload)
-
-
-def test_generation_brief_rejects_more_than_two_audience_segments():
-    payload = {
-        **VALID_BRIEF,
-        "target_audience": {
-            **VALID_BRIEF["target_audience"],
-            "segments": [
-                "small_business_owners",
-                "entrepreneurs",
-                "professionals",
-            ],
-        },
-    }
 
     with pytest.raises(ValidationError):
         GenerationBrief.model_validate(payload)
@@ -347,5 +331,61 @@ def test_generation_brief_preserves_mixed_script_text():
 
     assert brief.core_idea == mixed_text
     assert brief.text_to_include == mixed_text
+
+
+def test_target_audience_accepts_one_segment():
+    audience = TargetAudience(
+        segments=["small_business_owners"],
+    )
+
+    assert len(audience.segments) == 1
+    assert audience.segments[0].value == "small_business_owners"
+   
+
+
+def test_generation_brief_accepts_three_audience_segments():
+    payload = {
+        **VALID_BRIEF,
+        "target_audience": {
+            **VALID_BRIEF["target_audience"],
+            "segments": [
+                "small_business_owners",
+                "entrepreneurs",
+                "professionals",
+            ],
+        },
+    }
+
+    brief = GenerationBrief.model_validate(payload)
+
+    assert len(brief.target_audience.segments) == 3
+
+
+
+def test_target_audience_rejects_four_segments():
+    with pytest.raises(ValidationError):
+        TargetAudience(
+            segments=[
+                "small_business_owners",
+                "marketers_creators",
+                "online_shoppers",
+                "professionals",
+            ],
+        )
+
+
+def test_target_audience_rejects_duplicate_segments():
+    with pytest.raises(ValidationError):
+        TargetAudience(
+            segments=[
+                "small_business_owners",
+                "small_business_owners",
+            ],
+        )
+
+
+def test_target_audience_rejects_empty_segments():
+    with pytest.raises(ValidationError):
+        TargetAudience(segments=[])
 
 
