@@ -4,6 +4,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Literal
 from pydantic import BaseModel, Field, field_validator, model_validator
+from uuid import UUID
 
 
 class ProviderEnum(str, Enum):
@@ -348,7 +349,8 @@ class GenerateRequest(BaseModel):
     provider: ProviderEnum
     platform_preset: PlatformPresetEnum
     logo_mode: LogoModeEnum = LogoModeEnum.none
-
+    product_asset_id: UUID | None = None
+    
 
 __all__ = [
     "ProviderEnum",
@@ -370,4 +372,5 @@ __all__ = [
     "VoiceToneEnum",
     "TargetAudience",
     "GenerationBrief",
+    
 ]

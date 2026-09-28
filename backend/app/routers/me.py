@@ -32,6 +32,17 @@ def _error_response(status_code: int, code: str, message: str) -> HTTPException:
         status_code=status_code,
         detail={"error": {"code": code, "message": message, "request_id": str(uuid4())}},
     )
+def _avatar_storage_key(avatar_path: str) -> str:
+    """
+    Return the path relative to the avatars Storage bucket.
+    """
+    prefix = "avatars/"
+
+    if avatar_path.startswith(prefix):
+        return avatar_path[len(prefix):]
+
+    return avatar_path
+
 
 ALLOWED_AVATAR_TYPES = {
     "image/jpeg": "jpg",
@@ -116,24 +127,33 @@ async def update_profile(
     )
 
 
-def _create_avatar_signed_url(client, avatar_path: str) -> str:
+def _create_avatar_signed_url(
+    client,
+    avatar_path: str,
+) -> str:
+    storage_key = _avatar_storage_key(avatar_path)
+
     result = (
         client.storage
-        .from_(settings.AVATAR_BUCKET)
-        .create_signed_url(avatar_path, 3600)
+        .from_(settings.AVATARS_BUCKET)
+        .create_signed_url(storage_key, 3600)
     )
 
     if isinstance(result, dict):
-        signed_url = result.get("signedURL") or result.get("signed_url")
+        signed_url = (
+            result.get("signedURL")
+            or result.get("signed_url")
+        )
 
         if signed_url:
             return signed_url
 
     raise _error_response(
-        status.HTTP_502_BAD_GATEWAY,
+        502,
         "AVATAR_URL_FAILED",
         "Could not create avatar URL",
     )
+
 @router.post(
     "/me/avatar",
     response_model=AvatarUploadResponse,
@@ -168,9 +188,11 @@ async def upload_avatar(
     extension = ALLOWED_AVATAR_TYPES[file.content_type]
 
     avatar_path = (
-        f"users/{current_user.id}/avatar/"
-        f"{uuid4()}.{extension}"
+    f"avatars/{current_user.id}/avatar.{extension}"
     )
+    storage_key = _avatar_storage_key(avatar_path)
+
+
 
     client = get_service_client()
 
@@ -188,8 +210,8 @@ async def upload_avatar(
         old_avatar_path = profile_result.data.get("avatar_path")
 
     try:
-        client.storage.from_(settings.AVATAR_BUCKET).upload(
-            avatar_path,
+        client.storage.from_(settings.AVATARS_BUCKET).upload(
+            storage_key,
             image_bytes,
             {
                 "content-type": file.content_type,
@@ -205,7 +227,7 @@ async def upload_avatar(
         )
 
         if not update_result.data:
-            client.storage.from_(settings.AVATAR_BUCKET).remove(
+            client.storage.from_(settings.AVATARS_BUCKET).remove(
                 [avatar_path]
             )
 
@@ -217,7 +239,7 @@ async def upload_avatar(
 
         if old_avatar_path:
             try:
-                client.storage.from_(settings.AVATAR_BUCKET).remove(
+                client.storage.from_(settings.AVATARS_BUCKET).remove(
                     [old_avatar_path]
                 )
             except Exception:
@@ -245,7 +267,7 @@ async def upload_avatar(
         )
 
         try:
-            client.storage.from_(settings.AVATAR_BUCKET).remove(
+            client.storage.from_(settings.AVATARS_BUCKET).remove(
                 [avatar_path]
             )
         except Exception:
@@ -259,5 +281,6 @@ async def upload_avatar(
             "AVATAR_UPLOAD_FAILED",
             "Could not upload avatar",
         ) from exc
+
 
 

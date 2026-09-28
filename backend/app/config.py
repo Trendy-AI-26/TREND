@@ -6,7 +6,9 @@ class Settings(BaseSettings):
     SUPABASE_SECRET_KEY: str
     SUPABASE_ANON_KEY: str = ""
     STORAGE_BUCKET: str = "brand-assets"
-    AVATAR_BUCKET: str = "avatars"
+    PRODUCT_ASSETS_BUCKET: str = "product-assets"
+    PRODUCT_ASSET_MAX_BYTES: int = 5 * 1024 * 1024
+    AVATARS_BUCKET: str = "avatars"
     AVATAR_MAX_BYTES: int = 2 * 1024 * 1024
     ADMIN_EMAILS: str = ""
     HOST: str = "127.0.0.1"
