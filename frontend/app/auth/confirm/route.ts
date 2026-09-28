@@ -3,33 +3,19 @@ import { createClient } from '@/lib/supabase/server'
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url)
-  const token_hash = searchParams.get('token_hash')
-  const type = searchParams.get('type') as
-    | 'signup'
-    | 'invite'
-    | 'magiclink'
-    | 'recovery'
-    | 'email_change'
-    | 'email'
-    | null
+  const tokenHash = searchParams.get('token_hash')
+  const type = searchParams.get('type')
 
-  const redirectTo = request.nextUrl.clone()
-
-  if (token_hash && type) {
-    const supabase = await createClient()
-    const { error } = await supabase.auth.verifyOtp({ type, token_hash })
-
-    if (!error) {
-      redirectTo.pathname = '/brands'
-      redirectTo.searchParams.delete('token_hash')
-      redirectTo.searchParams.delete('type')
-      return NextResponse.redirect(redirectTo)
-    }
+  if (type !== 'recovery' || !tokenHash) {
+    return NextResponse.redirect(new URL('/forgot-password?error=invalid-link', request.url))
   }
 
-  // If verification fails or params missing, redirect to login
-  redirectTo.pathname = '/login'
-  redirectTo.searchParams.delete('token_hash')
-  redirectTo.searchParams.delete('type')
-  return NextResponse.redirect(redirectTo)
+  const supabase = await createClient()
+  const { error } = await supabase.auth.verifyOtp({ type: 'recovery', token_hash: tokenHash })
+
+  if (error) {
+    return NextResponse.redirect(new URL('/forgot-password?error=expired-link', request.url))
+  }
+
+  return NextResponse.redirect(new URL('/reset-password', request.url))
 }

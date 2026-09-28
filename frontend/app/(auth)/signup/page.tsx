@@ -26,6 +26,7 @@ export default function SignUpPage() {
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  const [confirmationSent, setConfirmationSent] = useState(false)
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -33,7 +34,7 @@ export default function SignUpPage() {
     setLoading(true)
 
     const supabase = createClient()
-    const { error } = await supabase.auth.signUp({
+    const { data, error } = await supabase.auth.signUp({
       email,
       password,
     })
@@ -46,6 +47,11 @@ export default function SignUpPage() {
       } else {
         setError(error.message)
       }
+      return
+    }
+
+    if (!data.session) {
+      setConfirmationSent(true)
       return
     }
 
@@ -70,6 +76,22 @@ export default function SignUpPage() {
       ]}
     >
       <Card className="shadow-sm">
+        {confirmationSent ? (
+          <>
+            <CardHeader>
+              <CardTitle className="text-[22px] font-semibold tracking-tight">{t('checkEmail')}</CardTitle>
+              <CardDescription>
+                {t('confirmationSent')} <strong>{email}</strong>. {t('activateAccount')}
+              </CardDescription>
+            </CardHeader>
+            <CardFooter>
+              <Link href="/login" className="w-full text-center text-sm font-medium text-brand underline underline-offset-2">
+                {t('backToLogin')}
+              </Link>
+            </CardFooter>
+          </>
+        ) : (
+          <>
         <CardHeader>
           <CardTitle className="text-[22px] font-semibold tracking-tight">{t('createAccount')}</CardTitle>
           <CardDescription>{t('signupDescription')}</CardDescription>
@@ -119,6 +141,8 @@ export default function SignUpPage() {
             </p>
           </CardFooter>
         </form>
+          </>
+        )}
       </Card>
     </AuthShell>
   )

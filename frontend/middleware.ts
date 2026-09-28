@@ -47,11 +47,13 @@ export async function middleware(request: NextRequest) {
     return redirectResponse
   }
 
-  // Protected routes: redirect unauthenticated users to /login
+  // Password recovery pages must remain reachable before a recovery session exists.
   if (
     !user &&
     pathname !== '/login' &&
     pathname !== '/signup' &&
+    pathname !== '/forgot-password' &&
+    pathname !== '/reset-password' &&
     pathname !== '/' &&
     !pathname.startsWith('/auth/')
   ) {
