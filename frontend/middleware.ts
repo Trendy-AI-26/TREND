@@ -47,16 +47,16 @@ export async function middleware(request: NextRequest) {
     return redirectResponse
   }
 
-  // Password recovery pages must remain reachable before a recovery session exists.
-  if (
-    !user &&
-    pathname !== '/login' &&
-    pathname !== '/signup' &&
-    pathname !== '/forgot-password' &&
-    pathname !== '/reset-password' &&
-    pathname !== '/' &&
-    !pathname.startsWith('/auth/')
-  ) {
+  // Protected routes: redirect unauthenticated users to /login
+  const isPublicAuthFlow = [
+    '/login',
+    '/signup',
+    '/forgot-password',
+    '/verify-code',
+    '/reset-password',
+    '/reset-success',
+  ].includes(pathname)
+  if (!user && !isPublicAuthFlow && pathname !== '/' && !pathname.startsWith('/auth/')) {
     const url = request.nextUrl.clone()
     url.pathname = '/login'
     const redirectResponse = NextResponse.redirect(url)
@@ -74,3 +74,5 @@ export const config = {
     '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
   ],
 }
+
+

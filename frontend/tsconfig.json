@@ -20,12 +20,15 @@
       {
         "name": "next"
       }
-    ],
-    "paths": {
+    ],        "paths": {
       "@/*": [
         "./*"
       ]
-    }
+    },
+    "types": [
+      "vitest/globals",
+      "@testing-library/jest-dom"
+    ]
   },
   "include": [
     "next-env.d.ts",
@@ -34,11 +37,6 @@
     ".next/types/**/*.ts"
   ],
   "exclude": [
-    "node_modules",
-    "vitest.config.ts",
-    "vitest.setup.ts",
-    "**/__tests__/**",
-    "**/*.test.ts",
-    "**/*.test.tsx"
+    "node_modules"
   ]
 }

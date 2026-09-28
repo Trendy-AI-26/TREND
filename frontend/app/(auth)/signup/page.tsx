@@ -4,15 +4,11 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { useTranslations } from 'next-intl'
-import { ImagePlus, KeyRound, Palette } from 'lucide-react'
+import { ArrowUpRight, Eye, EyeOff, Mail, UserRound } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { AuthShell } from '@/components/auth/auth-shell'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 import {
   Card,
-  CardContent,
   CardDescription,
   CardFooter,
   CardHeader,
@@ -22,31 +18,26 @@ import {
 export default function SignUpPage() {
   const router = useRouter()
   const t = useTranslations('auth')
+  const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [confirmationSent, setConfirmationSent] = useState(false)
 
-  async function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
     setError(null)
     setLoading(true)
-
-    const supabase = createClient()
-    const { data, error } = await supabase.auth.signUp({
+    const { data, error } = await createClient().auth.signUp({
       email,
       password,
+      options: { data: { full_name: name } },
     })
-
     setLoading(false)
-
     if (error) {
-      if (error.message.includes('User already registered')) {
-        setError('An account with this email already exists. Please log in instead.')
-      } else {
-        setError(error.message)
-      }
+      setError(error.message.includes('User already registered') ? t('existingAccount') : error.message)
       return
     }
 
@@ -59,91 +50,54 @@ export default function SignUpPage() {
     router.refresh()
   }
 
-  const hero = (
-    <>
-      {t('signupHeroBefore')} <em className="text-brand-accent">{t('signupHeroAccent')}</em>
-    </>
-  )
-
   return (
-    <AuthShell
-      hero={hero}
-      subcopy={t('signupSubcopy')}
-      features={[
-        { icon: Palette, label: t('signupFeatureInterview') },
-        { icon: KeyRound, label: t('featureKeys') },
-        { icon: ImagePlus, label: t('signupFeaturePreset') },
-      ]}
-    >
-      <Card className="shadow-sm">
-        {confirmationSent ? (
-          <>
-            <CardHeader>
-              <CardTitle className="text-[22px] font-semibold tracking-tight">{t('checkEmail')}</CardTitle>
-              <CardDescription>
-                {t('confirmationSent')} <strong>{email}</strong>. {t('activateAccount')}
-              </CardDescription>
-            </CardHeader>
-            <CardFooter>
-              <Link href="/login" className="w-full text-center text-sm font-medium text-brand underline underline-offset-2">
-                {t('backToLogin')}
-              </Link>
-            </CardFooter>
-          </>
-        ) : (
-          <>
-        <CardHeader>
-          <CardTitle className="text-[22px] font-semibold tracking-tight">{t('createAccount')}</CardTitle>
-          <CardDescription>{t('signupDescription')}</CardDescription>
-        </CardHeader>
-        <form onSubmit={handleSubmit}>
-          <CardContent className="space-y-4">
-            {error && (
-              <div className="rounded-md bg-[color-mix(in_srgb,hsl(var(--destructive))_8%,white)] p-3 text-[13px] text-destructive">
-                {error}
-              </div>
-            )}
-            <div className="space-y-2">
-              <Label htmlFor="email">{t('email')}</Label>
-              <Input
-                id="email"
-                type="email"
-                placeholder={t('emailPlaceholder')}
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-                autoComplete="email"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="password">{t('password')}</Label>
-              <Input
-                id="password"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                minLength={6}
-                autoComplete="new-password"
-              />
-              <p className="text-[12px] text-muted-foreground">{t('passwordHint')}</p>
-            </div>
-          </CardContent>
-          <CardFooter className="flex flex-col gap-4">
-            <Button type="submit" size="lg" className="w-full" disabled={loading}>
-              {loading ? t('creatingAccount') : t('signUp')}
-            </Button>
-            <p className="text-center text-[12px] text-muted-foreground">
-              {t('hasAccount')}{' '}
-              <Link href="/login" className="font-medium text-brand underline underline-offset-[2px]">
-                {t('loginTitle')}
-              </Link>
-            </p>
+    <AuthShell eyebrow={t('signupEyebrow')} title={t('signupTitle')} subtitle={t('signupDescription')}>
+      {confirmationSent ? (
+        <Card className="shadow-sm">
+          <CardHeader>
+            <CardTitle className="text-[22px] font-semibold tracking-tight">{t('checkEmail')}</CardTitle>
+            <CardDescription>
+              {t('confirmationSent')} <strong>{email}</strong>. {t('activateAccount')}
+            </CardDescription>
+          </CardHeader>
+          <CardFooter>
+            <Link href="/login" className="w-full text-center text-sm font-medium text-brand underline underline-offset-2">
+              {t('backToLogin')}
+            </Link>
           </CardFooter>
-        </form>
-          </>
-        )}
-      </Card>
+        </Card>
+      ) : (
+      <form onSubmit={handleSubmit} className="space-y-4">
+        {error && <div role="alert" className="rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
+        <div>
+          <label htmlFor="full-name" className="mb-2 block text-[12px] font-bold uppercase tracking-[0.04em] text-[#424242]">{t('fullName')}</label>
+          <div className="relative">
+            <input id="full-name" type="text" placeholder={t('fullNamePlaceholder')} value={name} onChange={(e) => setName(e.target.value)} required autoComplete="name" className="auth-input h-12 w-full rounded-xl border px-4 pe-11 text-sm outline-none transition placeholder:text-[#b1b1b1]" />
+            <UserRound className="pointer-events-none absolute end-4 top-1/2 h-[17px] w-[17px] -translate-y-1/2 text-[#999]" strokeWidth={1.5} />
+          </div>
+        </div>
+        <div>
+          <label htmlFor="email" className="mb-2 block text-[12px] font-bold uppercase tracking-[0.04em] text-[#424242]">{t('email')}</label>
+          <div className="relative">
+            <input id="email" type="email" placeholder={t('emailPlaceholder')} value={email} onChange={(e) => setEmail(e.target.value)} required autoComplete="email" dir="ltr" className="auth-input h-12 w-full rounded-xl border px-4 pe-11 text-sm outline-none transition placeholder:text-[#b1b1b1]" />
+            <Mail className="pointer-events-none absolute end-4 top-1/2 h-[17px] w-[17px] -translate-y-1/2 text-[#999]" strokeWidth={1.5} />
+          </div>
+        </div>
+        <div>
+          <label htmlFor="password" className="mb-2 block text-[12px] font-bold uppercase tracking-[0.04em] text-[#424242]">{t('password')}</label>
+          <div className="relative">
+            <input id="password" type={showPassword ? 'text' : 'password'} placeholder={t('passwordPlaceholder')} value={password} onChange={(e) => setPassword(e.target.value)} required minLength={6} autoComplete="new-password" className="auth-input h-12 w-full rounded-xl border px-4 pe-11 text-sm outline-none transition placeholder:text-[#b1b1b1]" />
+            <button type="button" onClick={() => setShowPassword((value) => !value)} aria-label={showPassword ? t('hidePassword') : t('showPassword')} className="absolute end-3 top-1/2 -translate-y-1/2 rounded p-1 text-[#999] hover:text-[#7A1521]">
+              {showPassword ? <EyeOff className="h-[17px] w-[17px]" strokeWidth={1.5} /> : <Eye className="h-[17px] w-[17px]" strokeWidth={1.5} />}
+            </button>
+          </div>
+        </div>
+        <button type="submit" disabled={loading} className="auth-submit flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#7A1521] text-[15px] font-semibold text-white transition hover:bg-[#9c2a37] disabled:cursor-not-allowed disabled:opacity-60">
+          {loading ? t('creatingAccount') : t('createAccount')} <ArrowUpRight className="h-[17px] w-[17px]" strokeWidth={2} />
+        </button>
+        <p className="pt-1 text-center text-[13px] text-[#888]">{t('hasAccount')}{' '}<Link href="/login" className="font-semibold text-[#7A1521] hover:underline">{t('loginTitle')}</Link></p>
+      </form>
+      )}
     </AuthShell>
   )
 }

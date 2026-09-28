@@ -66,6 +66,8 @@ const config: Config = {
         logo: ['var(--font-logo)', 'var(--font-arabic)', 'serif'],
         // Landing-page body/UI text — Readex Pro (Arabic + Latin).
         readex: ['var(--font-readex)', 'var(--font-arabic)', 'sans-serif'],
+        tajawal: ['Tajawal', 'var(--font-arabic)', 'sans-serif'],
+        'el-messiri': ['El Messiri', 'var(--font-arabic)', 'serif'],
         mono: ['var(--font-geist-mono)', 'ui-monospace', 'Menlo', 'monospace'],
       },
       fontSize: {

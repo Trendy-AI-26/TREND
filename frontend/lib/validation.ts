@@ -43,8 +43,8 @@ export function validateGenerationBrief(
 
     if (audience.segments.length === 0) {
         errors.audience_segments = 'Please choose at least one audience group.'
-    } else if (audience.segments.length > 2) {
-        errors.audience_segments = 'You can select up to two audience groups.'
+       } else if (audience.segments.length > 3) {
+        errors.audience_segments = 'You can select up to three audience groups.'
     }
 
     const ideaLength = brief.core_idea.trim().length

@@ -1,7 +1,7 @@
 'use client'
 
 import { useTranslations } from 'next-intl';
-import { Sparkles } from 'lucide-react'
+import { Check, Sparkles } from 'lucide-react'
 import { BrandDot } from '@/components/brand/brand-dot'
 import { BrandWorkspace, TRENDY_AI_ACCENT, formatHex, normalizeHex, onBrandTextColor } from '@/components/brand/brand-workspace'
 import { ColorSlot } from '@/components/kit/color-slot'
@@ -15,10 +15,20 @@ interface StepProps {
   brandName: string
 }
 
-const CURATED = [
-  '#1E6E82', '#0F172A', '#2563EB', '#7C3AED',
-  '#DB2777', '#DC2626', '#EA580C', '#CA8A04',
-  '#16A34A', '#0D9488', '#0369A1', '#57534E',
+// الألوان المقترحة مع اسم كل لون (متل الفيجما)، بس كمربعات بدل مستطيلات
+const CURATED: { hex: string; nameKey: string }[] = [
+  { hex: '#7A1521', nameKey: 'color_maroon' },
+  { hex: '#DB2777', nameKey: 'color_pink' },
+  { hex: '#7C3AED', nameKey: 'color_purple' },
+  { hex: '#2563EB', nameKey: 'color_blue' },
+  { hex: '#0F172A', nameKey: 'color_navy' },
+  { hex: '#0891B2', nameKey: 'color_cyan' },
+  { hex: '#57534E', nameKey: 'color_gray' },
+  { hex: '#0369A1', nameKey: 'color_sky' },
+  { hex: '#16A34A', nameKey: 'color_green' },
+  { hex: '#CA8A04', nameKey: 'color_gold' },
+  { hex: '#EA580C', nameKey: 'color_orange' },
+  { hex: '#DC2626', nameKey: 'color_red' },
 ]
 
 export function StepColors({ answers, onChange }: StepProps) {
@@ -83,20 +93,43 @@ export function StepColors({ answers, onChange }: StepProps) {
           >
             {t('add_color')}
           </button>
-          <div className="grid grid-cols-6 gap-2 pt-2">
-            {CURATED.map((hex) => (
-              <button
-                key={hex}
-                type="button"
-                title={hex}
-                onClick={() => {
-                  if (colors.length === 0) onChange({ colors: [hex] })
-                  else handleAddColor(hex)
-                }}
-                className="h-8 rounded-md border border-border"
-                style={{ background: hex }}
-              />
-            ))}
+          
+          <p className="text-[12px] font-medium text-brand-headline/60">{t('curated_palette')}</p>
+          <div className="grid max-w-[404px] grid-cols-6 gap-2">
+            {CURATED.map(({ hex, nameKey }) => {
+              const picked = colors.some((c) => normalizeHex(c) === normalizeHex(hex))
+              const onColor = onBrandTextColor(hex)
+              return (
+                <button
+                  key={hex}
+                  type="button"
+                  title={t(nameKey)}
+                  aria-label={t(nameKey)}
+                  aria-pressed={picked}
+                  onClick={() => {
+                    if (colors.length === 0) onChange({ colors: [hex] })
+                    else handleAddColor(hex)
+                  }}
+                  className="group relative flex aspect-square w-full flex-col items-center justify-end overflow-hidden rounded-xl border border-black/10 transition-transform hover:scale-[1.03] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2"
+                  style={{ background: hex }}
+                >
+                  {picked && (
+                    <span
+                      className="absolute end-1 top-1 inline-flex h-4 w-4 items-center justify-center rounded-full bg-white/90 shadow-xs"
+                    >
+                      <Check className="h-[10px] w-[10px]" style={{ color: hex }} />
+                    </span>
+                  )}
+                
+                  <span
+                    className="w-full truncate bg-black/25 px-1 pb-[3px] pt-[5px] text-center text-[10px] font-medium leading-none backdrop-blur-[1px]"
+                    style={{ color: onColor }}
+                  >
+                    {t(nameKey)}
+                  </span>
+                </button>
+              )
+            })}
           </div>
         </div>
 

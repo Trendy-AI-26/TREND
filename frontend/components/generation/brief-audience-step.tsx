@@ -67,7 +67,7 @@ export function BriefAudienceStep({
     const availableSegments = AUDIENCE_SEGMENTS.filter(
         (segment) => segment.value !== 'custom',
     )
-    const hasReachedLimit = audience.segments.length >= 2
+       const hasReachedLimit = audience.segments.length >= 3
 
     function update(next: Partial<TargetAudienceBrief>) {
         onChange({ ...audience, ...next })
@@ -82,8 +82,8 @@ export function BriefAudienceStep({
             })
             return
         }
+        if (audience.segments.length >= 3) return
 
-        if (audience.segments.length >= 2) return
 
         update({
             segments: [...audience.segments, segment],

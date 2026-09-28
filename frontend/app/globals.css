@@ -1,20 +1,3 @@
-/* ============================================================
-   TRENDY AI — global design tokens
-
-   Product theme:
-   - Cream background and surfaces
-   - Charcoal text and dark sections
-   - Burgundy primary actions
-
-   Workspace theme:
-   - --brand is the customer's Brand Kit accent
-   - --brand must remain separate from --primary
-   - --brand is used for workspace accents, not global surfaces
-
-   shadcn/ui expects color variables as space-separated HSL values,
-   consumed by Tailwind as hsl(var(--variable-name)).
-   ============================================================ */
-
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -168,7 +151,7 @@
 }
 
 .auth-theme input:focus-visible {
-  border-color: #9f201c;
+  border-color: #7A1521;
   box-shadow: 0 0 0 3px rgba(196, 154, 85, 0.22);
 }
 
@@ -243,4 +226,88 @@
   --font-logo: 'El Messiri', 'Noto Naskh Arabic', serif;
   --font-heading: 'El Messiri', 'Noto Naskh Arabic', serif;
   --font-readex: 'Tajawal', 'Noto Naskh Arabic', sans-serif;
+}
+
+/* Auth pages — clean editorial form styling from the new Trendy direction. */
+.auth-page {
+  font-family: 'Tajawal', 'Noto Naskh Arabic', sans-serif;
+}
+
+.auth-page .auth-input {
+  border-color: #dedede;
+  background: #fff;
+  color: #202020;
+}
+
+.auth-page .auth-input:focus {
+  border-color: #7A1521;
+  box-shadow: 0 0 0 3px rgba(142, 29, 67, 0.10);
+}
+
+.auth-page .auth-submit {
+  box-shadow: 0 10px 20px rgba(142, 29, 67, 0.20);
+}
+
+[dir="rtl"] .auth-page input[type="password"] {
+  direction: ltr;
+  text-align: right;
+}
+
+@media (max-width: 1023px) {
+  .auth-card {
+    min-height: calc(100vh - 4rem);
+  }
+}
+
+.auth-floating-marker {
+  animation: auth-float 4.5s ease-in-out infinite;
+  will-change: transform;
+}
+
+.auth-floating-marker:nth-child(2) {
+  animation-delay: -1.2s;
+}
+
+.auth-floating-marker:nth-child(3) {
+  animation-delay: -2.4s;
+}
+
+.auth-floating-marker:nth-child(4) {
+  animation-delay: -3.6s;
+}
+
+.auth-floating-marker:nth-child(5) {
+  animation-delay: -0.8s;
+}
+
+@keyframes auth-float {
+
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) rotate(0deg);
+  }
+
+  50% {
+    transform: translate3d(0, -12px, 0) rotate(3deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .auth-floating-marker {
+    animation: none;
+  }
+}
+
+.auth-floating-marker {
+  transition:
+    transform 220ms ease,
+    background-color 220ms ease,
+    border-color 220ms ease;
+}
+
+.auth-floating-marker:hover {
+  animation-play-state: paused;
+  transform: translateY(-8px) scale(1.08) rotate(4deg);
+  background-color: rgba(255, 255, 255, 0.32);
+  border-color: rgba(255, 255, 255, 0.85);
 }
