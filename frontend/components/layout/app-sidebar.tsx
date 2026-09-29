@@ -1,4 +1,5 @@
 'use client'
+
 import Image from 'next/image'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
@@ -38,21 +39,18 @@ export function AppSidebar({
     router.refresh()
   }
 
-
   const nav = workspaceId
     ? [
-      { href: `/${workspaceId}/kit`, label: t('dashboard.brandIdentity'), icon: Palette, match: 'prefix' as const },
-      { href: `/${workspaceId}`, label: t('dashboard.aiContent'), icon: Bot, match: 'exact' as const },
-      { href: `/${workspaceId}/studio`, label: t('dashboard.designStudio'), icon: Pencil, match: 'prefix' as const },
-      { href: `/${workspaceId}/history`, label: t('dashboard.activityLog'), icon: Clock, match: 'prefix' as const },
-      // معلّقة مؤقتاً: المستخدم حالياً بيستخدم مفتاح الـ API الخاص فينا، ما في داعي لظهور خانة المفاتيح بالقائمة
-      // { href: `/${workspaceId}/keys`, label: t('dashboard.keys'), icon: Key, match: 'prefix' as const },
-    ]
+        { href: `/${workspaceId}/kit`, label: t('dashboard.brandIdentity'), icon: Palette, match: 'prefix' as const },
+        { href: `/${workspaceId}`, label: t('dashboard.aiContent'), icon: Bot, match: 'exact' as const },
+        { href: `/${workspaceId}/studio`, label: t('dashboard.designStudio'), icon: Pencil, match: 'prefix' as const },
+        { href: `/${workspaceId}/history`, label: t('dashboard.activityLog'), icon: Clock, match: 'prefix' as const },
+        // BYOK is intentionally hidden while provider-key management is disabled.
+      ]
     : []
 
   return (
     <aside className="flex h-full w-[224px] shrink-0 flex-col overflow-y-auto border-e border-brand-accent/30 bg-brand-cream px-3 font-readex text-brand-headline">
-
       <Link
         href="/brands"
         className="flex shrink-0 flex-col gap-1 border-b border-brand-accent/30 px-1 py-3 no-underline"
@@ -70,12 +68,9 @@ export function AppSidebar({
           </span>
           <Badge>{t('dashboard.proBadge')}</Badge>
         </span>
-        <span className="text-[11px] text-brand-headline/50">
-          {t('dashboard.tagline')}
-        </span>
+        <span className="text-[11px] text-brand-headline/50">{t('dashboard.tagline')}</span>
       </Link>
 
-      {/* بطاقة العلامة الحالية: رابط كل العلامات فوق، بعدين الاسم، بعدين مربعات الألوان */}
       <div className="mt-3 rounded-[10px] border border-brand-accent/30 bg-brand-bg/40 px-3 py-[10px]">
         <Link
           href="/brands"
@@ -106,8 +101,11 @@ export function AppSidebar({
                   )}
                   style={{ background: hex ? `#${hex}` : TRENDY_AI_ACCENT }}
                 />
-                <span className={cn('h-[2px] w-[26px] rounded-full', selected ? 'bg-brand-headline/50' : 'bg-transparent')}
-
+                <span
+                  className={cn(
+                    'h-[2px] w-[26px] rounded-full',
+                    selected ? 'bg-brand-headline/50' : 'bg-transparent',
+                  )}
                 />
               </Link>
             )
@@ -122,13 +120,10 @@ export function AppSidebar({
             <Plus className="h-[13px] w-[13px]" />
           </button>
         </div>
-        <p className="mt-1 text-[11px] text-brand-headline/50">
-          {t('dashboard.identityColors')}
-        </p>
+        <p className="mt-1 text-[11px] text-brand-headline/50">{t('dashboard.identityColors')}</p>
       </div>
 
-      {/* القائمة: العنصر الفعّال بيمتد لحافة الشريط وعليه خط جانبي بلون العلامة */}
-      <nav className="-mx-3 mt-4 flex flex-col gap-[2px]">
+      <nav className="-mx-3 mt-4 flex flex-col gap-[2px]" aria-label={t('dashboard.workspaceNavigation')}>
         {nav.map((item) => {
           const active =
             item.match === 'exact'
@@ -149,13 +144,11 @@ export function AppSidebar({
             >
               <Icon className={cn('h-[17px] w-[17px]', active ? 'text-brand' : 'text-brand-headline/60')} />
               <span className="flex-1">{item.label}</span>
-
             </Link>
           )
         })}
       </nav>
 
-      {/* أسفل الشريط: الإدارة (للأدمن) + المستخدم + تسجيل الخروج */}
       <div className="mt-auto pb-5">
         {profile?.is_admin && (
           <Link
@@ -175,16 +168,17 @@ export function AppSidebar({
             href="/account"
             className="flex items-center gap-[10px] rounded-lg px-1 py-1 no-underline transition-colors duration-fast hover:bg-brand-bg/60"
           >
-            <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand-primary">
-              <User className="h-[15px] w-[15px] text-white" />
-            </span>
-            <span className="truncate text-[13px] font-medium">
-              {profile?.full_name || t('dashboard.you')}
-            </span>
+            {profile?.avatar_url ? (
+              <img src={profile.avatar_url} alt="" className="h-8 w-8 shrink-0 rounded-full object-cover" />
+            ) : (
+              <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand-primary">
+                <User className="h-[15px] w-[15px] text-white" />
+              </span>
+            )}
+            <span className="truncate text-[13px] font-medium">{profile?.full_name || t('dashboard.you')}</span>
           </Link>
 
           <div className="mt-1 flex flex-col gap-[2px]">
-
             <Link
               href="#"
               className="flex h-9 items-center gap-3 rounded-lg px-2 text-[13px] text-brand-headline/70 no-underline transition-colors duration-fast hover:bg-brand-bg/60"

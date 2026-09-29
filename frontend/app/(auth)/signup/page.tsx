@@ -7,6 +7,13 @@ import { useTranslations } from 'next-intl'
 import { ArrowUpRight, Eye, EyeOff, Mail, UserRound } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { AuthShell } from '@/components/auth/auth-shell'
+import {
+  Card,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card'
 
 export default function SignUpPage() {
   const router = useRouter()
@@ -17,12 +24,13 @@ export default function SignUpPage() {
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  const [confirmationSent, setConfirmationSent] = useState(false)
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
     setError(null)
     setLoading(true)
-    const { error } = await createClient().auth.signUp({
+    const { data, error } = await createClient().auth.signUp({
       email,
       password,
       options: { data: { full_name: name } },
@@ -32,12 +40,33 @@ export default function SignUpPage() {
       setError(error.message.includes('User already registered') ? t('existingAccount') : error.message)
       return
     }
+
+    if (!data.session) {
+      setConfirmationSent(true)
+      return
+    }
+
     router.push('/brands')
     router.refresh()
   }
 
   return (
     <AuthShell eyebrow={t('signupEyebrow')} title={t('signupTitle')} subtitle={t('signupDescription')}>
+      {confirmationSent ? (
+        <Card className="shadow-sm">
+          <CardHeader>
+            <CardTitle className="text-[22px] font-semibold tracking-tight">{t('checkEmail')}</CardTitle>
+            <CardDescription>
+              {t('confirmationSent')} <strong>{email}</strong>. {t('activateAccount')}
+            </CardDescription>
+          </CardHeader>
+          <CardFooter>
+            <Link href="/login" className="w-full text-center text-sm font-medium text-brand underline underline-offset-2">
+              {t('backToLogin')}
+            </Link>
+          </CardFooter>
+        </Card>
+      ) : (
       <form onSubmit={handleSubmit} className="space-y-4">
         {error && <div role="alert" className="rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
         <div>
@@ -68,6 +97,7 @@ export default function SignUpPage() {
         </button>
         <p className="pt-1 text-center text-[13px] text-[#888]">{t('hasAccount')}{' '}<Link href="/login" className="font-semibold text-[#7A1521] hover:underline">{t('loginTitle')}</Link></p>
       </form>
+      )}
     </AuthShell>
   )
 }

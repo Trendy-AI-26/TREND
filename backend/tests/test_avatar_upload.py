@@ -52,6 +52,25 @@ async def test_avatar_rejects_empty_file():
     assert error.value.status_code == 400
     assert error.value.detail["error"]["code"] == "EMPTY_AVATAR"
 
+
+# Test that the payload is a real image, not only a permitted MIME type.
+@pytest.mark.asyncio
+async def test_avatar_rejects_invalid_image_payload():
+    file = make_upload_file(
+        filename="avatar.png",
+        content=b"not-an-image",
+        content_type="image/png",
+    )
+
+    with pytest.raises(HTTPException) as error:
+        await me.upload_avatar(
+            file=file,
+            current_user=USER,
+        )
+
+    assert error.value.status_code == 400
+    assert error.value.detail["error"]["code"] == "INVALID_IMAGE"
+
 # Test for file size exceeding the limit
 @pytest.mark.asyncio
 async def test_avatar_rejects_large_file(monkeypatch):

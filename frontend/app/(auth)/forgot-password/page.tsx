@@ -2,7 +2,6 @@
 
 import Image from 'next/image'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
 import { useState } from 'react'
 import { ArrowRight, CheckCircle2, Mail } from 'lucide-react'
 import { useLocale, useTranslations } from 'next-intl'
@@ -10,28 +9,27 @@ import LanguageSwitcher from '@/components/language-switcher'
 import { createClient } from '@/lib/supabase/client'
 
 export default function ForgotPasswordPage() {
-  const router = useRouter()
   const t = useTranslations('auth')
   const shell = useTranslations('components.auth.auth-shell')
   const locale = useLocale()
   const isArabic = locale === 'ar'
   const [email, setEmail] = useState('')
   const [error, setError] = useState<string | null>(null)
-  const [sent] = useState(false)
+  const [sent, setSent] = useState(false)
   const [loading, setLoading] = useState(false)
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setError(null)
     setLoading(true)
-    const redirectTo = `${window.location.origin}/auth/confirm`
+    const redirectTo = `${window.location.origin}/auth/confirm?next=/reset-password`
     const { error: resetError } = await createClient().auth.resetPasswordForEmail(email, { redirectTo })
     setLoading(false)
     if (resetError) {
       setError(resetError.message)
       return
     }
-    router.push(`/verify-code?email=${encodeURIComponent(email)}`)
+    setSent(true)
   }
 
   return (
@@ -90,4 +88,3 @@ export default function ForgotPasswordPage() {
     </main>
   )
 }
-
