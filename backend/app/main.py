@@ -1,13 +1,14 @@
 from contextlib import asynccontextmanager
 from uuid import uuid4
 
+
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.config import settings
-from app.routers import admin, brands, generations, health, keys, kit, me, preview
+from app.routers import admin, brands, generations, health, keys, kit, me, preview, product_assets
 
 
 @asynccontextmanager
@@ -44,7 +45,7 @@ app.include_router(keys.router)
 app.include_router(kit.router)
 app.include_router(generations.router)
 app.include_router(preview.router)
-
+app.include_router(product_assets.router)
 
 @app.exception_handler(HTTPException)
 async def http_exception_handler(request: Request, exc: HTTPException ):

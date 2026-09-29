@@ -385,6 +385,15 @@ async def generate_image(
     current_user: User = Depends(get_current_user),
 ) -> GenerationResponse:
     brand = _get_brand_or_404(brand_id, current_user.id)
+    product_asset = None
+
+    if body.product_asset_id is not None:
+         product_asset = _get_product_asset_or_400(
+            brand_id=brand_id,
+            asset_id=body.product_asset_id,
+            user_id=current_user.id,
+    )
+
     brand_name = brand["name"]
     brand_has_logo = bool(brand.get("logo_path"))
 
@@ -425,6 +434,12 @@ async def generate_image(
             "width": preset_w,
             "height": preset_h,
             "logo_mode": body.logo_mode.value,
+            "product_asset_id": (
+                str(body.product_asset_id)
+                if body.product_asset_id
+                
+                else None
+            ),
             "status": "pending",
         }
     ).execute()
@@ -748,3 +763,30 @@ async def delete_generation(
         "generation deleted brand_id=%s generation_id=%s",
         brand_id, generation_id,
     )
+
+def _get_product_asset_or_400(
+    *,
+    brand_id: UUID,
+    asset_id: UUID,
+    user_id: str,
+) -> dict:
+    client = get_service_client()
+
+    result = (
+        client.table("product_assets")
+        .select("*")
+        .eq("id", str(asset_id))
+        .eq("brand_id", str(brand_id))
+        .eq("owner_user_id", user_id)
+        .maybe_single()
+        .execute()
+    )
+
+    if result is None or result.data is None:
+        raise _error_response(
+            400,
+            "INVALID_PRODUCT_ASSET",
+            "Product image does not belong to this brand",
+        )
+
+    return result.data

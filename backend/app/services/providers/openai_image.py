@@ -3,7 +3,7 @@ import logging
 
 import httpx
 
-from app.services.providers.base import ProviderError, ProviderResult
+from app.services.providers.base import ProviderError, ProviderResult, ReferenceImage
 
 logger = logging.getLogger(__name__)
 
@@ -23,6 +23,7 @@ async def openai_generate(
     width: int,
     height: int,
     model: str,
+    reference_image: ReferenceImage | None = None,
 ) -> ProviderResult:
     logger.info("openai_generate: model=%s size=%dx%d", model, width, height)
     async with httpx.AsyncClient(timeout=httpx.Timeout(120.0)) as client:
