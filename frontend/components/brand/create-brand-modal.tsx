@@ -69,6 +69,7 @@ export function CreateBrandModal({ open, onOpenChange, onBrandCreated }: CreateB
           audience: null,
           colors: [color],
           avoid_words: null,
+          industry: null,
         })
         setAccent(brand.id, color)
       } catch {

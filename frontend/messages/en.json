@@ -128,7 +128,7 @@
     "copyright": "© 2026 Trendy (Trendy AI). All rights reserved.",
     "designCredit": "Designed with an authentic Arabic spirit and identity."
   },
-  "dashboard": {
+ "dashboard": {
     "generate": "Generate",
     "history": "History",
     "brandKit": "Brand Kit",
@@ -141,15 +141,19 @@
     "createBrand": "Create brand",
     "you": "You",
     "allBrandsShort": "All brands",
+    "proBadge": "PRO",
+    "tagline": "Identity & digital assets studio",
+    "currentBrand": "Current brand",
+    "identityColors": "Identity colors",
     "brandBadge": "All brands",
-    "brandIdentity": "Brand identity",
+    "brandIdentity": "Brand Kit",
     "aiContent": "AI content generation",
     "designStudio": "Design studio",
-    "activityLog": "Activity log",
+    "activityLog": "History & activity",
     "subscription": "Subscription & billing",
-    "sidebarSubtitle": "Digital identity and brand assets",
+    "sidebarSubtitle": "Identity & digital assets studio",
     "workspaceNavigation": "Workspace navigation"
-  },
+},
   "account": {
     "title": "Account",
     "loadingProfile": "Loading profile…",
@@ -377,7 +381,7 @@
           "sort_newest": "Newest first",
           "sort_oldest": "Oldest first",
           "no_results": "No brands match your search.",
-          "studio_summary": "{count, plural, =1 {1 studio. Each one remembers its own kit, keys, and history.} other {# studios. Each one remembers its own kit, keys, and history.}}",
+          "studio_summary": "{count, plural, =1 {One studio — each one remembers your brand's identity, keys, and history, powered by AI models to create visually and linguistically consistent content.} other {# studios — each one remembers your brand's identity, keys, and history, powered by AI models to create visually and linguistically consistent content.}}",
           "no_studios_yet": "No studios yet.",
           "create_your_first_brand": "Create your first brand to walk into the studio.",
           "create_brand2": "Create brand"
@@ -440,6 +444,7 @@
       },
       "brands-table": {
         "col_brand": "Brand",
+        "col_industry": "Field of work",
         "col_actions": "Actions",
         "col_status": "Status",
         "col_created": "Created",
@@ -457,6 +462,14 @@
       },
       "brand-card": {
         "current": "Current"
+      },
+        "ai-promo-banner": {
+        "eyebrow": "Instant AI content generation",
+        "heading": "Ready to launch a new campaign with a fresh voice?",
+        "heading_with_brand": "Ready to launch a new campaign in the voice of \"{brand}\"?",
+        "description": "TRENDY AI analyzes your saved color keys and voice tones to produce posts that are 100% on-brand.",
+        "cta": "Start smart generation now",
+        "close": "Close"
       },
       "create-brand-modal": {
         "enter_brand_name": "Enter brand name",
@@ -798,6 +811,7 @@
     },
     "layout": {
       "app-shell": {
+        "breadcrumb_dashboard": "Main Dashboard",
         "close_menu": "Close menu",
         "open_menu": "Open menu",
         "breadcrumb_label": "Breadcrumb",
