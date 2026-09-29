@@ -4,7 +4,7 @@ import { useLocale } from 'next-intl'
 import Link from 'next/link'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { useParams, usePathname, useRouter } from 'next/navigation'
-import { PanelLeft } from 'lucide-react'
+import { Bell, PanelLeft } from 'lucide-react'
 import { BrandWorkspace } from '@/components/brand/brand-workspace'
 import { CreateBrandModal } from '@/components/brand/create-brand-modal'
 import { AppSidebar } from '@/components/layout/app-sidebar'
@@ -41,8 +41,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   const wearBrand = Boolean(currentBrandId) && !isNeutralRoute(pathname)
   const accent = currentBrandId ? accents[currentBrandId] : undefined
-  const crumbBrand = brands.find((b) => b.id === currentBrandId) ?? (pathname === '/account' ? brands[0] : undefined)
-
+  const crumbBrand = brands.find((b) => b.id === currentBrandId) ?? (isNeutralRoute(pathname) ? brands[0] : undefined)
   useEffect(() => {
     setNavOpen(false)
   }, [pathname])
@@ -109,7 +108,17 @@ export function AppShell({ children }: { children: ReactNode }) {
           </span>
 
           <div dir={locale === 'ar' ? 'ltr' : 'rtl'} className="flex min-w-0 flex-1 items-center justify-between gap-3">
-            <LanguageSwitcher />
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                aria-label={t('notifications')}
+                className="relative inline-flex h-9 w-9 items-center justify-center rounded-full text-brand-headline/70 transition-colors duration-fast hover:bg-brand-bg/60"
+              >
+                <Bell className="h-[18px] w-[18px]" />
+                <span className="absolute end-2 top-2 h-1.5 w-1.5 rounded-full bg-brand-primary" />
+              </button>
+              <LanguageSwitcher />
+            </div>
             <nav
               dir={locale}
               aria-label={t('breadcrumb_label')}
@@ -119,12 +128,18 @@ export function AppShell({ children }: { children: ReactNode }) {
                 href="/brands"
                 className="font-medium text-brand-headline/80 no-underline hover:underline"
               >
-                {t('breadcrumb_brands')}
+                {t('breadcrumb_dashboard')}
               </Link>
               {crumbBrand && (
                 <>
                   <span className="text-brand-headline/40">/</span>
                   <span className="text-brand-headline/50">{crumbBrand.name}</span>
+                </>
+              )}
+              {pathname === '/brands' && (
+                <>
+                  <span className="text-brand-headline/40">/</span>
+                  <span className="font-semibold text-brand-primary">{t('breadcrumb_brands')}</span>
                 </>
               )}
               {pathname.endsWith('/settings') && (

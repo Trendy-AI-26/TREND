@@ -88,6 +88,7 @@ export interface KitAnswers {
   audience: string | null
   colors: string[]
   avoid_words: string | null
+  industry: string | null
 }
 
 export interface BrandKit {
