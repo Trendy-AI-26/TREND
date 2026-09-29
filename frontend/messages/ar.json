@@ -176,9 +176,9 @@
     "languageArabic": "العربية (Arabic )",
     "avatarUploadHint": "ارفع صورة شخصية من جهازك",
     "chooseImage": "اختر صورة من جهازك",
-    "imageRequirements": "PNG أو JPG أو WebP · الحد الأقصى 5 ميغابايت",
+    "imageRequirements": "PNG أو JPG أو WebP · الحد الأقصى 2 ميغابايت",
     "imageTypeError": "يرجى اختيار ملف صورة.",
-    "imageSizeError": "يجب ألا يتجاوز حجم الصورة 5 ميغابايت."
+    "imageSizeError": "يجب ألا يتجاوز حجم الصورة 2 ميغابايت."
   },
   "langToggle": {
     "switchTo": "English",
@@ -800,6 +800,7 @@
       "app-shell": {
         "close_menu": "إغلاق القائمة",
         "open_menu": "فتح القائمة",
+        "notifications": "الإشعارات",
         "breadcrumb_label": "مسار التنقل",
         "breadcrumb_brands": "العلامات التجارية",
         "breadcrumb_account": "الحساب الشخصي",
