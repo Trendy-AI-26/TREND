@@ -180,9 +180,9 @@
     "languageArabic": "العربية (Arabic )",
     "avatarUploadHint": "Upload a profile image from your device",
     "chooseImage": "Choose an image",
-    "imageRequirements": "PNG, JPG, or WebP · Maximum 5 MB",
+    "imageRequirements": "PNG, JPG, or WebP · Maximum 2 MB",
     "imageTypeError": "Please choose an image file.",
-    "imageSizeError": "The image must be smaller than 5 MB."
+    "imageSizeError": "The image must be smaller than 2 MB."
   },
   "langToggle": {
     "switchTo": "العربية",
@@ -814,6 +814,7 @@
         "breadcrumb_dashboard": "Main Dashboard",
         "close_menu": "Close menu",
         "open_menu": "Open menu",
+        "notifications": "Notifications",
         "breadcrumb_label": "Breadcrumb",
         "breadcrumb_brands": "Brands",
         "breadcrumb_account": "Personal account",

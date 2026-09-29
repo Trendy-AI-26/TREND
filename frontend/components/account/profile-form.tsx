@@ -24,6 +24,7 @@ export function ProfileForm({ profile, onUpdate }: ProfileFormProps) {
   const t = useTranslations()
   const [fullName, setFullName] = useState(profile.full_name ?? '')
   const [avatarUrl, setAvatarUrl] = useState(profile.avatar_url ?? '')
+  const [avatarFile, setAvatarFile] = useState<File | null>(null)
   const [loading, setLoading] = useState(false)
   const [imageError, setImageError] = useState<string | null>(null)
   const [errors, setErrors] = useState<{ full_name?: string }>({})
@@ -39,11 +40,12 @@ export function ProfileForm({ profile, onUpdate }: ProfileFormProps) {
       setImageError(t('account.imageTypeError'))
       return
     }
-    if (file.size > 5 * 1024 * 1024) {
+    if (file.size > 2 * 1024 * 1024) {
       setImageError(t('account.imageSizeError'))
       return
     }
     setImageError(null)
+    setAvatarFile(file)
     const reader = new FileReader()
     reader.onload = () => setAvatarUrl(typeof reader.result === 'string' ? reader.result : '')
     reader.readAsDataURL(file)
@@ -65,9 +67,20 @@ export function ProfileForm({ profile, onUpdate }: ProfileFormProps) {
     try {
       const updated = await apiRequest<Profile>('/me', {
         method: 'PATCH',
-        body: JSON.stringify({ full_name: fullName.trim() || null, avatar_url: avatarUrl || null }),
+        body: JSON.stringify({ full_name: fullName.trim() || null }),
       })
-      onUpdate(updated)
+      let nextProfile = updated
+      if (avatarFile) {
+        const formData = new FormData()
+        formData.append('file', avatarFile)
+        const uploaded = await apiRequest<{ avatar_url: string }>('/me/avatar', {
+          method: 'POST',
+          body: formData,
+        })
+        nextProfile = { ...updated, avatar_url: uploaded.avatar_url }
+        setAvatarFile(null)
+      }
+      onUpdate(nextProfile)
       toast({ title: t('account.profileUpdated'), description: t('account.changesSaved') })
     } catch (err) {
       toast({ title: t('account.error'), description: err instanceof Error ? err.message : t('account.updateFailed'), variant: 'destructive' })
