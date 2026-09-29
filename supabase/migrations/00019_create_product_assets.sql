@@ -1,4 +1,4 @@
-# Product Assets Table Created by Supabase CLI
+-- Product Assets Table Created by Supabase CLI
 
 -- Product reference images uploaded by users for generation requests
 
@@ -68,8 +68,8 @@ COMMENT ON TABLE product_assets IS
 COMMENT ON COLUMN product_assets.storage_path IS
   'Private Storage path for the product image';
 
-# We add it here to make it easier to query for all product assets uploaded by a
-# user, and to enforce that the user exists in the auth.users table.
+-- This owner column makes it easy to query assets by uploader and enforces that
+-- the uploader exists in auth.users.
 
 COMMENT ON COLUMN product_assets.owner_user_id IS  
 

@@ -1,5 +1,4 @@
-# Create private product-assets bucket for storing product reference images
-
+-- Create a private product-assets bucket for product reference images.
 INSERT INTO storage.buckets (
   id,
   name,
@@ -48,9 +47,7 @@ WITH CHECK (
   )
 );
 
-# Add storage.objects table policies to allow users to update and delete their 
-# own product assets
-
+-- Allow owners to update and delete their product assets.
 CREATE POLICY "Product assets owner can update"
 ON storage.objects
 FOR UPDATE
