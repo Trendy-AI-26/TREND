@@ -11,6 +11,11 @@ class Settings(BaseSettings):
     AVATARS_BUCKET: str = "avatars"
     AVATAR_MAX_BYTES: int = 2 * 1024 * 1024
     ADMIN_EMAILS: str = ""
+    # Server-side image generation credentials. These are the ONLY source for
+    # provider/model/key: nothing is ever read from a request body.
+    GENERATION_PROVIDER: str = "openai"
+    GENERATION_MODEL: str = "gpt-image-2"
+    GENERATION_API_KEY: str = ""
     HOST: str = "127.0.0.1"
     PORT: int = 8000
     CORS_ORIGINS: str = (

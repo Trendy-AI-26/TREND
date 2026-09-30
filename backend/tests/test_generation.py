@@ -73,14 +73,16 @@ def test_generate_request_accepts_valid_payload():
     request = GenerateRequest.model_validate(
         {
             "brief": VALID_BRIEF,
-            "provider": "openai",
             "platform_preset": "instagram_post",
             "logo_mode": "none",
         }
     )
 
     assert request.brief.campaign_goal is CampaignGoalEnum.product_launch
-    assert request.provider is ProviderEnum.openai
+    # provider/model/api_key are server-only: the request must not carry them
+    assert not hasattr(request, "provider")
+    assert not hasattr(request, "model")
+    assert not hasattr(request, "api_key")
     assert request.platform_preset is PlatformPresetEnum.instagram_post
     assert request.logo_mode.value == "none"
 
@@ -89,7 +91,6 @@ def test_generate_request_rejects_missing_brief():
     with pytest.raises(ValidationError):
         GenerateRequest.model_validate(
             {
-                "provider": "openai",
                 "platform_preset": "instagram_post",
             }
         )
@@ -231,7 +232,6 @@ def test_generate_request_passes_language_inside_brief():
                 **VALID_BRIEF,
                 "language": "ar",
             },
-            "provider": "openai",
             "platform_preset": "instagram_post",
             "logo_mode": "none",
         }
