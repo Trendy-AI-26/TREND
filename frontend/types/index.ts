@@ -126,7 +126,6 @@ export type PlatformPreset =
 
 export interface GenerateRequest {
   brief: GenerationBrief
-  provider: Provider
   platform_preset: PlatformPreset
   logo_mode: LogoMode
 }

@@ -109,12 +109,16 @@ def mock_helpers(monkeypatch):
         "name": "Acme Brand",
         "logo_path": "brands/logo.png"
     })
-    monkeypatch.setattr(generations, "_get_active_key_or_400", lambda brand_id, provider: {
-        "id": "key-abc",
-        "vault_secret_id": "secret-123"
-    })
     monkeypatch.setattr(generations, "_get_brand_kit_context", lambda brand_id, brand_name: None)
-    monkeypatch.setattr(generations, "read_secret", lambda secret_id: "fake-api-key")
+    # Credentials come from server config, never from the request body.
+    from app.services.generation_resolver import ManagedGenerationConfig
+    monkeypatch.setattr(
+        generations,
+        "resolve_generation_config",
+        lambda: ManagedGenerationConfig(
+            provider="openai", model="gpt-image-2", api_key="fake-server-key"
+        ),
+    )
 
 @pytest.mark.asyncio
 async def test_generate_endpoint_success_openai(override_auth, mock_supabase, mock_helpers, monkeypatch):
@@ -130,7 +134,6 @@ async def test_generate_endpoint_success_openai(override_auth, mock_supabase, mo
     brand_id = uuid4()
     payload = {
         "brief": VALID_BRIEF,
-        "provider": "openai",
         "platform_preset": "instagram_post",
         "logo_mode": "none"
     }
@@ -156,7 +159,6 @@ async def test_generate_endpoint_validation_error(override_auth, mock_helpers):
     
     # Payload is missing required field 'brief'
     payload = {
-        "provider": "openai",
         "platform_preset": "instagram_post",
     }
     
@@ -180,7 +182,6 @@ async def test_generate_endpoint_logo_required_check(override_auth, mock_supabas
     # Requesting a watermark logo mode when brand has no logo
     payload = {
         "brief": VALID_BRIEF,
-        "provider": "openai",
         "platform_preset": "instagram_post",
         "logo_mode": "watermark"
     }
@@ -205,7 +206,6 @@ async def test_generate_endpoint_accepts_language_param(override_auth, mock_supa
     # نمرر brief يحتوي على language="en"
     payload_with_lang = {
         "brief": {**VALID_BRIEF, "language": "en"},
-        "provider": "openai",
         "platform_preset": "instagram_post",
         "logo_mode": "none"
     }
@@ -230,7 +230,6 @@ async def test_generate_endpoint_rejects_invalid_language(override_auth, mock_he
     
     payload_bad_lang = {
         "brief": {**VALID_BRIEF, "language": "invalid_lang"},
-        "provider": "openai",
         "platform_preset": "instagram_post",
         "logo_mode": "none"
     }
@@ -265,7 +264,6 @@ async def test_generate_endpoint_persists_language(
             **VALID_BRIEF,
             "language": "en",
         },
-        "provider": "openai",
         "platform_preset": "instagram_post",
         "logo_mode": "none",
     }
@@ -301,7 +299,6 @@ def test_generate_request_accepts_three_audience_segments():
             "core_idea": "إطلاق منتج جديد",
             "voice_tone": "friendly",
         },
-        "provider": "openai",
         "platform_preset": "instagram_post",
         "logo_mode": "none",
     }
@@ -331,7 +328,6 @@ def test_generate_request_rejects_four_audience_segments():
             "core_idea": "إطلاق منتج جديد",
             "voice_tone": "friendly",
         },
-        "provider": "openai",
         "platform_preset": "instagram_post",
         "logo_mode": "none",
     }

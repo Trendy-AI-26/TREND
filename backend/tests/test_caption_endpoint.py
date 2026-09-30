@@ -7,9 +7,23 @@ from app.core.auth import User
 from app.models.caption import CaptionRequest, CaptionResponse
 from app.routers import generations
 from app.services.caption_generator import CaptionOutputError
+from app.services.generation_resolver import ManagedGenerationConfig
 
 
 USER = User(id="user-123", email="user@example.com", access_token="test-token")
+
+SERVER_KEY = "server-secret-key"
+
+
+def use_server_config(monkeypatch):
+    """Caption generation reads credentials from server config, not the vault."""
+    monkeypatch.setattr(
+        generations,
+        "resolve_generation_config",
+        lambda: ManagedGenerationConfig(
+            provider="openai", model="gpt-image-2", api_key=SERVER_KEY
+        ),
+    )
 
 
 def valid_row(*, brand_id: str, status: str = "succeeded") -> dict:
@@ -47,12 +61,7 @@ async def test_caption_endpoint_inherits_generation_context_and_allows_empty_bod
 
     monkeypatch.setattr(generations, "_get_brand_or_404", lambda *_: {"name": "Acme"})
     monkeypatch.setattr(generations, "_find_generation_or_404", lambda *_: row)
-    monkeypatch.setattr(
-        generations,
-        "_get_active_key_or_400",
-        lambda *_: {"vault_secret_id": "secret-id"},
-    )
-    monkeypatch.setattr(generations, "read_secret", lambda *_: "provider-secret")
+    use_server_config(monkeypatch)
     monkeypatch.setattr(generations, "_get_brand_kit_context", lambda *_: None)
 
     async def fake_generate_caption(**kwargs):
@@ -74,7 +83,7 @@ async def test_caption_endpoint_inherits_generation_context_and_allows_empty_bod
     assert calls[0]["platform"].value == "instagram_post"
     assert calls[0]["generation_prompt"] == row["prompt"]
     assert calls[0]["brief"] is None
-    assert calls[0]["api_key"] == "provider-secret"
+    assert calls[0]["api_key"] == SERVER_KEY
 
 
 @pytest.mark.asyncio
@@ -131,8 +140,7 @@ async def test_caption_endpoint_can_be_called_more_than_once(monkeypatch):
 
     monkeypatch.setattr(generations, "_get_brand_or_404", lambda *_: {"name": "Acme"})
     monkeypatch.setattr(generations, "_find_generation_or_404", lambda *_: row)
-    monkeypatch.setattr(generations, "_get_active_key_or_400", lambda *_: {"vault_secret_id": "id"})
-    monkeypatch.setattr(generations, "read_secret", lambda *_: "secret")
+    use_server_config(monkeypatch)
     monkeypatch.setattr(generations, "_get_brand_kit_context", lambda *_: None)
 
     async def fake_generate_caption(**_):
@@ -160,8 +168,7 @@ async def test_caption_timeout_returns_error_without_mutating_generation(monkeyp
 
     monkeypatch.setattr(generations, "_get_brand_or_404", lambda *_: {"name": "Acme"})
     monkeypatch.setattr(generations, "_find_generation_or_404", lambda *_: row)
-    monkeypatch.setattr(generations, "_get_active_key_or_400", lambda *_: {"vault_secret_id": "id"})
-    monkeypatch.setattr(generations, "read_secret", lambda *_: "secret")
+    use_server_config(monkeypatch)
     monkeypatch.setattr(generations, "_get_brand_kit_context", lambda *_: None)
 
     async def timeout_caption(**_):
@@ -186,8 +193,7 @@ async def test_caption_endpoint_passes_preferences_without_reasking_for_context(
 
     monkeypatch.setattr(generations, "_get_brand_or_404", lambda *_: {"name": "Acme"})
     monkeypatch.setattr(generations, "_find_generation_or_404", lambda *_: row)
-    monkeypatch.setattr(generations, "_get_active_key_or_400", lambda *_: {"vault_secret_id": "id"})
-    monkeypatch.setattr(generations, "read_secret", lambda *_: "secret")
+    use_server_config(monkeypatch)
     monkeypatch.setattr(generations, "_get_brand_kit_context", lambda *_: None)
 
     async def fake_generate_caption(**kwargs):

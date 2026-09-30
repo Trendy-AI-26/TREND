@@ -231,6 +231,11 @@ uploads/
 keys.json
 secrets.json
 credentials.json
+
+# Local backup copies of the project (contain live .env secrets)
+backend_backup_*/
+supabase_backup_*/
+
 .claude/settings.local.json
 .opencode/
 .agents/
