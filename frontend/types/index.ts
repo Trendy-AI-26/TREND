@@ -53,6 +53,19 @@ export interface LogoUploadResponse {
   logo_url: string
 }
 
+export interface ProductAssetResponse {
+  id: string
+  brand_id: string
+  image_url: string
+  content_type: string
+  file_size_bytes: number
+  width: number
+  height: number
+  created_at: string
+}
+
+export interface ProductAssetUploadResponse extends ProductAssetResponse { }
+
 export interface ProviderKey {
   id: string
   provider: 'openai' | 'gemini'
@@ -79,12 +92,11 @@ export interface ValidateKeyResponse {
   key_id: string
 }
 
-export type ToneOption = 'formal' | 'casual' | 'playful' | 'professional' | 'friendly'
 export type KitStatus = 'not_started' | 'in_progress' | 'complete'
 
 export interface KitAnswers {
+  product_asset_id: string | null
   tagline: string | null
-  tone: ToneOption | null
   audience: string | null
   colors: string[]
   avoid_words: string | null

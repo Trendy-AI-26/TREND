@@ -128,7 +128,7 @@
     "copyright": "© 2026 Trendy (Trendy AI). All rights reserved.",
     "designCredit": "Designed with an authentic Arabic spirit and identity."
   },
- "dashboard": {
+  "dashboard": {
     "generate": "Generate",
     "history": "History",
     "brandKit": "Brand Kit",
@@ -153,7 +153,7 @@
     "subscription": "Subscription & billing",
     "sidebarSubtitle": "Identity & digital assets studio",
     "workspaceNavigation": "Workspace navigation"
-},
+  },
   "account": {
     "title": "Account",
     "loadingProfile": "Loading profile…",
@@ -463,7 +463,7 @@
       "brand-card": {
         "current": "Current"
       },
-        "ai-promo-banner": {
+      "ai-promo-banner": {
         "eyebrow": "Instant AI content generation",
         "heading": "Ready to launch a new campaign with a fresh voice?",
         "heading_with_brand": "Ready to launch a new campaign in the voice of \"{brand}\"?",
@@ -691,15 +691,20 @@
         "hex_color_value": "Hex color value",
         "remove_color": "Remove color",
         "primary_the_accent": "Primary · the accent",
-        "make_primary": "Make primary"
+        "make_primary": "Make primary",
+        "primary_confirmed": "Primary color",
+        "secondary_color": "Secondary color"
       },
       "kit-wizard": {
-        "brand_kit": "Brand Kit",
+        "brand_kit": "Your visual identity",
         "back": "Back",
         "continue": "Continue",
+        "required_elements": "Essential required elements",
+        "required_count": "{completed} of {total} items complete",
         "step_brand": "Brand",
+        "step_logo": "Logo",
         "step_tagline": "Tagline",
-        "step_tone": "Tone",
+        "step_industry": "Industry",
         "step_audience": "Audience",
         "step_colors": "Colors",
         "step_avoid": "Avoid",
@@ -712,18 +717,28 @@
       },
       "steps": {
         "step-audience": {
-          "describe_your_target_audience": "Describe your target audience…",
-          "audience": "Audience",
-          "who_is_it_prefix": "Who is it ",
-          "for_word": "for?",
-          "audience_help": "A few sentences on who should feel spoken to."
+          "describe_your_target_audience": "e.g. young adults, founders, and tech professionals in the local market…",
+          "audience": "Target audience description",
+          "required_badge": "(Required)",
+          "who_is_it_prefix": "Who is ",
+          "audience_suffix": "'s target audience?",
+          "audience_help": "Describe the groups and segments most interested in your brand.",
+          "quick_suggestions": "Quick suggested segments",
+          "select_multiple_hint": "Select multiple",
+          "suggestion_founders": "Entrepreneurs and startup founders",
+          "suggestion_small_businesses": "Small and midsize businesses",
+          "suggestion_local_customers": "Local customers and product enthusiasts",
+          "suggestion_professionals": "Young adults and tech professionals",
+          "suggestion_families": "Families and households",
+          "suggestion_enthusiasts": "People interested in this field"
         },
         "step-avoid-words": {
           "words_or_themes_to": "Words or themes to avoid…",
           "avoid": "Avoid",
+          "avoid_label": "Avoid (comma-separated)",
           "anything_to_prefix": "Anything to ",
           "avoid_word": "avoid?",
-          "avoid_help": "Optional. Words or themes TRENDY AI should stay away from."
+          "avoid_help": "Choose words or themes TRENDY AI should stay away from."
         },
         "step-colors": {
           "add_a_color_to": "Add a color to set the studio accent.",
@@ -733,9 +748,9 @@
           "your_prefix": "Your ",
           "colors_word": "colors",
           "colors_help": "Up to three. The first one is the accent TRENDY AI wears in this workspace.",
-          "text_white": "white",
-          "text_ink": "ink",
+          "preview_description": "This color will be used on all interactive buttons and content generators.",
           "curated_palette": "Curated quick palette",
+          "choose_quick_color": "Choose a quick accent",
           "color_maroon": "Maroon",
           "color_pink": "Pink",
           "color_purple": "Purple",
@@ -750,21 +765,21 @@
           "color_red": "Red"
         },
         "step-review": {
+          "identity_summary": "Identity summary",
+          "required_summary": "{complete} of {total} required items complete",
+          "required_field_missing": "Not added yet",
           "tagline": "Tagline",
-          "tone": "Tone",
+          "industry": "Industry",
+          "product_image": "Product image",
           "audience": "Audience",
           "avoid": "Avoid",
           "colors": "Colors",
           "you_can_save_now": "You can save now — the kit stays in progress until those are filled.",
           "brand_kit_saved_complete": "Brand kit saved — complete.",
           "brand_kit_saved_in": "Brand kit saved — in progress. Fill the remaining required fields to reach complete.",
-          "what_the_model_will": "What the model will use",
-          "you_have_unsaved_changes": "You have unsaved changes — the summary updates after save.",
-          "summary_is_generated_after": "Summary is generated after you save.",
           "ready_to_prefix": "Ready to ",
           "save_word": "save?",
           "review_help": "{brandName} — a short interview so TRENDY AI can paint in its voice.",
-          "missing_tone": "Tone",
           "missing_audience": "Audience",
           "missing_colors": "Colors (at least one)",
           "still_missing": "Still missing: {items}.",
@@ -774,8 +789,8 @@
         "step-tagline": {
           "enter_a_tagline": "Enter a tagline…",
           "tagline": "Tagline",
-          "whats_prefix": "What's ",
-          "tagline_suffix": " tagline?",
+          "whats_prefix": "What is the tagline for ",
+          "tagline_suffix": "?",
           "tagline_help": "Optional. A short line TRENDY AI can weave into the image brief.",
           "example_seen_clearly": "{brandName}. Seen clearly.",
           "example_made_to_be_remembered": "Made to be remembered.",
@@ -785,20 +800,47 @@
           "this_is_prefix": "This is ",
           "registered_name_help": "The name you registered. Continue to tell TRENDY AI how it should look and sound."
         },
-        "step-tone": {
-          "how_should_it_prefix": "How should it ",
-          "sound_word": "sound?",
-          "tone_help": "Pick the voice TRENDY AI should paint in.",
-          "tone_formal": "Formal",
-          "tone_formal_desc": "Reserved, precise, a little distant.",
-          "tone_casual": "Casual",
-          "tone_casual_desc": "Easy, conversational, like a friend.",
-          "tone_playful": "Playful",
-          "tone_playful_desc": "Light on its feet, a wink in the copy.",
-          "tone_professional": "Professional",
-          "tone_professional_desc": "Clear, competent, no wasted words.",
-          "tone_friendly": "Friendly",
-          "tone_friendly_desc": "Warm, open, glad you showed up."
+        "step-logo": {
+          "question_before": "What product are we ",
+          "question_emphasis": "marketing",
+          "question_after": "?",
+          "helper": "Upload a real product photo. TRENDY AI will use it in the final design instead of inventing a product.",
+          "drop_prompt": "Drop your product image here or browse files",
+          "requirements": "PNG, JPG, or WebP up to 10 MB · Ready for 4K images",
+          "choose_image": "Choose product image",
+          "replace_image": "Replace product image",
+          "uploading": "Uploading image…",
+          "background_removal": "AI background removal",
+          "preserve_details": "Preserve product details",
+          "product_image_alt": "Product image for {brandName}",
+          "image_load_failed": "Could not load the saved product image.",
+          "image_type_error": "Choose a PNG, JPG, or WebP image.",
+          "image_size_error": "The image must be smaller than 10 MB.",
+          "upload_failed": "Could not upload the product image. Try again."
+        },
+        "step-industry": {
+          "question_before": "What is your",
+          "question_emphasis": "business field",
+          "question_after": "?",
+          "helper": "Your business field helps tailor the voice and recommendations to your brand.",
+          "beauty": "Beauty and care",
+          "fashion": "Fashion and apparel",
+          "perfume": "Perfume",
+          "food": "Food and beverage",
+          "retail": "Retail and commerce",
+          "home": "Home and decor",
+          "services": "Professional services",
+          "jewelry": "Jewelry and accessories",
+          "other": "Other field",
+          "other_label": "Other field (free text)",
+          "other_placeholder": "e.g. education, technology, services…",
+          "other_hint": "Add any specialty with precise detail · Up to 120 characters",
+          "ai_supported": "AI supported",
+          "clear_other": "Clear custom field",
+          "recognized": "This field will guide design concepts",
+          "selected_field": "Currently selected field:",
+          "ready_for_identity": "Ready to build identity",
+          "ready_next_step": "Ready to create the identity in the next step"
         }
       },
       "kit-status-badge": {
@@ -816,6 +858,7 @@
         "open_menu": "Open menu",
         "breadcrumb_label": "Breadcrumb",
         "breadcrumb_brands": "Brands",
+        "breadcrumb_brand_kit": "Brand identity",
         "breadcrumb_account": "Personal account",
         "breadcrumb_settings": "Settings"
       }

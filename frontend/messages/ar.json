@@ -128,7 +128,7 @@
     "copyright": "© 2026 ترندي (Trendy AI). جميع الحقوق محفوظة.",
     "designCredit": "صُمم بروح وهوية عربية أصيلة."
   },
- "dashboard": {
+  "dashboard": {
     "generate": "توليد",
     "history": "السجل",
     "brandKit": "هوية العلامة التجارية",
@@ -153,7 +153,7 @@
     "subscription": "الاشتراك والدفع",
     "sidebarSubtitle": "استوديو الهوية والأصول الرقمية",
     "workspaceNavigation": "التنقل داخل مساحة العمل"
-},
+  },
   "account": {
     "title": "الحساب",
     "loadingProfile": "جارٍ تحميل الملف الشخصي…",
@@ -381,7 +381,8 @@
           "sort_newest": "الأحدث أولاً",
           "sort_oldest": "الأقدم أولاً",
           "no_results": "لا توجد علامات مطابقة للبحث.",
-"studio_summary": "{count, plural, =1 {استوديو واحد — كل استوديو يتذكر هوية علامتك ومفاتيحها وسجلها، معززاً بنماذج الذكاء الاصطناعي لإنشاء محتوى متسق بصرياً ولغوياً.} other {# استوديوهات — كل استوديو يتذكر هوية علامتك ومفاتيحها وسجلها، معززاً بنماذج الذكاء الاصطناعي لإنشاء محتوى متسق بصرياً ولغوياً.}}",          "no_studios_yet": "لا توجد استوديوهات بعد.",
+          "studio_summary": "{count, plural, =1 {استوديو واحد — كل استوديو يتذكر هوية علامتك ومفاتيحها وسجلها، معززاً بنماذج الذكاء الاصطناعي لإنشاء محتوى متسق بصرياً ولغوياً.} other {# استوديوهات — كل استوديو يتذكر هوية علامتك ومفاتيحها وسجلها، معززاً بنماذج الذكاء الاصطناعي لإنشاء محتوى متسق بصرياً ولغوياً.}}",
+          "no_studios_yet": "لا توجد استوديوهات بعد.",
           "create_your_first_brand": "أنشئ علامتك التجارية الأولى لدخول الاستوديو.",
           "create_brand2": "إنشاء علامة تجارية"
         }
@@ -462,7 +463,7 @@
       "brand-card": {
         "current": "الحالية"
       },
-        "ai-promo-banner": {
+      "ai-promo-banner": {
         "eyebrow": "توليد المحتوى الفوري AI",
         "heading": "هل تود إطلاق حملة جديدة بنبرة صوت جديدة؟",
         "heading_with_brand": "هل تود إطلاق حملة جديدة بنبرة صوت «{brand}»؟",
@@ -470,7 +471,6 @@
         "cta": "بدء التوليد الذكي الآن",
         "close": "إغلاق"
       },
-
       "create-brand-modal": {
         "enter_brand_name": "أدخل اسم العلامة التجارية",
         "create_brand": "إنشاء علامة تجارية",
@@ -691,15 +691,20 @@
         "hex_color_value": "قيمة اللون السداسية",
         "remove_color": "إزالة اللون",
         "primary_the_accent": "الأساسي · اللون المميز",
-        "make_primary": "اجعله أساسيًا"
+        "make_primary": "اجعله أساسيًا",
+        "primary_confirmed": "اللون الأساسي المعتمد",
+        "secondary_color": "لون ثانوي"
       },
       "kit-wizard": {
-        "brand_kit": "هوية العلامة التجارية",
+        "brand_kit": "الهوية البصرية لعلامتك",
         "back": "رجوع",
         "continue": "متابعة",
+        "required_elements": "العناصر المطلوبة الأساسية",
+        "required_count": "{completed} من {total} عناصر مكتملة",
         "step_brand": "العلامة",
+        "step_logo": "الشعار البصري",
         "step_tagline": "الشعار",
-        "step_tone": "النبرة",
+        "step_industry": "مجال العمل",
         "step_audience": "الجمهور",
         "step_colors": "الألوان",
         "step_avoid": "تجنّب",
@@ -712,18 +717,28 @@
       },
       "steps": {
         "step-audience": {
-          "describe_your_target_audience": "صف جمهورك المستهدف…",
-          "audience": "الجمهور",
-          "who_is_it_prefix": "مين هو ",
-          "for_word": "الجمهور؟",
-          "audience_help": "كم جملة عن مين لازم يحس إنه المحتوى موجّه إله."
+          "describe_your_target_audience": "مثال: الشباب، رواد الأعمال والمهنيون المهتمون بالتقنية في السوق العربي…",
+          "audience": "وصف الجمهور المستهدف",
+          "required_badge": "(أساسي)",
+          "who_is_it_prefix": "مين جمهور ",
+          "audience_suffix": " المستهدف؟",
+          "audience_help": "حدد الفئات والشرائح الأكثر اهتماماً بعلامتك التجارية.",
+          "quick_suggestions": "فئات مقترحة سريعة",
+          "select_multiple_hint": "يمكن اختيار أكثر من فئة",
+          "suggestion_founders": "رواد الأعمال وأصحاب المشاريع الناشئة",
+          "suggestion_small_businesses": "أصحاب المشاريع الصغيرة والمتوسطة",
+          "suggestion_local_customers": "العملاء المحليون والمهتمون بالمنتج",
+          "suggestion_professionals": "الشباب والمهنيون المهتمون بالتقنية",
+          "suggestion_families": "العائلات والأسر",
+          "suggestion_enthusiasts": "المهتمون بمجال العلامة"
         },
         "step-avoid-words": {
           "words_or_themes_to": "كلمات أو مواضيع لتجنّبها…",
           "avoid": "تجنّب",
+          "avoid_label": "تجنّب (افصل بفاصلة)",
           "anything_to_prefix": "في شي لازم ",
           "avoid_word": "نتجنبه؟",
-          "avoid_help": "اختياري. كلمات أو مواضيع لازم TRENDY AI يبتعد عنها."
+          "avoid_help": "اختر كلمات أو مواضيع لازم TRENDY AI يبتعد عنها."
         },
         "step-colors": {
           "add_a_color_to": "أضف لونًا لتحديد لون الاستوديو المميز.",
@@ -733,9 +748,9 @@
           "your_prefix": "ألوان ",
           "colors_word": "علامتك.",
           "colors_help": "حتى ثلاثة ألوان. أول لون هو اللون المميز يلي TRENDY AI بيستخدمه بمساحة العمل.",
-          "text_white": "أبيض",
-          "text_ink": "غامق",
+          "preview_description": "سيظهر هذا اللون كلون أساسي لكافة الأزرار التفاعلية ومولدات المحتوى",
           "curated_palette": "باليتات مقترحة سريعة",
+          "choose_quick_color": "اختر لوناً مميزاً سريعاً",
           "color_maroon": "عنابي",
           "color_pink": "وردي",
           "color_purple": "بنفسجي",
@@ -750,21 +765,21 @@
           "color_red": "أحمر"
         },
         "step-review": {
+          "identity_summary": "ملخص الهوية",
+          "required_summary": "اكتمل {complete} من {total} عناصر أساسية",
+          "required_field_missing": "لم يُحدّد بعد",
           "tagline": "الشعار النصي",
-          "tone": "النبرة",
+          "industry": "مجال العمل",
+          "product_image": "صورة المنتج",
           "audience": "الجمهور",
           "avoid": "تجنّب",
           "colors": "الألوان",
           "you_can_save_now": "يمكنك الحفظ الآن — تبقى الهوية قيد التقدم حتى تُملأ تلك الحقول.",
           "brand_kit_saved_complete": "تم حفظ الهوية — مكتملة.",
           "brand_kit_saved_in": "تم حفظ الهوية — قيد التقدم. املأ الحقول المطلوبة المتبقية لاكتمالها.",
-          "what_the_model_will": "ما سيستخدمه النموذج",
-          "you_have_unsaved_changes": "لديك تغييرات غير محفوظة — يُحدَّث الملخص بعد الحفظ.",
-          "summary_is_generated_after": "يتم إنشاء الملخص بعد الحفظ.",
           "ready_to_prefix": "جاهزة ",
           "save_word": "للحفظ؟",
           "review_help": "{brandName} — مقابلة قصيرة عشان TRENDY AI يرسم بصوتها.",
-          "missing_tone": "النبرة",
           "missing_audience": "الجمهور",
           "missing_colors": "الألوان (لون واحد على الأقل)",
           "still_missing": "لسا ناقص: {items}.",
@@ -774,7 +789,7 @@
         "step-tagline": {
           "enter_a_tagline": "أدخل شعارًا نصيًا…",
           "tagline": "الشعار النصي",
-          "whats_prefix": "شو هو شعار ",
+          "whats_prefix": "شو العبارة التعريفية لـ ",
           "tagline_suffix": "؟",
           "tagline_help": "اختياري. جملة قصيرة يقدر TRENDY AI يدمجها بموجز الصورة.",
           "example_seen_clearly": "{brandName}. واضح ومميز.",
@@ -785,20 +800,47 @@
           "this_is_prefix": "هاي هي ",
           "registered_name_help": "الاسم يلي سجّلتيه. كمّلي خبري TRENDY AI كيف لازم يبين ويحكي."
         },
-        "step-tone": {
-          "how_should_it_prefix": "كيف لازم ",
-          "sound_word": "يحكي؟",
-          "tone_help": "اختاري الصوت يلي TRENDY AI لازم يرسم فيه.",
-          "tone_formal": "رسمي",
-          "tone_formal_desc": "محافظ، دقيق، وفيه شوي مسافة.",
-          "tone_casual": "عفوي",
-          "tone_casual_desc": "بسيط، حواري، متل ما بيحكي صاحبك.",
-          "tone_playful": "مرح",
-          "tone_playful_desc": "خفيف وسلس، فيه لمسة خفة دم بالكلام.",
-          "tone_professional": "احترافي",
-          "tone_professional_desc": "واضح، كفؤ، بدون كلام زايد.",
-          "tone_friendly": "ودود",
-          "tone_friendly_desc": "دافئ، منفتح، ومرحّب فيك."
+        "step-logo": {
+          "question_before": "شو المنتج يلي بدنا ",
+          "question_emphasis": "نسوّقه",
+          "question_after": "؟",
+          "helper": "ارفع صورة منتجك الحقيقي. سيستخدمها TRENDY AI في التصميم النهائي بدلاً من اختراع منتج من خياله.",
+          "drop_prompt": "اسحب صورة المنتج أو تصفّح الملفات",
+          "requirements": "يدعم PNG أو JPG أو WebP حتى 10 ميغابايت · جاهز لصور بدقة 4K",
+          "choose_image": "اختيار صورة المنتج",
+          "replace_image": "استبدال صورة المنتج",
+          "uploading": "جارٍ رفع الصورة…",
+          "background_removal": "إزالة الخلفية بالذكاء الاصطناعي",
+          "preserve_details": "الحفاظ على دقة تفاصيل المنتج",
+          "product_image_alt": "صورة منتج {brandName}",
+          "image_load_failed": "تعذّر تحميل صورة المنتج المحفوظة.",
+          "image_type_error": "اختر صورة بصيغة PNG أو JPG أو WebP.",
+          "image_size_error": "يجب ألا يتجاوز حجم الصورة 10 ميغابايت.",
+          "upload_failed": "تعذّر رفع صورة المنتج. حاول مرة أخرى."
+        },
+        "step-industry": {
+          "question_before": "شو ",
+          "question_emphasis": "مجال عملك",
+          "question_after": "؟",
+          "helper": "يُستخدم مجال عملك لتكييف النبرة والاقتراحات بما يناسب علامتك التجارية.",
+          "beauty": "الجمال والعناية",
+          "fashion": "الأزياء والملابس",
+          "perfume": "العطور",
+          "food": "الأطعمة والمشروبات",
+          "retail": "التجارة والتجزئة",
+          "home": "المنزل والديكور",
+          "services": "الخدمات المهنية",
+          "jewelry": "المجوهرات والإكسسوارات",
+          "other": "مجال آخر",
+          "other_label": "مجال آخر (إدخال يدوي حر)",
+          "other_placeholder": "مثال: التعليم، التقنية، الخدمات…",
+          "other_hint": "يمكنك كتابة أي تخصص بدقة متناهية · حتى 120 حرفاً",
+          "ai_supported": "مدعوم بالذكاء الاصطناعي",
+          "clear_other": "مسح المجال المكتوب",
+          "recognized": "سيُستخدم المجال لتوجيه أفكار التصميم",
+          "selected_field": "المجال المعتمد حالياً:",
+          "ready_for_identity": "جاهز لإنشاء الهوية",
+          "ready_next_step": "جاهز لإنشاء الهوية في الخطوة التالية"
         }
       },
       "kit-status-badge": {
@@ -811,14 +853,14 @@
     },
     "layout": {
       "app-shell": {
-        "breadcrumb_dashboard": "لوحة التحكم الرئيسية", 
+        "breadcrumb_dashboard": "لوحة التحكم الرئيسية",
         "close_menu": "إغلاق القائمة",
         "open_menu": "فتح القائمة",
         "breadcrumb_label": "مسار التنقل",
         "breadcrumb_brands": "العلامات التجارية",
+        "breadcrumb_brand_kit": "الهوية البصرية",
         "breadcrumb_account": "الحساب الشخصي",
         "breadcrumb_settings": "الإعدادات"
-        
       }
     }
   },
