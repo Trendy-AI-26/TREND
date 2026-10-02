@@ -1,35 +1,21 @@
--- Require industry for completed brand kits without discarding existing answers.
+-- Require industry for new completed-kit writes without rewriting legacy data.
 --
--- Existing completed kits that do not satisfy the new completion contract are
--- moved back to in_progress so they can be completed from the UI. Their
--- answers, including tone, tagline, audience, colors, and avoid_words, are
--- intentionally preserved.
+-- NOT VALID deliberately leaves existing rows untouched. PostgreSQL still
+-- enforces this CHECK for every new row and every future INSERT/UPDATE. A
+-- legacy completed kit can therefore remain visible as-is until its owner
+-- edits it, while all newly saved completed kits require industry, audience,
+-- and at least one color.
 
 ALTER TABLE brand_kits
-  DROP CONSTRAINT chk_brand_kits_status_complete_consistency;
-
-UPDATE brand_kits
-SET
-  status = 'in_progress'::kit_status_t,
-  completed_at = NULL
-WHERE status = 'complete'
-  AND (
-    NULLIF(BTRIM(industry), '') IS NULL
-    OR NULLIF(BTRIM(audience), '') IS NULL
-    OR COALESCE(cardinality(colors), 0) < 1
-  );
-
-ALTER TABLE brand_kits
-  ADD CONSTRAINT chk_brand_kits_status_complete_consistency
+  ADD CONSTRAINT chk_brand_kits_complete_requires_industry
   CHECK (
-    (
-      status = 'complete'
-      AND NULLIF(BTRIM(industry), '') IS NOT NULL
+    status <> 'complete'
+    OR (
+      NULLIF(BTRIM(industry), '') IS NOT NULL
       AND NULLIF(BTRIM(audience), '') IS NOT NULL
       AND COALESCE(cardinality(colors), 0) >= 1
     )
-    OR status <> 'complete'
-  );
+  ) NOT VALID;
 
-COMMENT ON CONSTRAINT chk_brand_kits_status_complete_consistency ON brand_kits IS
-  'Completed kits require a non-empty industry, audience, and at least one color; existing answers are preserved.';
+COMMENT ON CONSTRAINT chk_brand_kits_complete_requires_industry ON brand_kits IS
+  'New or updated completed kits require a non-empty industry, audience, and at least one color; legacy rows are preserved.';
