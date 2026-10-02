@@ -31,6 +31,16 @@ const SEGMENT_VALUES = AUDIENCE_SEGMENTS.filter((s) => s.value !== 'custom')
     .map((s) => s.value)
 
 describe('BriefAudienceStep — regression: 3-segment cap', () => {
+    it.each(['under_18', '18_24', '25_34', '35_44', '45_54', '55_plus'])(
+        'submits the API age value %s', async (age) => {
+            const user = userEvent.setup()
+            const onChange = vi.fn()
+            renderWithIntl(<BriefAudienceStep audience={EMPTY_AUDIENCE} onChange={onChange} />)
+            await user.selectOptions(document.getElementById('audience-age')!, age)
+            expect(onChange).toHaveBeenLastCalledWith({ ...EMPTY_AUDIENCE, age_range: age })
+        },
+    )
+
     it('allows selecting a 1st, 2nd and 3rd segment', async () => {
         const user = userEvent.setup()
         const onChange = vi.fn()
