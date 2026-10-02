@@ -3,7 +3,7 @@
 import { useTranslations } from 'next-intl';
 import { AUDIENCE_SEGMENTS } from '@/lib/generation-options'
 import type { BriefFieldErrors } from '@/lib/validation'
-import type { TargetAudienceBrief } from '@/types/generation'
+import type { AudienceAgeRange, TargetAudienceBrief } from '@/types/generation'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
@@ -42,13 +42,13 @@ const LOCATION_SUGGESTION_KEYS = [
 ] as const
 
 const AGE_RANGES = [
-    { value: 'Under 18', labelKey: 'age_under_18' },
-    { value: '18–24', labelKey: 'age_18_24' },
-    { value: '25–34', labelKey: 'age_25_34' },
-    { value: '35–44', labelKey: 'age_35_44' },
-    { value: '45–54', labelKey: 'age_45_54' },
-    { value: '55+', labelKey: 'age_55_plus' },
-] as const
+    { value: 'under_18', labelKey: 'age_under_18' },
+    { value: '18_24', labelKey: 'age_18_24' },
+    { value: '25_34', labelKey: 'age_25_34' },
+    { value: '35_44', labelKey: 'age_35_44' },
+    { value: '45_54', labelKey: 'age_45_54' },
+    { value: '55_plus', labelKey: 'age_55_plus' },
+] as const satisfies ReadonlyArray<{ value: AudienceAgeRange; labelKey: string }>
 
 const GENDER_OPTIONS = [
     { value: 'all', label: 'Everyone' },
@@ -159,7 +159,9 @@ export function BriefAudienceStep({
                         id="audience-age"
                         value={audience.age_range ?? ''}
                         onChange={(event) =>
-                            update({ age_range: event.target.value || null })
+                            update({
+                                age_range: AGE_RANGES.find((range) => range.value === event.target.value)?.value ?? null,
+                            })
                         }
                         disabled={disabled}
                         className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground outline-none focus-visible:border-brand focus-visible:ring-2 focus-visible:ring-brand/20"
