@@ -141,7 +141,6 @@ async def test_product_asset_rejects_large_file(monkeypatch):
 def test_generate_request_allows_no_product_asset():
     request = GenerateRequest(
         brief=VALID_BRIEF_MODEL,
-        provider="openai",
         platform_preset="instagram_post",
         logo_mode="none",
         product_asset_id=None,
@@ -155,7 +154,6 @@ def test_generate_request_accepts_one_product_asset():
 
     request = GenerateRequest(
         brief=VALID_BRIEF_MODEL,
-        provider="openai",
         platform_preset="instagram_post",
         logo_mode="none",
         product_asset_id=asset_id,

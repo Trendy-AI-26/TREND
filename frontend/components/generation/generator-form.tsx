@@ -3,9 +3,8 @@
 'use client'
 
 import { useTranslations } from 'next-intl';
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { Download, Loader2, Sparkles } from 'lucide-react'
-import { useActiveKeys } from '@/hooks/use-active-keys'
 import { useGenerate } from '@/hooks/use-generate'
 import { LogoModeSelector } from '@/components/generation/logo-mode-selector'
 import { PresetSelector } from '@/components/generation/preset-selector'
@@ -16,7 +15,7 @@ import { Button } from '@/components/ui/button'
 import { downloadImageFile } from '@/lib/download'
 import { PLATFORM_PRESETS } from '@/lib/presets'
 import { providerLabel } from '@/lib/providers'
-import type { LogoMode, PlatformPreset, Provider } from '@/types'
+import type { LogoMode, PlatformPreset } from '@/types'
 import {
   EMPTY_GENERATION_BRIEF,
   GenerationBriefForm,
@@ -35,41 +34,15 @@ export function GeneratorForm({ brandId, brandName, brandHasLogo }: GeneratorFor
   const tOpt = useTranslations('options');
   const [brief, setBrief] = useState<GenerationBrief>(EMPTY_GENERATION_BRIEF)
   const [briefReviewed, setBriefReviewed] = useState(false)
-  const [provider, setProvider] = useState<Provider>('openai')
   const [preset, setPreset] = useState<PlatformPreset>('instagram_post')
   const [logoMode, setLogoMode] = useState<LogoMode>('none')
-  const [providerInitialized, setProviderInitialized] = useState(false)
   const [downloading, setDownloading] = useState(false)
   const [downloadError, setDownloadError] = useState<string | null>(null)
 
-  const { activeKeys, loading: keysLoading } = useActiveKeys(brandId)
   const { state, generate, reset } = useGenerate(brandId)
 
-  useEffect(() => {
-    setProviderInitialized(false)
-  }, [brandId])
-
-  useEffect(() => {
-    if (keysLoading || providerInitialized) return
-
-    if (activeKeys.openaiActive && !activeKeys.geminiActive) {
-      setProvider('openai')
-    } else if (!activeKeys.openaiActive && activeKeys.geminiActive) {
-      setProvider('gemini')
-    } else if (activeKeys.openaiActive && activeKeys.geminiActive) {
-      setProvider('gemini')
-    } else {
-      setProvider('openai')
-    }
-
-    setProviderInitialized(true)
-  }, [keysLoading, activeKeys, providerInitialized])
-
   const submitting = state.status === 'submitting'
-  const hasActiveKey =
-    (provider === 'openai' && activeKeys.openaiActive) ||
-    (provider === 'gemini' && activeKeys.geminiActive)
-  const generateDisabled = submitting || !briefReviewed || !hasActiveKey
+  const generateDisabled = submitting || !briefReviewed
 
   const presetInfo = PLATFORM_PRESETS[preset]
   const canvasStatus =
@@ -94,7 +67,6 @@ export function GeneratorForm({ brandId, brandName, brandHasLogo }: GeneratorFor
 
     await generate({
       brief,
-      provider,
       platform_preset: preset,
       logo_mode: logoMode,
     })
@@ -152,13 +124,7 @@ export function GeneratorForm({ brandId, brandName, brandHasLogo }: GeneratorFor
           <PresetSelector value={preset} onChange={handlePresetChange} disabled={submitting} />
 
           <div className="grid gap-3 sm:grid-cols-2">
-            <ProviderSelector
-              value={provider}
-              onChange={setProvider}
-              activeKeys={activeKeys}
-              brandId={brandId}
-              disabled={submitting}
-            />
+            <ProviderSelector disabled={submitting} />
             <LogoModeSelector
               value={logoMode}
               onChange={setLogoMode}
@@ -178,10 +144,6 @@ export function GeneratorForm({ brandId, brandName, brandHasLogo }: GeneratorFor
             )}
           </Button>
 
-          {!hasActiveKey && (
-            <p className="text-[12px] text-muted-foreground">{t('add_an_active_provider')}</p>
-          )}
-
           {state.status === 'error' && (
             <ErrorMessage code={state.code} message={state.message} brandId={brandId} />
           )}
@@ -199,7 +161,7 @@ export function GeneratorForm({ brandId, brandName, brandHasLogo }: GeneratorFor
 
         <div className="flex items-center justify-between gap-3">
           <p className="font-mono text-[12px] text-muted-foreground">
-            {presetInfo.width} × {presetInfo.height} · {tOpt(`preset_${preset}`)} · {providerLabel(result?.provider ?? provider)}
+            {presetInfo.width} × {presetInfo.height} · {tOpt(`preset_${preset}`)} · {providerLabel(result?.provider ?? 'openai')}
           </p>
           <Button
             type="button"

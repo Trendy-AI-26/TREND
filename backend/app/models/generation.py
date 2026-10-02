@@ -345,11 +345,21 @@ class PreviewBriefRequest(BaseModel):
     platform_preset: PlatformPresetEnum
 
 class GenerateRequest(BaseModel):
+    """Image-generation request body.
+
+    Security: the provider, model, and API key are resolved exclusively on the
+    server via app.services.generation_resolver. They are deliberately absent
+    here, and "extra": "forbid" makes any attempt to inject them (api_key,
+    provider, model, ...) fail loudly with a 422 instead of being ignored
+    silently. product_asset_id stays a legitimate client choice.
+    """
+
     brief: GenerationBrief
-    provider: ProviderEnum
     platform_preset: PlatformPresetEnum
     logo_mode: LogoModeEnum = LogoModeEnum.none
     product_asset_id: UUID | None = None
+
+    model_config = {"extra": "forbid"}
     
 
 __all__ = [

@@ -8,13 +8,11 @@ from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import ValidationError
-from pydantic import ValidationError
 from storage3.exceptions import StorageException
 
 from app.config import settings
 from app.core.auth import User, get_current_user
 from app.core.supabase import get_service_client
-from app.core.vault import read_secret
 from app.models.caption import CaptionRequest, CaptionResponse, CaptionPreferences
 from app.models.generation import (
     GenerateRequest,
@@ -31,9 +29,9 @@ from app.models.generation import (
 )
 from app.services.error_mapping import classify_provider_error
 from app.services.caption_generator import CaptionOutputError, generate_caption
+from app.services.generation_resolver import resolve_generation_config
 from app.services.postprocess import resize_to_preset
 from app.services.presets import (
-    MODEL_FOR_PROVIDER,
     PLATFORM_PRESETS,
     PRESET_TO_ASPECT_RATIO,
     build_download_filename,
@@ -45,7 +43,6 @@ from app.services.prompt_composer import (
     compose_full_prompt,
 )
 from app.services.providers.base import ProviderError, ProviderResult
-from app.services.providers.gemini_image import gemini_generate
 from app.services.providers.openai_image import openai_generate
 from app.services.watermark import apply_watermark
 
@@ -82,24 +79,6 @@ def _get_brand_or_404(brand_id: UUID, user_id: str) -> dict:
     return result.data
 
 
-def _get_active_key_or_400(brand_id: UUID, provider: str) -> dict:
-    client = get_service_client()
-    result = (
-        client.table("provider_keys")
-        .select("*")
-        .eq("brand_id", str(brand_id))
-        .eq("provider", provider)
-        .eq("is_active", True)
-        .maybe_single()
-        .execute()
-    )
-    if result is None or result.data is None:
-        raise _error_response(
-            400,
-            "NO_ACTIVE_KEY",
-            f"No active {provider} key for this brand. Add or activate a key on the Keys page.",
-        )
-    return result.data
 
 
 def _get_brand_kit_context(brand_id: UUID, brand_name: str) -> BrandContext | None:
@@ -316,10 +295,18 @@ async def create_caption(
         ) from exc
 
     preferences = body.preferences if body and body.preferences else CaptionPreferences()
-    active_key = _get_active_key_or_400(brand_id, generation["provider"])
-    api_key = read_secret(active_key["vault_secret_id"])
-    if not api_key:
-        raise _error_response(502, "CAPTION_PROVIDER_KEY_UNAVAILABLE", "Caption provider is unavailable.")
+
+    # Same server-only credentials as image generation. The stored generation's
+    # provider is informational; the key always comes from configuration.
+    try:
+        managed_config = resolve_generation_config()
+    except RuntimeError as exc:
+        raise _error_response(
+            503,
+            "GENERATION_CONFIGURATION_ERROR",
+            "Generation is not configured on the server.",
+        ) from exc
+    api_key = managed_config.api_key
 
     brief = None
     if generation.get("brief"):
@@ -336,7 +323,7 @@ async def create_caption(
     try:
         result = await asyncio.wait_for(
             generate_caption(
-                provider=generation["provider"],
+                provider=managed_config.provider,
                 api_key=api_key,
                 language=language,
                 platform=platform,
@@ -406,7 +393,16 @@ async def generate_image(
 
     preset_w, preset_h, _label = PLATFORM_PRESETS[body.platform_preset.value]
 
-    active_key = _get_active_key_or_400(brand_id, body.provider.value)
+    # Provider, model, and API key come from server configuration only.
+    # The request body cannot influence them (GenerateRequest forbids extras).
+    try:
+        managed_config = resolve_generation_config()
+    except RuntimeError as exc:
+        raise _error_response(
+            503,
+            "GENERATION_CONFIGURATION_ERROR",
+            "Image generation is not configured on the server.",
+        ) from exc
 
     aspect_ratio = PRESET_TO_ASPECT_RATIO[body.platform_preset.value]
     platform = build_platform_context(
@@ -418,7 +414,7 @@ async def generate_image(
     brand_context = _get_brand_kit_context(brand_id, brand_name)
 
     generation_id = uuid4()
-    resolved_model = MODEL_FOR_PROVIDER[body.provider.value]
+    resolved_model = managed_config.model
 
     client = get_service_client()
     client.table("generations").insert(
@@ -428,7 +424,7 @@ async def generate_image(
             "prompt": body.brief.core_idea,
             "brief": body.brief.model_dump(mode="json"),
             "language": body.brief.language.value,
-            "provider": body.provider.value,
+            "provider": managed_config.provider,
             "model": resolved_model,
             "platform_preset": body.platform_preset.value,
             "width": preset_w,
@@ -446,7 +442,7 @@ async def generate_image(
 
     logger.info(
         "generate start generation_id=%s brand_id=%s provider=%s preset=%s logo_mode=%s",
-        generation_id, brand_id, body.provider.value,
+        generation_id, brand_id, managed_config.provider,
         body.platform_preset.value, body.logo_mode.value,
     )
 
@@ -463,31 +459,19 @@ async def generate_image(
             brand_has_logo=brand_has_logo,
         )
 
-        api_key = read_secret(active_key["vault_secret_id"])
+        api_key = managed_config.api_key
 
         try:
-            if body.provider is ProviderEnum.openai:
-                result: ProviderResult = await asyncio.wait_for(
-                    openai_generate(
-                        api_key=api_key,
-                        prompt=full_prompt,
-                        width=preset_w,
-                        height=preset_h,
-                        model=resolved_model,
-                    ),
-                    timeout=120.0,
-                )
-            else:
-                result = await asyncio.wait_for(
-                    asyncio.to_thread(
-                        gemini_generate,
-                        api_key=api_key,
-                        prompt=full_prompt,
-                        aspect_ratio=aspect_ratio,
-                        model=resolved_model,
-                    ),
-                    timeout=120.0,
-                )
+            result: ProviderResult = await asyncio.wait_for(
+                openai_generate(
+                    api_key=api_key,
+                    prompt=full_prompt,
+                    width=preset_w,
+                    height=preset_h,
+                    model=resolved_model,
+                ),
+                timeout=120.0,
+            )
         except asyncio.TimeoutError as exc:
             raise ProviderError(
                 "TIMEOUT",
@@ -532,16 +516,6 @@ async def generate_image(
             .execute()
         )
 
-        try:
-            client.table("provider_keys").update({"last_used_at": now_iso}).eq(
-                "id", active_key["id"]
-            ).execute()
-        except Exception:
-            logger.warning(
-                "Failed to update last_used_at for key %s (non-critical)",
-                active_key["id"],
-            )
-
         row = updated.data[0] if updated.data else None
         if row is None:
             try:
@@ -567,7 +541,7 @@ async def generate_image(
                 "id": str(generation_id),
                 "prompt": body.brief.core_idea,
                 "language": body.brief.language.value,
-                "provider": body.provider.value,
+                "provider": managed_config.provider,
                 "model": resolved_model,
                 "platform_preset": body.platform_preset.value,
                 "width": preset_w,
