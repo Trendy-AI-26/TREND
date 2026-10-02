@@ -1,6 +1,7 @@
 import re
 from datetime import datetime
 from enum import Enum
+from uuid import UUID
 
 from pydantic import BaseModel, field_validator
 
@@ -16,11 +17,25 @@ class ToneEnum(str, Enum):
 
 
 class KitAnswers(BaseModel):
+    product_asset_id: UUID | None = None
     tagline: str | None = None
     tone: ToneEnum | None = None
+    industry: str | None = None
     audience: str | None = None
     colors: list[str] = []
     avoid_words: str | None = None
+
+    @field_validator("industry")
+    @classmethod
+    def validate_industry(cls, v: str | None) -> str | None:
+        if v is None:
+            return None
+        v = v.strip()
+        if not v:
+            return None
+        if len(v) > 120:
+            raise ValueError("Industry must be 120 characters or less")
+        return v
 
     @field_validator("tagline")
     @classmethod

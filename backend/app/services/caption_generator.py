@@ -76,6 +76,7 @@ def build_caption_prompt(
                 f"Brand: {brand_context.name}",
                 f"Tagline: {brand_context.tagline or 'none'}",
                 f"Tone: {brand_context.tone or 'none'}",
+                f"Business field: {brand_context.industry or 'none'}",
                 f"Audience: {brand_context.audience or 'none'}",
                 f"Colors: {', '.join(brand_context.colors) or 'none'}",
                 f"Avoid words: {brand_context.avoid_words or 'none'}",

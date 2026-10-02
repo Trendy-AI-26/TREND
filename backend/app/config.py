@@ -7,7 +7,7 @@ class Settings(BaseSettings):
     SUPABASE_ANON_KEY: str = ""
     STORAGE_BUCKET: str = "brand-assets"
     PRODUCT_ASSETS_BUCKET: str = "product-assets"
-    PRODUCT_ASSET_MAX_BYTES: int = 5 * 1024 * 1024
+    PRODUCT_ASSET_MAX_BYTES: int = 10 * 1024 * 1024
     AVATARS_BUCKET: str = "avatars"
     AVATAR_MAX_BYTES: int = 2 * 1024 * 1024
     ADMIN_EMAILS: str = ""

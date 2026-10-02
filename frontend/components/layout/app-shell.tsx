@@ -124,15 +124,17 @@ export function AppShell({ children }: { children: ReactNode }) {
               aria-label={t('breadcrumb_label')}
               className="hidden items-center gap-[5px] font-readex text-[13px] md:flex"
             >
-              <Link
-                href="/brands"
-                className="font-medium text-brand-headline/80 no-underline hover:underline"
-              >
-                {t('breadcrumb_dashboard')}
-              </Link>
+              {!pathname.endsWith('/kit') && (
+                <Link
+                  href="/brands"
+                  className="font-medium text-brand-headline/80 no-underline hover:underline"
+                >
+                  {t('breadcrumb_dashboard')}
+                </Link>
+              )}
               {crumbBrand && (
                 <>
-                  <span className="text-brand-headline/40">/</span>
+                  {!pathname.endsWith('/kit') && <span className="text-brand-headline/40">/</span>}
                   <span className="text-brand-headline/50">{crumbBrand.name}</span>
                 </>
               )}
@@ -146,6 +148,12 @@ export function AppShell({ children }: { children: ReactNode }) {
                 <>
                   <span className="text-brand-headline/40">/</span>
                   <span className="font-semibold text-brand-primary">{t('breadcrumb_settings')}</span>
+                </>
+              )}
+              {pathname.endsWith('/kit') && (
+                <>
+                  <span className="text-brand-headline/40">/</span>
+                  <span className="font-semibold text-brand-primary">{t('breadcrumb_brand_kit')}</span>
                 </>
               )}
               {pathname === '/account' && (

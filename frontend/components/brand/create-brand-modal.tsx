@@ -64,8 +64,8 @@ export function CreateBrandModal({ open, onOpenChange, onBrandCreated }: CreateB
       })
       try {
         await saveKit(brand.id, {
+          product_asset_id: null,
           tagline: null,
-          tone: null,
           audience: null,
           colors: [color],
           avoid_words: null,
@@ -73,7 +73,7 @@ export function CreateBrandModal({ open, onOpenChange, onBrandCreated }: CreateB
         })
         setAccent(brand.id, color)
       } catch {
-       
+
       }
       onBrandCreated(brand)
       reset()
@@ -178,7 +178,7 @@ export function CreateBrandModal({ open, onOpenChange, onBrandCreated }: CreateB
 
           {error && <p className="mt-3 text-[13px] text-destructive">{error}</p>}
 
-      
+
           <div className="mt-8 flex items-center gap-2 ltr:flex-row-reverse">
             {step === 1 ? (
               <Button key="next" type="submit" disabled={!name.trim()} className="h-11 px-5">
