@@ -197,6 +197,7 @@
     "emptyTitle": "No notifications yet",
     "emptyDescription": "Notifications will appear here when a design generation is complete or your brand identity is updated.",
     "waitingForGeneration": "Waiting for the first generation",
+    "justNow": "Just now",
     "items": {
       "generation": {
         "title": "New design generation completed",
