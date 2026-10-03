@@ -358,7 +358,14 @@ class GenerateRequest(BaseModel):
     platform_preset: PlatformPresetEnum
     logo_mode: LogoModeEnum = LogoModeEnum.none
     product_asset_id: UUID | None = None
-
+    product_edit_instruction: str | None = Field(
+        default=None,
+        max_length=2000,
+        description=(
+            "Optional instructions describing how the product image "
+            "should be used or visually modified."
+        ),
+    )
     model_config = {"extra": "forbid"}
     
 
