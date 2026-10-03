@@ -10,6 +10,7 @@ import { CreateBrandModal } from '@/components/brand/create-brand-modal'
 import { AppSidebar } from '@/components/layout/app-sidebar'
 import LanguageSwitcher from '@/components/language-switcher'
 import { useBrands } from '@/hooks/use-brands'
+import { useNotifications } from '@/hooks/use-notifications'
 import { useProfile } from '@/hooks/use-profile'
 import { cn } from '@/lib/utils'
 import type { Brand } from '@/types'
@@ -51,7 +52,9 @@ export function AppShell({ children }: { children: ReactNode }) {
   const router = useRouter()
   const currentBrandId = typeof params.brandId === 'string' ? params.brandId : undefined
   const { brands, accents, addBrand } = useBrands()
+  const { notifications } = useNotifications()
   const { profile } = useProfile()
+  const hasUnreadNotifications = notifications.some((notification) => notification.unread)
   const [createOpen, setCreateOpen] = useState(false)
   const [navOpen, setNavOpen] = useState(false)
   const [sidebarClosed, setSidebarClosed] = useState(false)
@@ -140,7 +143,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             <div className="flex items-center gap-2">
               <Link href="/notifications" aria-label={t('notifications')} aria-current={pathname === '/notifications' ? 'page' : undefined} className={cn('relative inline-flex h-9 w-9 items-center justify-center rounded-full text-brand-headline/70 no-underline transition-colors duration-fast hover:bg-brand-bg/60', pathname === '/notifications' && 'bg-brand-bg text-brand-primary')}>
                 <Bell className="h-[18px] w-[18px]" />
-                <span className="absolute end-2 top-2 h-1.5 w-1.5 rounded-full bg-brand-primary" />
+                {hasUnreadNotifications && <span className="absolute end-2 top-2 h-1.5 w-1.5 rounded-full bg-brand-primary" />}
               </Link>
               <LanguageSwitcher />
             </div>
