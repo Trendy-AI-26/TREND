@@ -1,3 +1,4 @@
+from app.services.providers.base import ReferenceImage
 import pytest
 from uuid import UUID, uuid4
 from unittest.mock import AsyncMock, MagicMock
@@ -335,3 +336,76 @@ def test_generate_request_rejects_four_audience_segments():
     with pytest.raises(ValidationError):
         GenerateRequest.model_validate(payload)
 
+@pytest.mark.asyncio
+async def test_generate_passes_product_reference_to_provider(
+    override_auth,
+    mock_supabase,
+    mock_helpers,
+    monkeypatch,
+):
+    from app.services.providers.base import ProviderResult
+
+    provider_mock = AsyncMock(
+        return_value=ProviderResult(
+            image_bytes=b"fake-image-bytes",
+            request_id="req-product-reference",
+        )
+    )
+
+    monkeypatch.setattr(
+        generations,
+        "openai_generate",
+        provider_mock,
+    )
+
+    monkeypatch.setattr(
+        generations,
+        "resize_to_preset",
+        lambda image, width, height: image,
+    )
+
+    product_asset_id = uuid4()
+
+    fake_reference_image = ReferenceImage(
+        content=b"fake-product-image",
+        mime_type="image/png",
+    )
+
+    monkeypatch.setattr(
+        generations,
+        "load_product_asset_reference",
+        lambda **kwargs: fake_reference_image,
+    )
+
+    payload = {
+        "brief": {
+            **VALID_BRIEF,
+            "language": "en",
+        },
+        "platform_preset": "instagram_post",
+        "logo_mode": "none",
+        "product_asset_id": str(product_asset_id),
+        "product_edit_instruction": (
+            "Place the product on a white background."
+        ),
+    }
+
+    client = TestClient(app)
+    brand_id = uuid4()
+
+    response = client.post(
+        f"/brands/{brand_id}/generate",
+        json=payload,
+    )
+
+    assert response.status_code == 200
+
+    provider_mock.assert_awaited_once()
+
+    call_kwargs = provider_mock.call_args.kwargs
+
+    assert call_kwargs["reference_image"] is fake_reference_image
+    assert (
+        "Place the product on a white background."
+        in call_kwargs["prompt"]
+    )
