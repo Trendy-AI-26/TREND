@@ -152,7 +152,8 @@
     "activityLog": "السجل والنشاط",
     "subscription": "الاشتراك والدفع",
     "sidebarSubtitle": "استوديو الهوية والأصول الرقمية",
-    "workspaceNavigation": "التنقل داخل مساحة العمل"
+    "workspaceNavigation": "التنقل داخل مساحة العمل",
+    "myLibrary": "مكتبتي"
   },
   "account": {
     "title": "الحساب",
@@ -314,7 +315,15 @@
             }
           },
           "page": {
-            "history": "السجل"
+            "history": "السجل",
+            "library_title": "مكتبتي",
+            "library_subtitle": "جميع تصاميم ومحاولاتك في سجل واحد، مع التفاصيل والتنزيل وإدارة النتائج.",
+            "new_design": "تصميم جديد",
+            "generation_log": "سجل التوليد",
+            "all_statuses": "كل الحالات",
+            "view_details": "عرض التفاصيل",
+            "download": "تنزيل",
+            "retry": "محاولة جديدة"
           }
         },
         "keys": {
@@ -542,7 +551,7 @@
         "next": "التالي",
         "ready_to_generate": "جاهز للتوليد"
       },
-            "wizard": {
+      "wizard": {
         "title": "توليد المحتوى",
         "ai_badge": "بالذكاء الاصطناعي",
         "subtitle": "راجع التصميم والكابشن، ثم احفظ أو نزّل نسختك",
@@ -564,7 +573,7 @@
         "ready_title": "جاهز للتوليد؟",
         "ready_progress": "{done} من {total} أقسام مكتملة.",
         "ready_all_done": "كل الأقسام مكتملة. يمكنك التوليد الآن.",
-               "generate": "توليد المحتوى",
+        "generate": "توليد المحتوى",
         "idea_label": "الفكرة الأساسية للمحتوى",
         "idea_hint": "كلما كانت الفكرة أوضح، كان المحتوى المُولَّد أدق.",
         "idea_placeholder": "اكتب فكرتك الأساسية هنا...",
@@ -1004,12 +1013,15 @@
         "breadcrumb_dashboard": "لوحة التحكم الرئيسية",
         "close_menu": "إغلاق القائمة",
         "open_menu": "فتح القائمة",
-        "notifications": "الإشعارات",
         "breadcrumb_label": "مسار التنقل",
         "breadcrumb_brands": "العلامات التجارية",
         "breadcrumb_brand_kit": "الهوية البصرية",
         "breadcrumb_account": "الحساب الشخصي",
-        "breadcrumb_settings": "الإعدادات"
+        "breadcrumb_settings": "الإعدادات",
+        "breadcrumb_library": "مكتبتي",
+        "notifications": "الإشعارات",
+        "unreadNotifications": "إشعارات غير مقروءة",
+        "breadcrumb_notifications": "الإشعارات"
       }
     }
   },
@@ -1162,5 +1174,32 @@
     "heading": "علامتك التجارية القادمة تبدأ بفكرة واحدة",
     "subheading": "انضم إلى ترندي وحوّل فكرتك إلى علامة تجارية متكاملة — استراتيجية وهوية ومحتوى جاهز للنشر بوقت وجهد أصغر.",
     "cta": "ابدأ تجربتك الآن"
+  },
+  "notifications": {
+    "eyebrow": "مركز التنبيهات",
+    "title": "الإشعارات",
+    "description": "تابع آخر التحديثات المتعلقة بتصاميمك وهوية علامتك.",
+    "backToDashboard": "العودة للوحة التحكم",
+    "notifications": "الإشعارات",
+    "unreadNotifications": "إشعارات غير مقروءة",
+    "unread": "غير مقروء",
+    "allCaughtUp": "لقد اطلعت على جميع الإشعارات",
+    "items": {
+      "generation": {
+        "title": "اكتمل توليد تصميم جديد",
+        "description": "تم تجهيز التصميم تلقائيًا في مكتبتك.",
+        "time": "منذ 5 دقائق"
+      },
+      "brand": {
+        "title": "الهوية البصرية جاهزة للمراجعة",
+        "description": "أصبح دليل علامتك التجارية جاهزًا للمراجعة.",
+        "time": "منذ ساعة"
+      },
+      "system": {
+        "title": "اقترب استهلاك الخطة المجانية",
+        "description": "تبقى لك بعض المحاولات قبل نهاية الفترة الحالية.",
+        "time": "منذ يوم"
+      }
+    }
   }
 }

@@ -152,7 +152,8 @@
     "activityLog": "History & activity",
     "subscription": "Subscription & billing",
     "sidebarSubtitle": "Identity & digital assets studio",
-    "workspaceNavigation": "Workspace navigation"
+    "workspaceNavigation": "Workspace navigation",
+    "myLibrary": "My Library"
   },
   "account": {
     "title": "Account",
@@ -314,7 +315,15 @@
             }
           },
           "page": {
-            "history": "History"
+            "history": "History",
+            "library_title": "My Library",
+            "library_subtitle": "All your designs and attempts in one place, with details, downloads, and result management.",
+            "new_design": "New design",
+            "generation_log": "Generation log",
+            "all_statuses": "All statuses",
+            "view_details": "View details",
+            "download": "Download",
+            "retry": "Try again"
           }
         },
         "keys": {
@@ -542,7 +551,7 @@
         "next": "Next",
         "ready_to_generate": "Ready to generate"
       },
-            "wizard": {
+      "wizard": {
         "title": "Generate content",
         "ai_badge": "AI-powered",
         "subtitle": "Review the design and caption, then save or download your copy",
@@ -1005,11 +1014,14 @@
         "close_menu": "Close menu",
         "open_menu": "Open menu",
         "notifications": "Notifications",
+        "unreadNotifications": "Unread notifications",
+        "breadcrumb_notifications": "Notifications",
         "breadcrumb_label": "Breadcrumb",
         "breadcrumb_brands": "Brands",
         "breadcrumb_brand_kit": "Brand identity",
         "breadcrumb_account": "Personal account",
-        "breadcrumb_settings": "Settings"
+        "breadcrumb_settings": "Settings",
+        "breadcrumb_library": "My Library"
       }
     }
   },
@@ -1162,5 +1174,32 @@
     "heading": "Your next brand starts with one idea",
     "subheading": "Join Trendy and turn your idea into a complete brand — strategy, identity, and publish-ready content, in a fraction of the time and effort.",
     "cta": "Start your trial now"
+  },
+  "notifications": {
+    "eyebrow": "Notification center",
+    "title": "Notifications",
+    "description": "Keep up with the latest updates about your designs and brand identity.",
+    "backToDashboard": "Back to dashboard",
+    "notifications": "Notifications",
+    "unreadNotifications": "Unread notifications",
+    "unread": "Unread",
+    "allCaughtUp": "You are all caught up",
+    "items": {
+      "generation": {
+        "title": "New design generation completed",
+        "description": "Your design has been automatically added to your library.",
+        "time": "5 minutes ago"
+      },
+      "brand": {
+        "title": "Visual identity ready for review",
+        "description": "Your brand identity guide is ready for review.",
+        "time": "1 hour ago"
+      },
+      "system": {
+        "title": "Free plan usage is almost complete",
+        "description": "You have a few remaining generations in the current period.",
+        "time": "1 day ago"
+      }
+    }
   }
 }

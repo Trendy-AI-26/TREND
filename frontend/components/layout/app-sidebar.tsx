@@ -3,7 +3,7 @@
 import Image from 'next/image'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { Bot, Clock, CreditCard, LogOut, Palette, Pencil, Plus, Settings, Sliders, User } from 'lucide-react'
+import { Bot, CreditCard, FolderOpen, LogOut, Palette, Plus, Settings, Sliders, User, X } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { normalizeHex, TRENDY_AI_ACCENT } from '@/components/brand/brand-workspace'
 import { Badge } from '@/components/ui/badge'
@@ -17,6 +17,7 @@ interface AppSidebarProps {
   currentBrandId?: string
   profile: Profile | null
   onCreateBrand: () => void
+  onClose?: () => void
 }
 
 export function AppSidebar({
@@ -25,6 +26,7 @@ export function AppSidebar({
   currentBrandId,
   profile,
   onCreateBrand,
+  onClose,
 }: AppSidebarProps) {
   const pathname = usePathname()
   const router = useRouter()
@@ -41,35 +43,43 @@ export function AppSidebar({
 
   const nav = workspaceId
     ? [
-        { href: `/${workspaceId}/kit`, label: t('dashboard.brandIdentity'), icon: Palette, match: 'prefix' as const },
-        { href: `/${workspaceId}`, label: t('dashboard.aiContent'), icon: Bot, match: 'exact' as const },
-        { href: `/${workspaceId}/studio`, label: t('dashboard.designStudio'), icon: Pencil, match: 'prefix' as const },
-        { href: `/${workspaceId}/history`, label: t('dashboard.activityLog'), icon: Clock, match: 'prefix' as const },
-        // BYOK is intentionally hidden while provider-key management is disabled.
-      ]
+      { href: `/${workspaceId}/kit`, label: t('dashboard.brandIdentity'), icon: Palette, match: 'prefix' as const },
+      { href: `/${workspaceId}`, label: t('dashboard.aiContent'), icon: Bot, match: 'exact' as const },
+      { href: `/${workspaceId}/history`, label: t('dashboard.myLibrary'), icon: FolderOpen, match: 'prefix' as const },
+      // BYOK is intentionally hidden while provider-key management is disabled.
+    ]
     : []
 
   return (
     <aside className="flex h-full w-[224px] shrink-0 flex-col overflow-y-auto border-e border-brand-accent/30 bg-brand-cream px-3 font-readex text-brand-headline">
-      <Link
-        href="/brands"
-        className="flex shrink-0 flex-col gap-1 border-b border-brand-accent/30 px-1 py-3 no-underline"
-      >
-        <span className="flex items-center gap-2">
-          <Image
-            src="/trendy_logo.png"
-            alt="TRENDY AI"
-            width={32}
-            height={32}
-            className="h-8 w-8 object-contain"
-          />
-          <span className="font-logo text-[22px] font-semibold leading-none text-brand-headline">
-            TRENDY AI
+      <div className="relative shrink-0 border-b border-brand-accent/30 py-3">
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label={t('layout.close_menu')}
+          className="absolute end-0 top-3 inline-flex h-8 w-8 items-center justify-center rounded-md text-brand-headline/60 transition-colors hover:bg-brand-bg/60 hover:text-brand-primary"
+        >
+          <X className="h-4 w-4" />
+        </button>
+        <Link
+          href="/brands"
+          className="flex flex-col gap-1 px-1 pe-10 no-underline"
+        >
+          <span className="flex items-center gap-2">
+            <Image
+              src="/trendy_logo.png"
+              alt="TRENDY AI"
+              width={32}
+              height={32}
+              className="h-8 w-8 object-contain"
+            />
+            <span className="font-logo text-[22px] font-semibold leading-none text-brand-headline">
+              TRENDY AI
+            </span>
           </span>
-          <Badge>{t('dashboard.proBadge')}</Badge>
-        </span>
-        <span className="text-[11px] text-brand-headline/50">{t('dashboard.tagline')}</span>
-      </Link>
+          <span className="text-[11px] text-brand-headline/50">{t('dashboard.tagline')}</span>
+        </Link>
+      </div>
 
       <div className="mt-3 rounded-[10px] border border-brand-accent/30 bg-brand-bg/40 px-3 py-[10px]">
         <Link
