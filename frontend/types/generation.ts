@@ -45,13 +45,15 @@ export type VoiceTone =
 
 export type TextLanguage = 'en' | 'ar'
 
+export type AudienceAgeRange = 'under_18' | '18_24' | '25_34' | '35_44' | '45_54' | '55_plus'
+
 export interface TargetAudienceBrief {
     /** One or two audience segments selected by the user. */
     segments: string[]
     /** Optional location, such as "Amman, Jordan". */
     location?: string | null
-    /** Optional age range, such as "25–34". */
-    age_range?: string | null
+    /** Optional API age value, such as "25_34"; labels are translated separately. */
+    age_range?: AudienceAgeRange | null
     /** Optional gender focus, such as "all" or "women". */
     gender_focus?: string | null
     /** Optional context about the audience's needs or motivations. */
