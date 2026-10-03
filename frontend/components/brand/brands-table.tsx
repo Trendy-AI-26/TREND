@@ -14,9 +14,11 @@ export const PAGE_SIZE = 5
 export type BrandSort = 'newest' | 'oldest'
 
 interface BrandsTableProps {
-  /** القائمة بعد الفلترة والترتيب (الجدول بيقصّها لصفحات لحاله) */
   brands: BrandListItem[]
   accents: Record<string, string>
+  industries: Record<string, string>
+  brandColors: Record<string, string[]>
+  taglines: Record<string, string>
   page: number
   onPageChange: (page: number) => void
   sort: BrandSort
@@ -25,9 +27,9 @@ interface BrandsTableProps {
 }
 
 const STATUS_STYLES: Record<KitStatus, string> = {
-  complete: 'bg-brand-primary/10 text-brand-primary',
-  in_progress: 'bg-brand-accent/20 text-[#8c6d3f]',
-  not_started: 'bg-brand-bg text-brand-headline/60',
+  complete: 'bg-emerald-100 text-emerald-700 font-bold',
+  in_progress: 'bg-amber-100 text-amber-700 font-bold',
+  not_started: 'bg-brand-bg text-brand-headline/60 font-bold',
 }
 
 const STATUS_LABELS: Record<KitStatus, string> = {
@@ -47,6 +49,9 @@ const iconButton =
 export function BrandsTable({
   brands,
   accents,
+  industries,
+  brandColors,
+  taglines,
   page,
   onPageChange,
   sort,
@@ -70,19 +75,20 @@ export function BrandsTable({
           <thead>
             <tr className="border-b border-brand-accent/30 bg-brand-bg/40 text-[12px] font-bold text-brand-headline">
               <th scope="col" className="px-6 py-4 text-start">{t('col_brand')}</th>
-              <th scope="col" className="px-6 py-4 text-start">{t('col_actions')}</th>
+              <th scope="col" className="px-6 py-4 text-start">{t('col_industry')}</th>
               <th scope="col" className="px-6 py-4 text-center">{t('col_status')}</th>
-              <th scope="col" className="px-6 py-4 text-end">
+              <th scope="col" className="px-6 py-4 text-center">
                 <button
                   type="button"
                   onClick={onToggleSort}
                   aria-label={sort === 'newest' ? t('sort_newest_hint') : t('sort_oldest_hint')}
-                  className="inline-flex items-center gap-1.5 font-bold hover:text-brand-primary"
+                  className="mx-auto inline-flex items-center gap-1.5 font-bold hover:text-brand-primary"
                 >
                   {t('col_created')}
                   <ArrowUpDown className="h-3 w-3" />
                 </button>
               </th>
+              <th scope="col" className="px-6 py-4 text-center">{t('col_actions')}</th>
             </tr>
           </thead>
           <tbody>
@@ -114,25 +120,65 @@ export function BrandsTable({
                         )}
                       </span>
                       <div className="min-w-0">
-                        <Link
-                          href={`/${brand.id}`}
-                          className="block truncate text-[14px] font-bold text-brand-headline no-underline hover:underline"
-                        >
-                          {brand.name}
-                        </Link>
-                        <span
-                          dir="ltr"
-                          className="block text-start text-[12px] tracking-[0.3px] text-brand-headline/45"
-                        >
-                          {hex ? `#${hex}` : '—'}
-                        </span>
+                        <div className="flex items-baseline gap-2">
+                          <Link
+                            href={`/${brand.id}`}
+                            className="truncate text-[14px] font-bold text-brand-headline no-underline hover:underline"
+                          >
+                            {brand.name}
+                          </Link>
+                          <span dir="ltr" className="shrink-0 text-[11px] tracking-[0.3px] text-brand-headline/40">
+                            {hex ? `#${hex}` : '—'}
+                          </span>
+                        </div>
+                        <div className="mt-1 flex min-w-0 items-center gap-1.5">
+                          {(brandColors?.[brand.id] ?? []).slice(0, 4).map((c, i) => (
+                            <span
+                              key={i}
+                              className="h-2 w-2 shrink-0 rounded-full ring-1 ring-inset ring-black/10"
+                              style={{ backgroundColor: c }}
+                            />
+                          ))}
+                          {taglines[brand.id] && (
+                            <span className="truncate text-[12px] text-brand-headline/50">
+                              {taglines[brand.id]}
+                            </span>
+                          )}
+                        </div>
                       </div>
                     </div>
                   </td>
 
+                  {/* مجال العمل */}
+                  <td className="px-6 py-[17px]">
+                    {industries[brand.id] ? (
+                      <span className="inline-flex items-center rounded-full bg-brand-bg px-3 py-1 text-[12px] font-medium text-brand-headline/70">
+                        {industries[brand.id]}
+                      </span>
+                    ) : (
+                      <span className="text-[13px] text-brand-headline/40">—</span>
+                    )}
+                  </td>
+                  {/* الحالة */}
+                  <td className="px-6 py-[17px] text-center">
+                    <span
+                      className={cn(
+                        'inline-flex items-center rounded-full px-3 py-1 text-[12px] font-medium',
+                        STATUS_STYLES[brand.kit_status],
+                      )}
+                    >
+                      {t(STATUS_LABELS[brand.kit_status])}
+                    </span>
+                  </td>
+
+                  {/* تاريخ الإنشاء */}
+                  <td className="px-6 py-[17px] text-center text-[14px] text-brand-headline/70">
+                    {formatDate(brand.created_at)}
+                  </td>
+
                   {/* الإجراءات: فتح ← تعديل ← حذف */}
                   <td className="px-6 py-[17px]">
-                    <div className="flex items-center gap-1">
+                    <div className="flex items-center justify-center gap-1">
                       <Link
                         href={`/${brand.id}`}
                         className={cn(iconButton, 'text-brand-headline')}
@@ -160,23 +206,6 @@ export function BrandsTable({
                       </button>
                     </div>
                   </td>
-
-                  {/* الحالة */}
-                  <td className="px-6 py-[17px] text-center">
-                    <span
-                      className={cn(
-                        'inline-flex items-center rounded-full px-3 py-1 text-[12px] font-medium',
-                        STATUS_STYLES[brand.kit_status],
-                      )}
-                    >
-                      {t(STATUS_LABELS[brand.kit_status])}
-                    </span>
-                  </td>
-
-                  {/* تاريخ الإنشاء */}
-                  <td className="px-6 py-[17px] text-end text-[14px] text-brand-headline/70">
-                    {formatDate(brand.created_at)}
-                  </td>
                 </tr>
               )
             })}
@@ -184,7 +213,6 @@ export function BrandsTable({
         </table>
       </div>
 
-    
       <div className="flex flex-wrap items-center justify-between gap-3 border-t border-brand-accent/30 px-6 py-3">
         <p className="text-[12px] text-brand-headline/60">
           {t('showing', {

@@ -14,6 +14,7 @@ class BrandContext:
     audience: str | None = None
     colors: list[str] = field(default_factory=list)
     avoid_words: str | None = None
+    industry: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -262,6 +263,8 @@ def _build_brand_identity_section(brand_context: BrandContext | None) -> str | N
         lines.append(f'Tagline: "{brand_context.tagline}"')
     if brand_context.tone and brand_context.tone in TONE_STYLE_MAP:
         lines.append(f"Visual style: {TONE_STYLE_MAP[brand_context.tone]}")
+    if brand_context.industry:
+        lines.append(f"Business field: {brand_context.industry} — tailor concepts and recommendations to this industry.")
     if brand_context.audience:
         lines.append(
             f"Target audience: {brand_context.audience} "

@@ -103,7 +103,7 @@ def _get_brand_kit_context(brand_id: UUID, brand_name: str) -> BrandContext | No
     return BrandContext(
         name=brand_name,
         tagline=row.get("tagline"),
-        tone=row.get("tone"),
+        industry=row.get("industry"),
         audience=row.get("audience"),
         colors=row.get("colors") or [],
         avoid_words=row.get("avoid_words"),

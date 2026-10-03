@@ -1,4 +1,5 @@
 import type { Config } from "tailwindcss";
+import tailwindcssAnimate from 'tailwindcss-animate'
 
 const config: Config = {
   darkMode: ["class"],
@@ -57,16 +58,13 @@ const config: Config = {
         },
       },
       fontFamily: {
-        display: ['var(--font-display)', 'ui-serif', 'Georgia', 'serif'],
-        sans: ['var(--font-sans)', 'ui-sans-serif', 'system-ui', 'sans-serif'],
-        // Landing-page display headings — Markazi Text (Arabic + Latin),
-        // separate from the sitewide RTL body font (--font-arabic) below.
+        display: ['var(--font-display)', 'serif'],
+        sans: ['var(--font-sans)', 'sans-serif'],
+        // Landing and product headings share El Messiri; all UI/body text shares Tajawal.
         ruqaa: ['var(--font-heading)', 'var(--font-arabic)', 'serif'],
-        // Decorative wordmark ("تريندي" / "Trendy") — calligraphic Ruqaa style.
         logo: ['var(--font-logo)', 'var(--font-arabic)', 'serif'],
-        // Landing-page body/UI text — Readex Pro (Arabic + Latin).
         readex: ['var(--font-readex)', 'var(--font-arabic)', 'sans-serif'],
-        tajawal: ['Tajawal', 'var(--font-arabic)', 'sans-serif'],
+        tajawal: ['var(--font-sans)', 'sans-serif'],
         'el-messiri': ['El Messiri', 'var(--font-arabic)', 'serif'],
         mono: ['var(--font-geist-mono)', 'ui-monospace', 'Menlo', 'monospace'],
       },
@@ -111,6 +109,6 @@ const config: Config = {
       },
     },
   },
-  plugins: [require("tailwindcss-animate")],
+  plugins: [tailwindcssAnimate],
 };
 export default config;

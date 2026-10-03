@@ -3,7 +3,7 @@
 'use client'
 
 import { useTranslations } from 'next-intl';
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Download, Loader2, Sparkles } from 'lucide-react'
 import { useGenerate } from '@/hooks/use-generate'
 import { LogoModeSelector } from '@/components/generation/logo-mode-selector'
@@ -15,6 +15,7 @@ import { Button } from '@/components/ui/button'
 import { downloadImageFile } from '@/lib/download'
 import { PLATFORM_PRESETS } from '@/lib/presets'
 import { providerLabel } from '@/lib/providers'
+import { addGenerationNotification } from '@/hooks/use-notifications'
 import type { LogoMode, PlatformPreset } from '@/types'
 import {
   EMPTY_GENERATION_BRIEF,
@@ -32,6 +33,7 @@ interface GeneratorFormProps {
 export function GeneratorForm({ brandId, brandName, brandHasLogo }: GeneratorFormProps) {
   const t = useTranslations('components.generation.generator-form');
   const tOpt = useTranslations('options');
+  const tNotifications = useTranslations('notifications');
   const [brief, setBrief] = useState<GenerationBrief>(EMPTY_GENERATION_BRIEF)
   const [briefReviewed, setBriefReviewed] = useState(false)
   const [preset, setPreset] = useState<PlatformPreset>('instagram_post')
@@ -40,6 +42,7 @@ export function GeneratorForm({ brandId, brandName, brandHasLogo }: GeneratorFor
   const [downloadError, setDownloadError] = useState<string | null>(null)
 
   const { state, generate, reset } = useGenerate(brandId)
+  const notifiedGenerationRef = useRef<string | null>(null)
 
   const submitting = state.status === 'submitting'
   const generateDisabled = submitting || !briefReviewed
@@ -92,6 +95,17 @@ export function GeneratorForm({ brandId, brandName, brandHasLogo }: GeneratorFor
 
   const result = state.status === 'success' ? state.result : null
   const canDownload = Boolean(result?.image_url && result?.download_filename)
+
+  useEffect(() => {
+    if (state.status !== 'success' || notifiedGenerationRef.current === state.result.id) return
+    notifiedGenerationRef.current = state.result.id
+    addGenerationNotification(
+      tNotifications('items.generation.title'),
+      tNotifications('items.generation.description'),
+      tNotifications('justNow'),
+    )
+  }, [state, tNotifications])
+
   return (
     <div className="grid gap-[22px] xl:grid-cols-[minmax(380px,460px)_1fr] xl:items-start">
       <form

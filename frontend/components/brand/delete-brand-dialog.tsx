@@ -57,17 +57,24 @@ export function DeleteBrandDialog({
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="max-w-[360px] gap-0 rounded-2xl border-brand-accent/30 bg-white p-6 font-readex text-brand-headline sm:rounded-2xl">
-        <DialogHeader className="gap-0 text-start sm:text-start">
-          <span className="mb-4 inline-flex h-10 w-10 items-center justify-center rounded-xl bg-brand-primary/10 text-brand-primary">
-            <TriangleAlert className="h-5 w-5" />
-          </span>
-          <DialogTitle className="text-[16px] font-bold leading-normal tracking-normal">
-            {t('delete_title')}
-          </DialogTitle>
-          <DialogDescription className="mt-2 text-[13px] leading-relaxed text-brand-headline/60">
-            {t('confirm_text', { name: brand.name })}
-          </DialogDescription>
-        </DialogHeader>
+<DialogHeader className="gap-0 text-start sm:text-start">
+  <div className="flex items-start gap-3 rtl:flex-row-reverse">
+    <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-brand-primary/10 text-brand-primary">
+      <TriangleAlert className="h-5 w-5" />
+    </span>
+    <div>
+      <DialogTitle className="text-[16px] font-bold leading-normal tracking-normal">
+        {t('delete_title')}
+      </DialogTitle>
+     <DialogDescription className="mt-2 text-[13px] leading-relaxed text-brand-headline/60">
+  {t.rich('confirm_text', {
+    name: brand.name,
+    b: (chunks) => <span className="font-bold text-brand-headline">{chunks}</span>,
+  })}
+</DialogDescription>
+    </div>
+  </div>
+</DialogHeader>
 
         {error && <p className="mt-3 text-[13px] text-destructive">{error}</p>}
 
