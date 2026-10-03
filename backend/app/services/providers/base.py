@@ -7,8 +7,6 @@ class ProviderResult:
     request_id: str | None
 
 
-from dataclasses import dataclass
-
 @dataclass
 class ReferenceImage:
     content: bytes

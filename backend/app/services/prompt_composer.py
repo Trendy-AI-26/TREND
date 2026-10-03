@@ -299,6 +299,7 @@ def build_generation_prompt(
     platform: PlatformContext,
     logo_mode: str,
     brand_has_logo: bool,
+    product_edit_instruction: str | None = None,
 ) -> str:
     """Deterministic prompt composer combining GenerationBrief with Brand, Platform and Logo rules."""
     sections: list[str] = [SYSTEM_ROLE_PROMPT]
@@ -336,8 +337,21 @@ def build_generation_prompt(
     logo_sec = _build_logo_section(logo_mode, brand_has_logo)
     if logo_sec:
         sections.append(logo_sec)
+    # Layer 6: Product reference instructions
+        if product_edit_instruction:
+            sections.append(
+            "=== PRODUCT IMAGE INSTRUCTIONS ===\n"
+            "A product reference image is provided. "
+            "Use the same product in the generated design.\n"
+            "Preserve the product identity, shape, packaging, "
+            "logo, label, and important colors unless the user "
+            "explicitly asks to change them.\n"
+            f"User product instruction: "
+            f"{product_edit_instruction}"
+        )
 
-    # Layer 6: Output rules
+
+    # Layer 7: Output rules
     sections.append(
     OUTPUT_RULES_PROMPT
     + "\n"
@@ -387,3 +401,22 @@ def _mapped(mapping: dict[str, str], value: object, custom: str | None = None) -
     if key == "custom":
         return custom or "Custom"
     return mapping.get(key, key.replace("_", " "))
+
+def build_generation_prompt(
+    *,
+    brief,
+    brand_context,
+    platform,
+    logo_mode,
+    brand_has_logo,
+    has_product_reference: bool = False,
+    product_edit_instruction: str | None = None,
+) -> str:
+    if has_product_reference:
+        prompt_lines.append(
+        "A product reference image is provided. "
+        "Preserve the product identity, shape, packaging, "
+        "colors, and important visual details."
+    )
+
+    
