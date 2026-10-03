@@ -336,6 +336,15 @@ def test_generate_request_rejects_four_audience_segments():
     with pytest.raises(ValidationError):
         GenerateRequest.model_validate(payload)
 
+
+def test_history_filter_constants_match_supported_enums():
+    assert generations._VALID_HISTORY_STATUSES == {
+        status.value for status in generations.GenerationHistoryStatusEnum
+    }
+    assert generations._VALID_HISTORY_PROVIDERS == {
+        provider.value for provider in ProviderEnum
+    }
+
 @pytest.mark.asyncio
 async def test_generate_passes_product_reference_to_provider(
     override_auth,

@@ -787,7 +787,8 @@ async def generate_image(
             "Something went wrong. Please try again.",
         ) from exc
 
-# _VALID_HISTORY_PROVIDERS = {p.value for p in ProviderEnum}
+_VALID_HISTORY_STATUSES = {s.value for s in GenerationHistoryStatusEnum}
+_VALID_HISTORY_PROVIDERS = {p.value for p in ProviderEnum}
 
 
 @router.get("/generations", response_model=GenerationHistoryPage)
