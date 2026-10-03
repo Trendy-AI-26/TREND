@@ -193,9 +193,9 @@
    Applied when <html dir="rtl"> is set by LanguageProvider.
    ============================================================ */
 
-/* Use Arabic font when in RTL mode */
+/* Keep Arabic and English UI typography consistent across routes. */
 [dir="rtl"] body {
-  font-family: var(--font-arabic), var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--font-sans), var(--font-arabic), ui-sans-serif, system-ui, sans-serif;
 }
 
 /* Reset direction for LTR-only content like email/URL inputs */
@@ -220,17 +220,17 @@
 /* Font family variables — self-hosted via @fontsource (npm), not next/font/google.
    Avoids depending on a live connection to Google Fonts at build/runtime. */
 :root {
-  --font-display: 'Poppins', ui-serif, Georgia, serif;
-  --font-sans: 'Poppins', ui-sans-serif, system-ui, sans-serif;
-  --font-arabic: 'Noto Naskh Arabic', ui-sans-serif, system-ui, sans-serif;
-  --font-logo: 'El Messiri', 'Noto Naskh Arabic', serif;
-  --font-heading: 'El Messiri', 'Noto Naskh Arabic', serif;
-  --font-readex: 'Tajawal', 'Noto Naskh Arabic', sans-serif;
+  --font-display: 'El Messiri', 'Tajawal', serif;
+  --font-sans: 'Tajawal', 'Poppins', sans-serif;
+  --font-arabic: 'Tajawal', sans-serif;
+  --font-logo: 'El Messiri', 'Tajawal', serif;
+  --font-heading: 'El Messiri', 'Tajawal', serif;
+  --font-readex: 'Tajawal', 'Poppins', sans-serif;
 }
 
 /* Auth pages — clean editorial form styling from the new Trendy direction. */
 .auth-page {
-  font-family: 'Tajawal', 'Noto Naskh Arabic', sans-serif;
+  font-family: var(--font-sans), sans-serif;
 }
 
 .auth-page .auth-input {
