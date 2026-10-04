@@ -33,6 +33,20 @@ VALID_BRIEF = {
 }
 
 
+@pytest.mark.parametrize("age", ["under_18", "18_24", "25_34", "35_44", "45_54", "55_plus"])
+def test_generation_request_accepts_each_frontend_age_option(age):
+    payload = {
+        "brief": {
+            **VALID_BRIEF,
+            "target_audience": {**VALID_BRIEF["target_audience"], "age_range": age},
+        },
+        "platform_preset": "instagram_post",
+        "logo_mode": "none",
+    }
+    request = GenerateRequest.model_validate(payload)
+    assert request.brief.target_audience.age_range.value == age
+
+
 def test_generation_brief_accepts_valid_payload():
     brief = GenerationBrief.model_validate(VALID_BRIEF)
 

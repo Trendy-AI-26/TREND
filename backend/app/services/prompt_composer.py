@@ -302,6 +302,7 @@ def build_generation_prompt(
     platform: PlatformContext,
     logo_mode: str,
     brand_has_logo: bool,
+    product_edit_instruction: str | None = None,
 ) -> str:
     """Deterministic prompt composer combining GenerationBrief with Brand, Platform and Logo rules."""
     sections: list[str] = [SYSTEM_ROLE_PROMPT]
@@ -340,13 +341,25 @@ def build_generation_prompt(
     if logo_sec:
         sections.append(logo_sec)
 
-    # Layer 6: Output rules
-    sections.append(
-    OUTPUT_RULES_PROMPT
-    + "\n"
-    + language_instruction
-)
+    # Layer 6: Product reference instructions
+    if product_edit_instruction:
+        sections.append(
+            "=== PRODUCT IMAGE INSTRUCTIONS ===\n"
+            "A product reference image is provided. "
+            "Use the same product in the generated design.\n"
+            "Preserve the product identity, shape, packaging, "
+            "logo, label, and important colors unless the user "
+            "explicitly asks to change them.\n"
+            f"User product instruction: "
+            f"{product_edit_instruction}"
+        )
 
+    # Layer 7: Output rules
+    sections.append(
+        OUTPUT_RULES_PROMPT
+        + "\n"
+        + language_instruction
+    )
 
     return "\n\n".join(sections)
 
@@ -382,8 +395,17 @@ def _value(value: object) -> str:
 
 
 def _language_instruction(brief: GenerationBrief) -> str:
-    language = _value(brief.language) or "ar"
-    return LANGUAGE_INSTRUCTION_MAP[language]
+    language = (
+        brief.language.value
+        if hasattr(brief.language, "value")
+        else str(brief.language)
+    )
+
+    if language == "en":
+        return "Write newly generated campaign copy in English."
+
+    return "Write newly generated campaign copy in Arabic."
+
 
 def _mapped(mapping: dict[str, str], value: object, custom: str | None = None) -> str:
     key = _value(value)

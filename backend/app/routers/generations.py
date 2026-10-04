@@ -36,6 +36,10 @@ from app.services.presets import (
     PRESET_TO_ASPECT_RATIO,
     build_download_filename,
 )
+from app.services.product_asset_loader import (
+    load_product_asset_reference,
+)
+
 from app.services.prompt_composer import (
     BrandContext,
     build_generation_prompt,
@@ -86,7 +90,7 @@ def _get_brand_kit_context(brand_id: UUID, brand_name: str) -> BrandContext | No
     client = get_service_client()
     result = (
         client.table("brand_kits")
-        .select("tagline, industry, audience, colors, avoid_words, status")
+        .select("tagline, tone, audience, colors, avoid_words, status,language")
         .eq("brand_id", str(brand_id))
         .maybe_single()
         .execute()
@@ -371,30 +375,80 @@ async def generate_image(
     body: GenerateRequest,
     current_user: User = Depends(get_current_user),
 ) -> GenerationResponse:
-    brand = _get_brand_or_404(brand_id, current_user.id)
-    product_asset = None
+    """
+    Generate an image for a brand.
 
-    if body.product_asset_id is not None:
-         product_asset = _get_product_asset_or_400(
-            brand_id=brand_id,
-            asset_id=body.product_asset_id,
-            user_id=current_user.id,
+    The provider, model, and API key are resolved from
+    server-side configuration only.
+
+    If product_asset_id is provided:
+    - The product asset ownership is verified.
+    - The image is downloaded from Supabase Storage.
+    - The image is passed to the provider as a reference image.
+    - The original product asset remains unchanged.
+    """
+
+    # ---------------------------------------------------------
+    # 1. Verify that the brand belongs to the current user
+    # ---------------------------------------------------------
+    brand = _get_brand_or_404(
+        brand_id=brand_id,
+        user_id=current_user.id,
     )
 
     brand_name = brand["name"]
     brand_has_logo = bool(brand.get("logo_path"))
 
-    if body.logo_mode in (LogoModeEnum.watermark, LogoModeEnum.both) and not brand_has_logo:
+    # ---------------------------------------------------------
+    # 2. Validate logo requirements
+    # ---------------------------------------------------------
+    if (
+        body.logo_mode
+        in (LogoModeEnum.watermark, LogoModeEnum.both)
+        and not brand_has_logo
+    ):
         raise _error_response(
             400,
             "LOGO_REQUIRED",
-            "This logo mode requires an uploaded brand logo. Please upload a logo on the Settings page.",
+            (
+                "This logo mode requires an uploaded brand logo. "
+                "Please upload a logo on the Settings page."
+            ),
         )
 
-    preset_w, preset_h, _label = PLATFORM_PRESETS[body.platform_preset.value]
+    # ---------------------------------------------------------
+    # 3. Validate product instruction usage
+    # ---------------------------------------------------------
+    if (
+        body.product_edit_instruction
+        and body.product_asset_id is None
+    ):
+        raise _error_response(
+            400,
+            "PRODUCT_ASSET_REQUIRED",
+            (
+                "A product image is required when "
+                "product edit instructions are provided."
+            ),
+        )
 
-    # Provider, model, and API key come from server configuration only.
-    # The request body cannot influence them (GenerateRequest forbids extras).
+    # ---------------------------------------------------------
+    # 4. Load product image if the user selected one
+    # ---------------------------------------------------------
+    product_asset_reference = None
+
+    if body.product_asset_id is not None:
+        product_asset_reference = (
+            load_product_asset_reference(
+                asset_id=body.product_asset_id,
+                brand_id=brand_id,
+                user_id=current_user.id,
+            )
+        )
+
+    # ---------------------------------------------------------
+    # 5. Resolve managed provider configuration
+    # ---------------------------------------------------------
     try:
         managed_config = resolve_generation_config()
     except RuntimeError as exc:
@@ -404,19 +458,67 @@ async def generate_image(
             "Image generation is not configured on the server.",
         ) from exc
 
-    aspect_ratio = PRESET_TO_ASPECT_RATIO[body.platform_preset.value]
+    # ---------------------------------------------------------
+    # 6. Resolve platform dimensions and context
+    # ---------------------------------------------------------
+    preset_w, preset_h, _label = PLATFORM_PRESETS[
+        body.platform_preset.value
+    ]
+
+    aspect_ratio = PRESET_TO_ASPECT_RATIO[
+        body.platform_preset.value
+    ]
+
     platform = build_platform_context(
         preset_id=body.platform_preset.value,
         width=preset_w,
         height=preset_h,
         aspect_ratio=aspect_ratio,
     )
-    brand_context = _get_brand_kit_context(brand_id, brand_name)
 
+    # ---------------------------------------------------------
+    # 7. Load the completed Brand Kit context
+    # ---------------------------------------------------------
+    brand_context = _get_brand_kit_context(
+        brand_id=brand_id,
+        brand_name=brand_name,
+    )
+
+    # ---------------------------------------------------------
+    # 8. Resolve product image instructions
+    # ---------------------------------------------------------
+    product_edit_instruction = None
+
+    if product_asset_reference is not None:
+        product_edit_instruction = (
+            body.product_edit_instruction
+            or (
+                "Use the product image as the main visual "
+                "reference. Preserve its identity, shape, "
+                "packaging, logo, label, and important colors."
+            )
+        )
+
+    # ---------------------------------------------------------
+    # 9. Create the full prompt
+    # ---------------------------------------------------------
+    full_prompt = build_generation_prompt(
+        brief=body.brief,
+        brand_context=brand_context,
+        platform=platform,
+        logo_mode=body.logo_mode.value,
+        brand_has_logo=brand_has_logo,
+        product_edit_instruction=product_edit_instruction,
+    )
+
+    # ---------------------------------------------------------
+    # 10. Create a generation row before calling the provider
+    # ---------------------------------------------------------
     generation_id = uuid4()
     resolved_model = managed_config.model
 
     client = get_service_client()
+
     client.table("generations").insert(
         {
             "id": str(generation_id),
@@ -432,8 +534,7 @@ async def generate_image(
             "logo_mode": body.logo_mode.value,
             "product_asset_id": (
                 str(body.product_asset_id)
-                if body.product_asset_id
-                
+                if body.product_asset_id is not None
                 else None
             ),
             "status": "pending",
@@ -441,23 +542,29 @@ async def generate_image(
     ).execute()
 
     logger.info(
-        "generate start generation_id=%s brand_id=%s provider=%s preset=%s logo_mode=%s",
-        generation_id, brand_id, managed_config.provider,
-        body.platform_preset.value, body.logo_mode.value,
+        (
+            "generate start generation_id=%s "
+            "brand_id=%s provider=%s preset=%s "
+            "logo_mode=%s has_product_reference=%s"
+        ),
+        generation_id,
+        brand_id,
+        managed_config.provider,
+        body.platform_preset.value,
+        body.logo_mode.value,
+        product_asset_reference is not None,
     )
 
+    # ---------------------------------------------------------
+    # 11. Run the provider and save the generated image
+    # ---------------------------------------------------------
     try:
-        client.table("generations").update({"status": "processing"}).eq(
-            "id", str(generation_id)
+        client.table("generations").update(
+            {"status": "processing"}
+        ).eq(
+            "id",
+            str(generation_id),
         ).execute()
-
-        full_prompt = build_generation_prompt(
-            brief=body.brief,
-            brand_context=brand_context,
-            platform=platform,
-            logo_mode=body.logo_mode.value,
-            brand_has_logo=brand_has_logo,
-        )
 
         api_key = managed_config.api_key
 
@@ -469,39 +576,83 @@ async def generate_image(
                     width=preset_w,
                     height=preset_h,
                     model=resolved_model,
+                    reference_image=product_asset_reference,
                 ),
                 timeout=120.0,
             )
+
         except asyncio.TimeoutError as exc:
             raise ProviderError(
                 "TIMEOUT",
-                "The request took too long to complete. Please try again.",
+                "The request took too long to complete. "
+                "Please try again.",
             ) from exc
+
         except ProviderError:
             raise
+
         except Exception as exc:
-            code, user_msg = classify_provider_error(exc)
-            raise ProviderError(code, user_msg) from exc
+            code, user_message = classify_provider_error(exc)
 
-        image_bytes = resize_to_preset(result.image_bytes, preset_w, preset_h)
+            raise ProviderError(
+                code,
+                user_message,
+            ) from exc
 
-        if (
-            body.logo_mode in (LogoModeEnum.watermark, LogoModeEnum.both)
-            and brand_has_logo
-        ):
-            logo_bytes = client.storage.from_(settings.STORAGE_BUCKET).download(
-                brand["logo_path"]
-            )
-            image_bytes = apply_watermark(image_bytes, logo_bytes)
-
-        image_path = f"brands/{brand_id}/generations/{generation_id}.png"
-        client.storage.from_(settings.STORAGE_BUCKET).upload(
-            image_path,
-            image_bytes,
-            {"content-type": "image/png", "upsert": "false"},
+        # -----------------------------------------------------
+        # 12. Resize generated image to the selected platform
+        # -----------------------------------------------------
+        image_bytes = resize_to_preset(
+            result.image_bytes,
+            preset_w,
+            preset_h,
         )
 
-        now_iso = datetime.now(timezone.utc).isoformat()
+        # -----------------------------------------------------
+        # 13. Apply the brand logo watermark if requested
+        # -----------------------------------------------------
+        if (
+            body.logo_mode
+            in (LogoModeEnum.watermark, LogoModeEnum.both)
+            and brand_has_logo
+        ):
+            logo_bytes = (
+                client.storage
+                .from_(settings.STORAGE_BUCKET)
+                .download(brand["logo_path"])
+            )
+
+            image_bytes = apply_watermark(
+                image_bytes,
+                logo_bytes,
+            )
+
+        # -----------------------------------------------------
+        # 14. Save the generated image to Storage
+        # -----------------------------------------------------
+        image_path = (
+            f"brands/{brand_id}/"
+            f"generations/{generation_id}.png"
+        )
+
+        client.storage.from_(
+            settings.STORAGE_BUCKET
+        ).upload(
+            image_path,
+            image_bytes,
+            {
+                "content-type": "image/png",
+                "upsert": "false",
+            },
+        )
+
+        # -----------------------------------------------------
+        # 15. Mark generation as succeeded
+        # -----------------------------------------------------
+        now_iso = datetime.now(
+            timezone.utc
+        ).isoformat()
+
         updated = (
             client.table("generations")
             .update(
@@ -512,11 +663,18 @@ async def generate_image(
                     "completed_at": now_iso,
                 }
             )
-            .eq("id", str(generation_id))
+            .eq(
+                "id",
+                str(generation_id),
+            )
             .execute()
         )
 
         row = updated.data[0] if updated.data else None
+
+        # -----------------------------------------------------
+        # 16. Refetch the saved row if update returned no data
+        # -----------------------------------------------------
         if row is None:
             try:
                 row = (
@@ -529,14 +687,26 @@ async def generate_image(
                 )
             except Exception:
                 logger.warning(
-                    "Failed to re-fetch generation %s after success update",
+                    (
+                        "Failed to re-fetch generation "
+                        "%s after success update"
+                    ),
                     generation_id,
                 )
+
+        # -----------------------------------------------------
+        # 17. Fallback response row
+        # -----------------------------------------------------
         if row is None:
             logger.error(
-                "No row data for succeeded generation %s brand_id=%s; constructing minimal row",
-                generation_id, brand_id,
+                (
+                    "No row data for succeeded generation "
+                    "%s brand_id=%s; constructing minimal row"
+                ),
+                generation_id,
+                brand_id,
             )
+
             row = {
                 "id": str(generation_id),
                 "prompt": body.brief.core_idea,
@@ -554,33 +724,68 @@ async def generate_image(
                 "created_at": now_iso,
                 "completed_at": now_iso,
             }
+
         logger.info(
             "generate success generation_id=%s brand_id=%s",
-            generation_id, brand_id,
+            generation_id,
+            brand_id,
         )
-        return _build_response(row, brand_name)
 
-    except ProviderError as e:
-        _mark_failed(generation_id, e.code, e.user_message)
-        logger.info(
-            "generate failed code=%s generation_id=%s brand_id=%s",
-            e.code, generation_id, brand_id,
+        return _build_response(
+            row,
+            brand_name,
         )
-        raise _error_response(502, e.code, e.user_message)
-    except Exception:
-        logger.exception(
-            "generate pipeline unexpected error generation_id=%s brand_id=%s",
-            generation_id, brand_id,
-        )
+
+    # ---------------------------------------------------------
+    # 18. Known provider failure
+    # ---------------------------------------------------------
+    except ProviderError as exc:
         _mark_failed(
-            generation_id, "INTERNAL_ERROR", "Internal error"
+            generation_id,
+            exc.code,
+            exc.user_message,
         )
+
+        logger.info(
+            (
+                "generate failed code=%s "
+                "generation_id=%s brand_id=%s"
+            ),
+            exc.code,
+            generation_id,
+            brand_id,
+        )
+
+        raise _error_response(
+            502,
+            exc.code,
+            exc.user_message,
+        ) from exc
+
+    # ---------------------------------------------------------
+    # 19. Unexpected failure
+    # ---------------------------------------------------------
+    except Exception as exc:
+        logger.exception(
+            (
+                "generate pipeline unexpected error "
+                "generation_id=%s brand_id=%s"
+            ),
+            generation_id,
+            brand_id,
+        )
+
+        _mark_failed(
+            generation_id,
+            "INTERNAL_ERROR",
+            "Internal error",
+        )
+
         raise _error_response(
             500,
             "INTERNAL_ERROR",
             "Something went wrong. Please try again.",
-        )
-
+        ) from exc
 
 _VALID_HISTORY_STATUSES = {s.value for s in GenerationHistoryStatusEnum}
 _VALID_HISTORY_PROVIDERS = {p.value for p in ProviderEnum}
