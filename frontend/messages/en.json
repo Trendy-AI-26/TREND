@@ -771,7 +771,7 @@
       },
       "logo-mode-selector": {
         "none": "None",
-        "in_prompt": "In prompt",
+        "in_prompt": "Auto placement",
         "mark": "Mark",
         "both": "Both",
         "logo_mode": "Logo mode",

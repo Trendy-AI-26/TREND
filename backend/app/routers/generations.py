@@ -23,6 +23,7 @@ from app.models.generation import (
     GenerationHistoryStatusEnum,
     GenerationResponse,
     LogoModeEnum,
+    LogoPlacementEnum,
     PlatformPresetEnum,
     ProviderEnum,
     TextLanguageEnum,
@@ -48,7 +49,7 @@ from app.services.prompt_composer import (
 )
 from app.services.providers.base import ProviderError, ProviderResult
 from app.services.providers.openai_image import openai_generate
-from app.services.watermark import apply_watermark
+from app.services.watermark import apply_logo
 
 logger = logging.getLogger(__name__)
 
@@ -90,7 +91,7 @@ def _get_brand_kit_context(brand_id: UUID, brand_name: str) -> BrandContext | No
     client = get_service_client()
     result = (
         client.table("brand_kits")
-        .select("tagline, tone, audience, colors, avoid_words, status")
+        .select("tagline, tone, audience, colors, avoid_words, industry, status")
         .eq("brand_id", str(brand_id))
         .maybe_single()
         .execute()
@@ -103,11 +104,23 @@ def _get_brand_kit_context(brand_id: UUID, brand_name: str) -> BrandContext | No
     return BrandContext(
         name=brand_name,
         tagline=row.get("tagline"),
+        tone=row.get("tone"),
         industry=row.get("industry"),
         audience=row.get("audience"),
         colors=row.get("colors") or [],
         avoid_words=row.get("avoid_words"),
     )
+
+
+def _resolve_logo_placement(body: GenerateRequest) -> LogoPlacementEnum:
+    """Resolve the new placement field while supporting legacy logo_mode calls."""
+    if body.logo_placement != LogoPlacementEnum.none:
+        return body.logo_placement
+    if body.logo_mode == LogoModeEnum.watermark:
+        return LogoPlacementEnum.watermark
+    if body.logo_mode in (LogoModeEnum.prompt, LogoModeEnum.both):
+        return LogoPlacementEnum.auto
+    return LogoPlacementEnum.none
 
 
 def _mark_failed(generation_id: UUID, code: str, message: str) -> None:
@@ -398,15 +411,12 @@ async def generate_image(
 
     brand_name = brand["name"]
     brand_has_logo = bool(brand.get("logo_path"))
+    logo_placement = _resolve_logo_placement(body)
 
     # ---------------------------------------------------------
     # 2. Validate logo requirements
     # ---------------------------------------------------------
-    if (
-        body.logo_mode
-        in (LogoModeEnum.watermark, LogoModeEnum.both)
-        and not brand_has_logo
-    ):
+    if logo_placement != LogoPlacementEnum.none and not brand_has_logo:
         raise _error_response(
             400,
             "LOGO_REQUIRED",
@@ -508,6 +518,7 @@ async def generate_image(
         platform=platform,
         logo_mode=body.logo_mode.value,
         brand_has_logo=brand_has_logo,
+        logo_placement=logo_placement.value,
         product_edit_instruction=product_edit_instruction,
     )
 
@@ -611,20 +622,17 @@ async def generate_image(
         # -----------------------------------------------------
         # 13. Apply the brand logo watermark if requested
         # -----------------------------------------------------
-        if (
-            body.logo_mode
-            in (LogoModeEnum.watermark, LogoModeEnum.both)
-            and brand_has_logo
-        ):
+        if logo_placement != LogoPlacementEnum.none and brand_has_logo:
             logo_bytes = (
                 client.storage
                 .from_(settings.STORAGE_BUCKET)
                 .download(brand["logo_path"])
             )
 
-            image_bytes = apply_watermark(
+            image_bytes = apply_logo(
                 image_bytes,
                 logo_bytes,
+                logo_placement.value,
             )
 
         # -----------------------------------------------------

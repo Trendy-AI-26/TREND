@@ -16,7 +16,7 @@ import { downloadImageFile } from '@/lib/download'
 import { PLATFORM_PRESETS } from '@/lib/presets'
 import { providerLabel } from '@/lib/providers'
 import { addGenerationNotification } from '@/hooks/use-notifications'
-import type { LogoMode, PlatformPreset } from '@/types'
+import type { LogoMode, LogoPlacement, PlatformPreset } from '@/types'
 import {
   EMPTY_GENERATION_BRIEF,
   GenerationBriefForm,
@@ -72,6 +72,12 @@ export function GeneratorForm({ brandId, brandName, brandHasLogo }: GeneratorFor
       brief,
       platform_preset: preset,
       logo_mode: logoMode,
+      logo_placement:
+        logoMode === 'none'
+          ? 'none'
+          : logoMode === 'watermark'
+            ? 'watermark'
+            : ('auto' satisfies LogoPlacement),
     })
   }
 

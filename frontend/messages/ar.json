@@ -771,7 +771,7 @@
       },
       "logo-mode-selector": {
         "none": "بدون",
-        "in_prompt": "ضمن الموجّه",
+        "in_prompt": "دمج تلقائي",
         "mark": "علامة مائية",
         "both": "كلاهما",
         "logo_mode": "وضع الشعار",

@@ -119,6 +119,7 @@ export interface UpsertKitRequest {
 
 export type Provider = 'openai' | 'gemini'
 export type LogoMode = 'none' | 'prompt' | 'watermark' | 'both'
+export type LogoPlacement = 'none' | 'corner' | 'prominent' | 'watermark' | 'auto'
 export type GenerationStatus = 'pending' | 'processing' | 'succeeded' | 'failed'
 
 export type PlatformPreset =
@@ -140,6 +141,7 @@ export interface GenerateRequest {
   brief: GenerationBrief
   platform_preset: PlatformPreset
   logo_mode: LogoMode
+  logo_placement?: LogoPlacement
 }
 
 export interface GenerationResponse {
