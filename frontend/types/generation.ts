@@ -51,6 +51,7 @@ export type AudienceAgeRange =
     | '25_34'
     | '35_44'
     | '45_54'
+    | '55_plus'
 
 export interface TargetAudienceBrief {
     /** One or two audience segments selected by the user. */
