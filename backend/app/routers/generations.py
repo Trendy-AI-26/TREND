@@ -90,7 +90,7 @@ def _get_brand_kit_context(brand_id: UUID, brand_name: str) -> BrandContext | No
     client = get_service_client()
     result = (
         client.table("brand_kits")
-        .select("tagline, tone, audience, colors, avoid_words, status,language")
+        .select("tagline, tone, audience, colors, avoid_words, status")
         .eq("brand_id", str(brand_id))
         .maybe_single()
         .execute()
