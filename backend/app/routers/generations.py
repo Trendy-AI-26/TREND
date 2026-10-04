@@ -831,6 +831,17 @@ async def list_generation_history(
     result = query.execute()
     rows = result.data or []
 
+    successful_count = None
+    if cursor is None and provider is None and status is None:
+        usage_result = (
+            client.table("generations")
+            .select("id", count="exact", head=True)
+            .eq("brand_id", str(brand_id))
+            .eq("status", "succeeded")
+            .execute()
+        )
+        successful_count = usage_result.count
+
     has_next = len(rows) > HISTORY_PAGE_SIZE
     if has_next:
         rows = rows[:HISTORY_PAGE_SIZE]
@@ -851,6 +862,7 @@ async def list_generation_history(
         items=items,
         next_cursor=next_cursor,
         page_size=HISTORY_PAGE_SIZE,
+        successful_count=successful_count,
     )
 
 

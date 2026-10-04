@@ -47,7 +47,12 @@ def test_history_item_failed_exposes_error_message():
 @pytest.mark.parametrize("bad_size", [0, 1, 23, 25, -1])
 def test_history_page_rejects_any_size_other_than_24(bad_size):
     with pytest.raises(ValueError):
-        GenerationHistoryPage(items=[], next_cursor=None, page_size=bad_size)
+        GenerationHistoryPage(
+            items=[],
+            next_cursor=None,
+            page_size=bad_size,
+            successful_count=0,
+        )
 
 
 def test_history_detail_rejects_non_terminal_status():

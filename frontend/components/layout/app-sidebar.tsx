@@ -3,7 +3,7 @@
 import Image from 'next/image'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { Bot, CreditCard, FolderOpen, LogOut, Palette, Plus, Settings, Sliders, User, X } from 'lucide-react'
+import { Bot, CreditCard, FolderOpen, Gauge, LogOut, Palette, Plus, Settings, Sliders, User, X } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { normalizeHex, TRENDY_AI_ACCENT } from '@/components/brand/brand-workspace'
 import { Badge } from '@/components/ui/badge'
@@ -43,8 +43,9 @@ export function AppSidebar({
 
   const nav = workspaceId
     ? [
+      { href: `/${workspaceId}`, label: t('dashboard.overview'), icon: Gauge, match: 'exact' as const },
       { href: `/${workspaceId}/kit`, label: t('dashboard.brandIdentity'), icon: Palette, match: 'prefix' as const },
-      { href: `/${workspaceId}`, label: t('dashboard.aiContent'), icon: Bot, match: 'exact' as const },
+      { href: `/${workspaceId}/generate`, label: t('dashboard.aiContent'), icon: Bot, match: 'prefix' as const },
       { href: `/${workspaceId}/history`, label: t('dashboard.myLibrary'), icon: FolderOpen, match: 'prefix' as const },
       // BYOK is intentionally hidden while provider-key management is disabled.
     ]
