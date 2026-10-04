@@ -183,6 +183,7 @@ export interface GenerationHistoryPage {
   items: GenerationHistoryItem[]
   next_cursor: string | null
   page_size: 24
+  successful_count: number | null
 }
 
 export interface GenerationDetail extends GenerationResponse {

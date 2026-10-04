@@ -53,7 +53,7 @@ export function LibraryView({ brandId }: LibraryViewProps) {
                     <h1 className="font-heading text-[38px] font-bold leading-tight text-brand-headline">{t('library_title')}</h1>
                     <p className="mt-2 text-[14px] text-brand-headline/55">{t('library_subtitle')}</p>
                 </div>
-                <Button type="button" onClick={() => router.push(`/${brandId}`)} className="h-11 rounded-xl bg-brand-primary px-5 text-[14px] font-bold text-white shadow-sm hover:bg-[#74151b]"><Plus className="h-4 w-4" />{t('new_design')}</Button>
+                <Button type="button" onClick={() => router.push(`/${brandId}/generate`)} className="h-11 rounded-xl bg-brand-primary px-5 text-[14px] font-bold text-white shadow-sm hover:bg-[#74151b]"><Plus className="h-4 w-4" />{t('new_design')}</Button>
             </header>
 
             <div className="flex flex-wrap items-center justify-between gap-4 border-b border-brand-accent/20 pb-3">
@@ -65,7 +65,7 @@ export function LibraryView({ brandId }: LibraryViewProps) {
 
             {loading && <div className="flex justify-center py-24"><Loader2 className="h-7 w-7 animate-spin text-brand-primary" /></div>}
             {!loading && error && <div className="rounded-xl border border-destructive/20 bg-destructive/5 p-5 text-center text-sm text-destructive">{error}</div>}
-            {!loading && !error && visibleItems.length === 0 && <div className="flex flex-col items-center justify-center gap-4 rounded-2xl border border-dashed border-brand-accent/30 bg-white/60 py-24 text-center"><p className="text-[15px] text-brand-headline/60">{status ? tl('no_history_match_filters') : tl('no_history_yet')}</p><Button type="button" onClick={() => router.push(`/${brandId}`)} variant="outline" className="rounded-lg">{t('new_design')}</Button></div>}
+            {!loading && !error && visibleItems.length === 0 && <div className="flex flex-col items-center justify-center gap-4 rounded-2xl border border-dashed border-brand-accent/30 bg-white/60 py-24 text-center"><p className="text-[15px] text-brand-headline/60">{status ? tl('no_history_match_filters') : tl('no_history_yet')}</p><Button type="button" onClick={() => router.push(`/${brandId}/generate`)} variant="outline" className="rounded-lg">{t('new_design')}</Button></div>}
             {!loading && !error && visibleItems.length > 0 && <div className="overflow-hidden rounded-2xl border border-brand-accent/20 bg-white shadow-sm">{visibleItems.map((item) => <LibraryRow key={item.id} item={item} brandId={brandId} onDelete={handleDelete} />)}</div>}
             {hasNext && <div className="flex justify-center"><Button type="button" variant="outline" onClick={handleLoadMore} disabled={loadingMore} className="rounded-lg">{loadingMore ? tl('loading') : tl('load_more')}</Button></div>}
         </div>
@@ -100,7 +100,7 @@ function LibraryRow({ item, brandId, onDelete }: { item: GenerationHistoryItem; 
             <div className="flex shrink-0 flex-col items-stretch gap-2 md:flex-row md:items-center">
                 <Link href={`/${brandId}/history/${item.id}`} className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg border border-brand-accent/25 px-3 text-[12px] text-brand-headline/70 no-underline hover:border-brand-primary hover:text-brand-primary"><Eye className="h-3.5 w-3.5" />{t('view_details')}</Link>
                 {success && <a href={item.image_url ?? undefined} download={`trendy-${item.id}.png`} className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg border border-brand-accent/25 px-3 text-[12px] text-brand-headline/70 no-underline hover:border-brand-primary hover:text-brand-primary"><Download className="h-3.5 w-3.5" />{t('download')}</a>}
-                {!success && <Link href={`/${brandId}`} className="inline-flex h-9 items-center justify-center rounded-lg border border-brand-accent/25 px-3 text-[12px] text-brand-headline/70 no-underline hover:border-brand-primary hover:text-brand-primary">{t('retry')}</Link>}
+                {!success && <Link href={`/${brandId}/generate`} className="inline-flex h-9 items-center justify-center rounded-lg border border-brand-accent/25 px-3 text-[12px] text-brand-headline/70 no-underline hover:border-brand-primary hover:text-brand-primary">{t('retry')}</Link>}
                 <button type="button" onClick={() => setDialogOpen(true)} aria-label={tc('delete')} className="inline-flex h-9 items-center justify-center rounded-lg border border-brand-accent/25 px-3 text-[12px] text-brand-headline/60 hover:border-red-300 hover:text-red-500"><Trash2 className="h-3.5 w-3.5" /><span className="sr-only">{tc('delete')}</span></button>
             </div>
         </article>

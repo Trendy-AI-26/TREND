@@ -93,6 +93,7 @@ class GenerationHistoryPage(BaseModel):
     items: list[GenerationHistoryItem]
     next_cursor: str | None
     page_size: Literal[24]
+    successful_count: int | None
 
 
 class GenerationDetailResponse(BaseModel):

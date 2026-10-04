@@ -6,6 +6,7 @@ import type { GenerationHistoryItem, GenerationHistoryPage } from '@/types'
 
 interface UseGenerationHistoryResult {
   items: GenerationHistoryItem[]
+  successfulCount: number | null
   loading: boolean
   loadingMore: boolean
   error: string | null
@@ -23,6 +24,7 @@ export function useGenerationHistory(
   initialCursor?: string,
 ): UseGenerationHistoryResult {
   const [items, setItems] = useState<GenerationHistoryItem[]>([])
+  const [successfulCount, setSuccessfulCount] = useState<number | null>(null)
   const [loading, setLoading] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -60,6 +62,7 @@ export function useGenerationHistory(
         if (fetchIdRef.current !== fetchId) return false
 
         setItems((prev) => (append ? [...prev, ...page.items] : page.items))
+        if (page.successful_count !== null) setSuccessfulCount(page.successful_count)
         setNextCursor(page.next_cursor)
         if (append && cursor) setActiveCursor(cursor)
         return true
@@ -81,6 +84,7 @@ export function useGenerationHistory(
     async (cursorToRestore: string | null, fetchId: number) => {
       setLoading(true)
       setItems([])
+      setSuccessfulCount(null)
       setError(null)
       try {
         const firstPage = await requestPage(null)
@@ -117,6 +121,7 @@ export function useGenerationHistory(
         }
 
         setItems(loadedItems)
+        setSuccessfulCount(firstPage.successful_count)
         setNextCursor(next)
       } catch (err) {
         if (fetchIdRef.current !== fetchId) return
@@ -161,6 +166,7 @@ export function useGenerationHistory(
 
   return {
     items,
+    successfulCount,
     loading,
     loadingMore,
     error,
