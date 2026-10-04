@@ -2,7 +2,14 @@ import io
 
 from PIL import Image
 
-from app.services.watermark import WATERMARK_MARGIN_PX, WATERMARK_SCALE, apply_watermark
+from app.services.watermark import (
+    CORNER_SCALE,
+    PROMINENT_SCALE,
+    WATERMARK_MARGIN_PX,
+    WATERMARK_SCALE,
+    apply_logo,
+    apply_watermark,
+)
 
 
 def _solid_rgb(w: int, h: int, color: tuple[int, int, int]) -> bytes:
@@ -55,3 +62,25 @@ def test_watermark_margin_is_20_px():
     out = Image.open(io.BytesIO(result)).convert("RGB")
 
     assert out.getpixel((1079, 1079)) == (255, 0, 0)
+
+
+def test_corner_overlay_uses_full_opacity_and_bottom_right():
+    base = _solid_rgb(1000, 1000, (255, 0, 0))
+    logo = _solid_rgba_logo(200, 200)
+    out = Image.open(io.BytesIO(apply_logo(base, logo, "corner"))).convert("RGB")
+
+    logo_w = int(round(1000 * CORNER_SCALE))
+    pixel = out.getpixel((1000 - WATERMARK_MARGIN_PX - logo_w // 2, 1000 - WATERMARK_MARGIN_PX - logo_w // 2))
+    assert pixel == (0, 255, 0)
+
+
+def test_prominent_overlay_is_larger_than_corner():
+    base = _solid_rgb(1000, 1000, (255, 0, 0))
+    logo = _solid_rgba_logo(200, 200)
+    corner = Image.open(io.BytesIO(apply_logo(base, logo, "corner"))).convert("RGB")
+    prominent = Image.open(io.BytesIO(apply_logo(base, logo, "prominent"))).convert("RGB")
+
+    corner_count = sum(pixel == (0, 255, 0) for pixel in corner.getdata())
+    prominent_count = sum(pixel == (0, 255, 0) for pixel in prominent.getdata())
+    assert prominent_count > corner_count
+    assert prominent_count >= int((PROMINENT_SCALE / CORNER_SCALE) ** 2 * corner_count * 0.8)

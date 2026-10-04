@@ -273,7 +273,13 @@ def _build_brand_identity_section(brand_context: BrandContext | None) -> str | N
     if brand_context.colors:
         lines.append(
             f"Brand colors: {', '.join(brand_context.colors)} "
-            "— incorporate these as the dominant palette."
+            "— use these exact user-provided colors as the source of truth for "
+            "the visual palette. Build a cohesive hierarchy with one dominant "
+            "color, supporting colors, and intentional accents. You may use "
+            "carefully derived tints, shades, and neutral backgrounds, but do "
+            "not replace, distort, or introduce unrelated hues. Maintain strong "
+            "contrast, legibility, color harmony, and professional saturation "
+            "across the whole composition."
         )
     if brand_context.avoid_words:
         lines.append(
@@ -283,14 +289,33 @@ def _build_brand_identity_section(brand_context: BrandContext | None) -> str | N
     return "=== BRAND IDENTITY ===\n" + "\n".join(lines)
 
 
-def _build_logo_section(logo_mode: str, brand_has_logo: bool) -> str | None:
-    """Helper building the === LOGO === prompt layer."""
-    if logo_mode in ("prompt", "both") and brand_has_logo:
+LOGO_PLACEMENT_PROMPT: dict[str, str] = {
+    "corner": "Reserve a clean, visually balanced area in a corner for the official logo.",
+    "prominent": "Reserve a clear, prominent, uncluttered area for the official logo.",
+    "watermark": "Keep a low-detail area suitable for a subtle official watermark.",
+    "auto": "Reserve the safest visually balanced area for the official logo.",
+}
+
+
+def _build_logo_section(
+    logo_mode: str,
+    brand_has_logo: bool,
+    logo_placement: str = "none",
+) -> str | None:
+    """Build instructions for a post-generation exact-logo overlay."""
+    placement = logo_placement
+    if placement == "none" and logo_mode in ("prompt", "both"):
+        # Legacy callers requested a logo in the prompt; use the reliable
+        # post-processing path instead of asking the model to redraw it.
+        placement = "auto"
+
+    if placement in LOGO_PLACEMENT_PROMPT and brand_has_logo:
         return (
-            "=== LOGO ===\n"
-            "Include the brand logo in the design — place it in a corner or "
-            "integrate it naturally into the composition. "
-            "Ensure it is clearly visible but does not dominate the scene."
+            "=== LOGO PLACEMENT ===\n"
+            "The official brand logo will be added after image generation. "
+            "Do not generate, draw, recreate, imitate, redesign, replace, "
+            "or invent any logo, brand mark, symbol, or fake brand text. "
+            f"{LOGO_PLACEMENT_PROMPT[placement]}"
         )
     return None
 
@@ -302,6 +327,7 @@ def build_generation_prompt(
     platform: PlatformContext,
     logo_mode: str,
     brand_has_logo: bool,
+    logo_placement: str = "none",
     product_edit_instruction: str | None = None,
 ) -> str:
     """Deterministic prompt composer combining GenerationBrief with Brand, Platform and Logo rules."""
@@ -337,7 +363,7 @@ def build_generation_prompt(
     sections.append(f"=== COMPOSITION ===\n{platform.note}")
 
     # Layer 5: Logo (conditional)
-    logo_sec = _build_logo_section(logo_mode, brand_has_logo)
+    logo_sec = _build_logo_section(logo_mode, brand_has_logo, logo_placement)
     if logo_sec:
         sections.append(logo_sec)
 
@@ -371,6 +397,7 @@ def compose_full_prompt(
     platform: PlatformContext,
     logo_mode: str,
     brand_has_logo: bool,
+    logo_placement: str = "none",
 ) -> str:
     """Legacy compose_full_prompt for backwards compatibility."""
     sections: list[str] = [SYSTEM_ROLE_PROMPT]
@@ -381,7 +408,7 @@ def compose_full_prompt(
 
     sections.append(f"=== COMPOSITION ===\n{platform.note}")
 
-    logo_sec = _build_logo_section(logo_mode, brand_has_logo)
+    logo_sec = _build_logo_section(logo_mode, brand_has_logo, logo_placement)
     if logo_sec:
         sections.append(logo_sec)
 
