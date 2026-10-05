@@ -43,7 +43,7 @@ export function AppSidebar({
 
   const nav = workspaceId
     ? [
-      { href: `/${workspaceId}`, label: t('dashboard.overview'), icon: Gauge, match: 'exact' as const },
+      { href: `/dashboard?brandId=${workspaceId}`, label: t('dashboard.overview'), icon: Gauge, match: 'exact' as const },
       { href: `/${workspaceId}/kit`, label: t('dashboard.brandIdentity'), icon: Palette, match: 'prefix' as const },
       { href: `/${workspaceId}/generate`, label: t('dashboard.aiContent'), icon: Bot, match: 'prefix' as const },
       { href: `/${workspaceId}/history`, label: t('dashboard.myLibrary'), icon: FolderOpen, match: 'prefix' as const },
@@ -63,7 +63,7 @@ export function AppSidebar({
           <X className="h-4 w-4" />
         </button>
         <Link
-          href="/brands"
+          href="/dashboard"
           className="flex flex-col gap-1 px-1 pe-10 no-underline"
         >
           <span className="flex items-center gap-2">
@@ -84,7 +84,7 @@ export function AppSidebar({
 
       <div className="mt-3 rounded-[10px] border border-brand-accent/30 bg-brand-bg/40 px-3 py-[10px]">
         <Link
-          href="/brands"
+          href="/dashboard"
           className="flex items-center gap-1 text-[11px] text-brand-primary no-underline hover:underline"
         >
           <span className="inline-block ltr:order-last ltr:rotate-180">‹</span>
@@ -95,12 +95,12 @@ export function AppSidebar({
         </p>
         <div className="mt-[6px] flex flex-wrap items-center gap-[4px]">
           {brands.map((brand) => {
-            const selected = brand.id === currentBrandId
+            const selected = brand.id === currentBrandId || (!currentBrandId && brand.id === activeBrand?.id)
             const hex = normalizeHex(accents[brand.id] ?? '')
             return (
               <Link
                 key={brand.id}
-                href={`/${brand.id}`}
+                href={`/dashboard?brandId=${brand.id}`}
                 title={brand.name}
                 aria-label={brand.name}
                 className="flex flex-col items-center gap-[2px] rounded-[4px] no-underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-primary/40"
@@ -136,10 +136,13 @@ export function AppSidebar({
 
       <nav className="-mx-3 mt-4 flex flex-col gap-[2px]" aria-label={t('dashboard.workspaceNavigation')}>
         {nav.map((item) => {
+          const itemPath = item.href.split('?')[0]
           const active =
-            item.match === 'exact'
-              ? pathname === item.href
-              : pathname === item.href || pathname.startsWith(`${item.href}/`)
+            itemPath === '/dashboard'
+              ? pathname === '/dashboard'
+              : item.match === 'exact'
+                ? pathname === item.href
+                : pathname === item.href || pathname.startsWith(`${item.href}/`)
           const Icon = item.icon
           return (
             <Link

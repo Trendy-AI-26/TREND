@@ -29,7 +29,7 @@ export default function NotificationsPage() {
                         <h1 className="mt-2 font-el-messiri text-[38px] font-bold leading-tight text-brand-headline sm:text-[48px]">{t('title')}</h1>
                         <p className="mt-2 max-w-[620px] font-tajawal text-[14px] text-brand-headline/60">{t('description')}</p>
                     </div>
-                    <Link href="/brands" className="inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-xl border border-brand-accent/30 bg-white px-4 font-tajawal text-[13px] text-brand-headline no-underline transition hover:border-brand-primary hover:text-brand-primary">
+                    <Link href="/dashboard" className="inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-xl border border-brand-accent/30 bg-white px-4 font-tajawal text-[13px] text-brand-headline no-underline transition hover:border-brand-primary hover:text-brand-primary">
                         <ArrowLeft className="h-4 w-4 rtl:rotate-180" />
                         {t('backToDashboard')}
                     </Link>

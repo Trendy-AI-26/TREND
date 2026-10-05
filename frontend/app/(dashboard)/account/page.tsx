@@ -13,7 +13,7 @@ export default function AccountPage() {
   const { brands } = useBrands()
   const t = useTranslations()
   const pathname = usePathname()
-  const settingsHref = brands[0] ? `/${brands[0].id}/settings` : '/brands'
+  const settingsHref = brands[0] ? `/${brands[0].id}/settings` : '/dashboard'
 
   if (loading) {
     return <div className="mx-auto max-w-[980px] py-8 font-tajawal text-muted-foreground">{t('account.loadingProfile')}</div>

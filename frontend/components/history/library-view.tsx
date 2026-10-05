@@ -88,14 +88,14 @@ function LibraryRow({ item, brandId, onDelete }: { item: GenerationHistoryItem; 
         setDeleting(false)
     }
     return <>
-        <article className="group flex min-h-[164px] flex-row-reverse items-center gap-5 border-b border-brand-accent/10 p-4 last:border-b-0 md:p-5">
+        <article className="group flex min-h-[164px] items-center gap-5 border-b border-brand-accent/10 p-4 last:border-b-0 md:p-5">
             <Link href={`/${brandId}/history/${item.id}`} className="relative h-[96px] w-[96px] shrink-0 overflow-hidden rounded-xl bg-brand-cream no-underline md:h-[108px] md:w-[108px]">
                 {item.image_url ? <img src={item.image_url} alt={item.prompt_excerpt} className="h-full w-full object-cover" /> : <div className="flex h-full w-full items-center justify-center text-brand-primary"><AlertCircle className="h-6 w-6" /></div>}
             </Link>
-            <div className="min-w-0 flex-1 text-end">
+            <div className="min-w-0 flex-1 text-start">
                 <h2 className="truncate text-[16px] font-bold text-brand-headline">{item.prompt_excerpt}</h2>
                 <p className="mt-2 text-[12px] text-brand-headline/45">{item.platform_preset} · {new Date(item.created_at).toLocaleDateString()}</p>
-                <div className="mt-3 flex items-center justify-end gap-2"><span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-bold ${success ? 'bg-emerald-50 text-emerald-600' : 'bg-red-50 text-red-500'}`}>{success ? <Check className="h-3 w-3" /> : <AlertCircle className="h-3 w-3" />}{tf(item.status)}</span>{item.error_message && <span className="max-w-[260px] truncate text-[11px] text-red-500">{item.error_message}</span>}</div>
+                <div className="mt-3 flex items-center gap-2"><span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-bold ${success ? 'bg-emerald-50 text-emerald-600' : 'bg-red-50 text-red-500'}`}>{success ? <Check className="h-3 w-3" /> : <AlertCircle className="h-3 w-3" />}{tf(item.status)}</span>{item.error_message && <span className="max-w-[260px] truncate text-[11px] text-red-500">{item.error_message}</span>}</div>
             </div>
             <div className="flex shrink-0 flex-col items-stretch gap-2 md:flex-row md:items-center">
                 <Link href={`/${brandId}/history/${item.id}`} className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg border border-brand-accent/25 px-3 text-[12px] text-brand-headline/70 no-underline hover:border-brand-primary hover:text-brand-primary"><Eye className="h-3.5 w-3.5" />{t('view_details')}</Link>
