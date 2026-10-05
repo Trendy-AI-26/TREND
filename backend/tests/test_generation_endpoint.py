@@ -100,6 +100,11 @@ class FakeSupabaseClient:
 def mock_supabase(monkeypatch):
     fake_client = FakeSupabaseClient()
     monkeypatch.setattr(generations, "get_service_client", lambda: fake_client)
+    monkeypatch.setattr(
+        generations,
+        "enforce_generation_rate_limit",
+        lambda **_: None,
+    )
     return fake_client
 
 @pytest.fixture

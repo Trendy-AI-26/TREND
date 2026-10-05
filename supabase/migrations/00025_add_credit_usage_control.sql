@@ -215,3 +215,13 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_generations_user_idempotency
 
 ALTER TABLE public.usage_events
     ADD COLUMN IF NOT EXISTS provider_request_id text;
+
+-- These tables are accessed by the backend service-role client only. With RLS
+-- enabled and no browser-role policies, anon/authenticated clients cannot
+-- inspect or alter balances, reservations, usage, locks, or rate-limit state.
+ALTER TABLE public.credit_accounts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.credit_ledger ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.usage_events ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.idempotency_records ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.generation_locks ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.rate_limit_buckets ENABLE ROW LEVEL SECURITY;

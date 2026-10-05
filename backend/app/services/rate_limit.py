@@ -19,9 +19,13 @@ def check_generation_rate_limit(
 
     now = datetime.now(timezone.utc)
 
-    window_start = now.replace(
-        second=0,
-        microsecond=0,
+    if window_seconds <= 0:
+        raise ValueError("Rate-limit window must be positive.")
+
+    epoch = datetime(1970, 1, 1, tzinfo=timezone.utc)
+    elapsed_seconds = int((now - epoch).total_seconds())
+    window_start = epoch + timedelta(
+        seconds=elapsed_seconds - elapsed_seconds % window_seconds
     )
 
     result = (
@@ -42,9 +46,7 @@ def check_generation_rate_limit(
             {
                 "user_id": user_id,
                 "bucket": "image_generation",
-                "window_started_at": (
-                    window_start.isoformat()
-                ),
+                "window_started_at": (window_start.isoformat()),
                 "request_count": 1,
             }
         ).execute()
@@ -53,16 +55,10 @@ def check_generation_rate_limit(
     row = result.data
 
     if int(row["request_count"]) >= limit:
-        raise RateLimitExceeded(
-            "Generation rate limit exceeded."
-        )
+        raise RateLimitExceeded("Generation rate limit exceeded.")
 
     client.table("rate_limit_buckets").update(
-        {
-            "request_count": (
-                int(row["request_count"]) + 1
-            )
-        }
+        {"request_count": (int(row["request_count"]) + 1)}
     ).eq(
         "user_id",
         user_id,

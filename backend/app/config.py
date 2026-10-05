@@ -8,7 +8,6 @@ class Settings(BaseSettings):
 
     SUPABASE_URL: str = "http://localhost"
     SUPABASE_SECRET_KEY: str = "test-secret-key"
-    SUPABASE_ANON_KEY: str = ""
 
     # --------------------------------------------------
     # Storage
@@ -32,7 +31,7 @@ class Settings(BaseSettings):
         "http://127.0.0.1:3000,"
         "http://localhost:3001,"
         "http://127.0.0.1:3001"
-     )
+    )
 
     ADMIN_EMAILS: str = ""
 
@@ -61,22 +60,11 @@ class Settings(BaseSettings):
     GENERATION_RATE_WINDOW_SECONDS: int = 60
 
     GENERATION_LOCK_TTL_SECONDS: int = 180
-        # --------------------------------------------------
-        # Upload limits
-        # --------------------------------------------------
-    
-    AVATAR_MAX_BYTES: int = 5 * 1024 * 1024
-    PRODUCT_ASSET_MAX_BYTES: int = 10 * 1024 * 1024
-    
-    ALLOWED_IMAGE_TYPES: str = (
-            "image/png,image/jpeg,image/webp"
-        )
-        # --------------------------------------------------
-        # Managed generation compatibility settings
-        # --------------------------------------------------
-    
-        # اتركيها فارغة افتراضيًا.
-        # القيم الفعلية تأتي من IMAGE_PROVIDER وOPENAI_API_KEY.
+
+    ALLOWED_IMAGE_TYPES: str = "image/png,image/jpeg,image/webp"
+
+    # Managed generation compatibility settings. None means use the primary
+    # IMAGE_PROVIDER/OPENAI_* settings above.
     MANAGED_PROVIDER: str | None = None
     MANAGED_API_KEY: str | None = None
     MANAGED_MODEL: str | None = None
@@ -91,7 +79,6 @@ class Settings(BaseSettings):
         case_sensitive=True,
         extra="ignore",
     )
-    
 
 
 settings = Settings()

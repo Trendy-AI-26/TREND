@@ -1,12 +1,9 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
-from time import perf_counter
+import time
 from uuid import UUID
 
 from app.core.supabase import get_service_client
-import time
-
 
 
 def start_usage(
@@ -38,9 +35,7 @@ def start_usage(
     )
 
     if not started.data:
-        raise RuntimeError(
-            "Could not create usage event."
-        )
+        raise RuntimeError("Could not create usage event.")
 
     return str(started.data[0]["id"])
 
@@ -54,9 +49,7 @@ def finish_usage(
     metadata: dict | None = None,
 ) -> None:
     if status not in {"succeeded", "failed"}:
-        raise ValueError(
-            "Usage status must be succeeded or failed."
-        )
+        raise ValueError("Usage status must be succeeded or failed.")
 
     client = get_service_client()
 
@@ -103,12 +96,12 @@ class UsageTimer:
         )
 
     def finish(
-    self,
-    *,
-    status: str,
-    metadata: dict | None = None,
-    provider_request_id: str | None = None,
-) -> None:
+        self,
+        *,
+        status: str,
+        metadata: dict | None = None,
+        provider_request_id: str | None = None,
+    ) -> None:
         duration_ms = self.duration_ms()
 
         # Must UPDATE the row created by start(); inserting here would leave a
@@ -122,24 +115,19 @@ class UsageTimer:
         if provider_request_id is not None:
             payload["provider_request_id"] = provider_request_id
 
-        get_service_client().table("usage_events").update(
-            payload
-    ).eq("id", self.usage_id).execute()
+        get_service_client().table("usage_events").update(payload).eq(
+            "id", self.usage_id
+        ).execute()
 
     def duration_ms(self) -> int:
         if self.started_at is None:
             return 0
 
-        return int(
-            (time.monotonic() - self.started_at)
-        * 1000
-    )
-   
-
+        return int((time.monotonic() - self.started_at) * 1000)
 
 
 __all__ = [
     "UsageTimer",
-    "start_usage",
     "finish_usage",
+    "start_usage",
 ]

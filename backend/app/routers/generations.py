@@ -1,23 +1,20 @@
 import asyncio
 import base64
-from binascii import Error as BinasciiError
+import hashlib
 import json
 import logging
+from binascii import Error as BinasciiError
 from datetime import datetime, timezone
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
-
-from app.services.generation_resolver import resolve_caption_config
-
-import hashlib
 from pydantic import ValidationError
 from storage3.exceptions import StorageException
 
 from app.config import settings
 from app.core.auth import User, get_current_user
 from app.core.supabase import get_service_client
-from app.models.caption import CaptionRequest, CaptionResponse, CaptionPreferences
+from app.models.caption import CaptionPreferences, CaptionRequest, CaptionResponse
 from app.models.generation import (
     GenerateRequest,
     GenerationBrief,
@@ -32,9 +29,23 @@ from app.models.generation import (
     ProviderEnum,
     TextLanguageEnum,
 )
-from app.services.error_mapping import classify_provider_error
 from app.services.caption_generator import CaptionOutputError, generate_caption
-from app.services.generation_resolver import resolve_generation_config
+from app.services.credits import (
+    CreditsError,
+    commit_credits,
+    release_credits,
+    reserve_credits,
+)
+from app.services.error_mapping import classify_provider_error
+from app.services.generation_lock import (
+    GenerationLockError,
+    acquire_generation_lock,
+    release_generation_lock,
+)
+from app.services.generation_resolver import (
+    resolve_caption_config,
+    resolve_generation_config,
+)
 from app.services.postprocess import resize_to_preset
 from app.services.presets import (
     PLATFORM_PRESETS,
@@ -42,31 +53,20 @@ from app.services.presets import (
     build_download_filename,
 )
 from app.services.product_asset_loader import load_product_asset_reference
-
-
 from app.services.prompt_composer import (
     BrandContext,
     build_generation_prompt,
     build_platform_context,
-    compose_full_prompt,
 )
-from app.services.credits import (
-    CreditsError,
-    commit_credits,
-    reserve_credits,
-    release_credits,
-)
-from app.services.generation_lock import (
-    GenerationLockError,
-    acquire_generation_lock,
-    release_generation_lock,
-)
-
-
-
-from app.services.usage import UsageTimer
 from app.services.providers.base import ProviderError, ProviderResult
 from app.services.providers.openai_image import openai_generate
+from app.services.rate_limit import (
+    RateLimitExceeded,
+)
+from app.services.rate_limit import (
+    check_generation_rate_limit as enforce_generation_rate_limit,
+)
+from app.services.usage import UsageTimer
 from app.services.watermark import apply_logo
 
 logger = logging.getLogger(__name__)
@@ -95,6 +95,7 @@ def _hash_generation_request(body: GenerateRequest) -> str:
 def _get_idempotent_generation(
     *,
     user_id: str,
+    scope: str = "image_generation",
     idempotency_key: str,
     request_hash: str,
 ) -> dict | None:
@@ -109,10 +110,9 @@ def _get_idempotent_generation(
 
     try:
         result = (
-            query
-            .select("*")
+            query.select("*")
             .eq("user_id", user_id)
-            .eq("scope", "image_generation")
+            .eq("scope", scope)
             .eq("idempotency_key", idempotency_key)
             .maybe_single()
             .execute()
@@ -130,16 +130,19 @@ def _get_idempotent_generation(
         raise _error_response(
             409,
             "IDEMPOTENCY_KEY_REUSED",
-            (
-                "The same Idempotency-Key was used "
-                "with a different request."
-            ),
+            ("The same Idempotency-Key was used with a different request."),
         )
 
     generation_id = record.get("generation_id")
 
     if not generation_id:
-        return record
+        if record.get("status") == "processing":
+            raise _error_response(
+                409,
+                "GENERATION_IN_PROGRESS",
+                "This request is already being processed.",
+            )
+        return None
 
     generation_result = (
         client.table("generations")
@@ -149,17 +152,13 @@ def _get_idempotent_generation(
         .execute()
     )
 
-    if (
-        generation_result is not None
-        and generation_result.data is not None
-    ):
+    if generation_result is not None and generation_result.data is not None:
         return generation_result.data
 
     return record
-_get_existing_idempotency = (
-    _get_idempotent_generation
-    )
 
+
+_get_existing_idempotency = _get_idempotent_generation
 
 
 def _get_brand_or_404(brand_id: UUID, user_id: str) -> dict:
@@ -175,8 +174,6 @@ def _get_brand_or_404(brand_id: UUID, user_id: str) -> dict:
     if result is None or result.data is None:
         raise _error_response(404, "BRAND_NOT_FOUND", "Brand not found")
     return result.data
-
-
 
 
 def _get_brand_kit_context(brand_id: UUID, brand_name: str) -> BrandContext | None:
@@ -229,7 +226,9 @@ def _mark_failed(generation_id: UUID, code: str, message: str) -> None:
     ).eq("id", str(generation_id)).execute()
 
 
-def _derive_download_filename(image_url: str | None, row: dict, brand_name: str) -> str | None:
+def _derive_download_filename(
+    image_url: str | None, row: dict, brand_name: str
+) -> str | None:
     if not image_url or not row.get("completed_at"):
         return None
     completed_at = row["completed_at"]
@@ -404,7 +403,9 @@ async def create_caption(
             "The generation context is invalid for caption generation.",
         ) from exc
 
-    preferences = body.preferences if body and body.preferences else CaptionPreferences()
+    preferences = (
+        body.preferences if body and body.preferences else CaptionPreferences()
+    )
 
     # Same server-only credentials as image generation. The stored generation's
     # provider is informational; the key always comes from configuration.
@@ -433,7 +434,10 @@ async def create_caption(
             raise _error_response(
                 500,
                 "GENERATION_CONTEXT_INVALID",
-                "The generation questionnaire context is invalid for caption generation.",
+                (
+                    "The generation questionnaire context is invalid for "
+                    "caption generation."
+                ),
             ) from exc
 
     brand_context = _get_brand_kit_context(brand_id, brand["name"])
@@ -452,7 +456,7 @@ async def create_caption(
             ),
             timeout=60.0,
         )
-        
+
     except CaptionOutputError as exc:
         logger.info(
             "caption failed code=%s generation_id=%s brand_id=%s",
@@ -494,13 +498,10 @@ async def generate_image(
         alias="Idempotency-Key",
         min_length=16,
         max_length=128,
-),
+    ),
 ) -> GenerationResponse:
     if not idempotency_key:
-        idempotency_key = (
-            f"legacy-{current_user.id}-"
-            f"{uuid4()}"
-        )
+        idempotency_key = f"legacy-{current_user.id}-{uuid4()}"
     """
     Generate an image for a brand.
 
@@ -527,22 +528,32 @@ async def generate_image(
     request_hash = _hash_generation_request(body)
 
     existing = _get_idempotent_generation(
-    user_id=current_user.id,
-    idempotency_key=idempotency_key,
-    request_hash=request_hash,
-)
-
-    if existing is not None:
-        return _build_response(
-        existing,
-        brand["name"],
+        user_id=current_user.id,
+        idempotency_key=idempotency_key,
+        request_hash=request_hash,
     )
 
+    if existing is not None:
+        return _build_response(existing, brand["name"])
+
+    try:
+        enforce_generation_rate_limit(
+            user_id=current_user.id,
+            limit=getattr(settings, "GENERATION_RATE_LIMIT", 5),
+            window_seconds=getattr(
+                settings,
+                "GENERATION_RATE_WINDOW_SECONDS",
+                60,
+            ),
+        )
+    except RateLimitExceeded as exc:
+        raise _error_response(429, "RATE_LIMITED", str(exc)) from exc
+
     idempotency_record = _create_idempotency_record(
-    user_id=current_user.id,
-    idempotency_key=idempotency_key,
-    request_hash=request_hash,
-)
+        user_id=current_user.id,
+        idempotency_key=idempotency_key,
+        request_hash=request_hash,
+    )
     logo_placement = _resolve_logo_placement(body)
 
     # ---------------------------------------------------------
@@ -561,10 +572,7 @@ async def generate_image(
     # ---------------------------------------------------------
     # 3. Validate product instruction usage
     # ---------------------------------------------------------
-    if (
-        body.product_edit_instruction
-        and body.product_asset_id is None
-    ):
+    if body.product_edit_instruction and body.product_asset_id is None:
         raise _error_response(
             400,
             "PRODUCT_ASSET_REQUIRED",
@@ -580,19 +588,17 @@ async def generate_image(
     product_asset_reference = None
 
     if body.product_asset_id is not None:
-        product_asset_reference = (
-            load_product_asset_reference(
-                asset_id=body.product_asset_id,
-                brand_id=brand_id,
-                user_id=current_user.id,
-            )
+        product_asset_reference = load_product_asset_reference(
+            asset_id=body.product_asset_id,
+            brand_id=brand_id,
+            user_id=current_user.id,
         )
 
     # ---------------------------------------------------------
     # 5. Resolve managed provider configuration
     # ---------------------------------------------------------
     try:
-        managed_config = resolve_caption_config()
+        managed_config = resolve_generation_config()
     except RuntimeError as exc:
         raise _error_response(
             503,
@@ -603,13 +609,9 @@ async def generate_image(
     # ---------------------------------------------------------
     # 6. Resolve platform dimensions and context
     # ---------------------------------------------------------
-    preset_w, preset_h, _label = PLATFORM_PRESETS[
-        body.platform_preset.value
-    ]
+    preset_w, preset_h, _label = PLATFORM_PRESETS[body.platform_preset.value]
 
-    aspect_ratio = PRESET_TO_ASPECT_RATIO[
-        body.platform_preset.value
-    ]
+    aspect_ratio = PRESET_TO_ASPECT_RATIO[body.platform_preset.value]
 
     platform = build_platform_context(
         preset_id=body.platform_preset.value,
@@ -632,13 +634,10 @@ async def generate_image(
     product_edit_instruction = None
 
     if product_asset_reference is not None:
-        product_edit_instruction = (
-            body.product_edit_instruction
-            or (
-                "Use the product image as the main visual "
-                "reference. Preserve its identity, shape, "
-                "packaging, logo, label, and important colors."
-            )
+        product_edit_instruction = body.product_edit_instruction or (
+            "Use the product image as the main visual "
+            "reference. Preserve its identity, shape, "
+            "packaging, logo, label, and important colors."
         )
 
     # ---------------------------------------------------------
@@ -676,9 +675,9 @@ async def generate_image(
 
     client = get_service_client()
     client.table("idempotency_records").update(
-    {
-        "generation_id": str(generation_id),
-    }
+        {
+            "generation_id": str(generation_id),
+        }
     ).eq(
         "id",
         idempotency_record["id"],
@@ -693,7 +692,6 @@ async def generate_image(
 
     resolved_model = managed_config.model
 
-
     client.table("generations").insert(
         {
             "id": str(generation_id),
@@ -704,6 +702,7 @@ async def generate_image(
             "language": body.brief.language.value,
             "provider": "openai",
             "model": resolved_model,
+            "idempotency_key": idempotency_key,
             "platform_preset": body.platform_preset.value,
             "width": preset_w,
             "height": preset_h,
@@ -730,7 +729,6 @@ async def generate_image(
         body.logo_mode.value,
         product_asset_reference is not None,
     )
-
 
     # ---------------------------------------------------------
     # 11. Reserve credits, start usage, then run the provider
@@ -764,15 +762,13 @@ async def generate_image(
         )
         usage_timer.start()
 
-        client.table("generations").update(
-            {"status": "processing"}
-        ).eq(
+        client.table("generations").update({"status": "processing"}).eq(
             "id",
             str(generation_id),
         ).execute()
-        
+
         api_key = managed_config.api_key
-   
+
         try:
             result: ProviderResult = await asyncio.wait_for(
                 openai_generate(
@@ -789,8 +785,7 @@ async def generate_image(
         except asyncio.TimeoutError as exc:
             raise ProviderError(
                 "TIMEOUT",
-                "The request took too long to complete. "
-                "Please try again.",
+                "The request took too long to complete. Please try again.",
             ) from exc
 
         except ProviderError:
@@ -817,10 +812,8 @@ async def generate_image(
         # 13. Apply the brand logo watermark if requested
         # -----------------------------------------------------
         if logo_placement != LogoPlacementEnum.none and brand_has_logo:
-            logo_bytes = (
-                client.storage
-                .from_(settings.STORAGE_BUCKET)
-                .download(brand["logo_path"])
+            logo_bytes = client.storage.from_(settings.STORAGE_BUCKET).download(
+                brand["logo_path"]
             )
 
             image_bytes = apply_logo(
@@ -832,14 +825,9 @@ async def generate_image(
         # -----------------------------------------------------
         # 14. Save the generated image to Storage
         # -----------------------------------------------------
-        image_path = (
-            f"brands/{brand_id}/"
-            f"generations/{generation_id}.png"
-        )
+        image_path = f"brands/{brand_id}/generations/{generation_id}.png"
 
-        client.storage.from_(
-            settings.STORAGE_BUCKET
-        ).upload(
+        client.storage.from_(settings.STORAGE_BUCKET).upload(
             image_path,
             image_bytes,
             {
@@ -851,9 +839,7 @@ async def generate_image(
         # -----------------------------------------------------
         # 15. Mark generation as succeeded
         # -----------------------------------------------------
-        now_iso = datetime.now(
-            timezone.utc
-        ).isoformat()
+        now_iso = datetime.now(timezone.utc).isoformat()
 
         updated = (
             client.table("generations")
@@ -906,10 +892,7 @@ async def generate_image(
                 )
             except Exception:
                 logger.warning(
-                    (
-                        "Failed to re-fetch generation "
-                        "%s after success update"
-                    ),
+                    ("Failed to re-fetch generation %s after success update"),
                     generation_id,
                 )
 
@@ -976,10 +959,7 @@ async def generate_image(
         )
 
         logger.info(
-            (
-                "generate failed code=%s "
-                "generation_id=%s brand_id=%s"
-            ),
+            ("generate failed code=%s generation_id=%s brand_id=%s"),
             exc.code,
             generation_id,
             brand_id,
@@ -994,26 +974,58 @@ async def generate_image(
     # ---------------------------------------------------------
     # 19. Unexpected failure
     # ---------------------------------------------------------
-    except HTTPException:
+    except HTTPException as exc:
         # Already-shaped client errors (402 credits, 400 validation, ...)
-        # must not be relabelled as an internal fault.
+        # must not be relabelled as an internal fault, but resources created
+        # before the error still need to be finalized.
+        if credit_reservation is not None:
+            try:
+                release_credits(credit_reservation)
+            except Exception:
+                logger.exception("Failed to release credits after HTTP failure")
+        if usage_timer is not None and usage_timer.usage_id is not None:
+            try:
+                usage_timer.finish(
+                    status="failed",
+                    metadata={"error_code": "HTTP_ERROR"},
+                )
+            except Exception:
+                logger.exception("Failed to finish usage after HTTP failure")
+        try:
+            client.table("idempotency_records").update(
+                {"status": "failed", "response_status": exc.status_code}
+            ).eq("id", idempotency_record["id"]).execute()
+        except Exception:
+            logger.exception("Failed to update idempotency after HTTP failure")
         raise
 
     except Exception as exc:
         logger.exception(
-            (
-                "generate pipeline unexpected error "
-                "generation_id=%s brand_id=%s"
-            ),
+            ("generate pipeline unexpected error generation_id=%s brand_id=%s"),
             generation_id,
             brand_id,
         )
 
-        _mark_failed(
-            generation_id,
-            "INTERNAL_ERROR",
-            "Internal error",
-        )
+        if credit_reservation is not None:
+            try:
+                release_credits(credit_reservation)
+            except Exception:
+                logger.exception("Failed to release credits after unexpected failure")
+        if usage_timer is not None and usage_timer.usage_id is not None:
+            try:
+                usage_timer.finish(
+                    status="failed",
+                    metadata={"error_code": "INTERNAL_ERROR"},
+                )
+            except Exception:
+                logger.exception("Failed to finish usage after unexpected failure")
+        try:
+            client.table("idempotency_records").update(
+                {"status": "failed", "response_status": 500}
+            ).eq("id", idempotency_record["id"]).execute()
+        except Exception:
+            logger.exception("Failed to update idempotency after unexpected failure")
+        _mark_failed(generation_id, "INTERNAL_ERROR", "Internal error")
 
         raise _error_response(
             500,
@@ -1026,6 +1038,7 @@ async def generate_image(
                 user_id=current_user.id,
                 generation_id=generation_id,
             )
+
 
 _VALID_HISTORY_STATUSES = {s.value for s in GenerationHistoryStatusEnum}
 _VALID_HISTORY_PROVIDERS = {p.value for p in ProviderEnum}
@@ -1042,9 +1055,13 @@ async def list_generation_history(
     _get_brand_or_404(brand_id, current_user.id)
 
     if provider is not None and provider not in _VALID_HISTORY_PROVIDERS:
-        raise _error_response(400, "VALIDATION_ERROR", f"Invalid provider filter: {provider}")
+        raise _error_response(
+            400, "VALIDATION_ERROR", f"Invalid provider filter: {provider}"
+        )
     if status is not None and status not in _VALID_HISTORY_STATUSES:
-        raise _error_response(400, "VALIDATION_ERROR", f"Invalid status filter: {status}")
+        raise _error_response(
+            400, "VALIDATION_ERROR", f"Invalid status filter: {status}"
+        )
 
     client = get_service_client()
     query = (
@@ -1066,7 +1083,11 @@ async def list_generation_history(
             f"and(created_at.eq.{cursor_created_at},id.lt.{cursor_id})"
         )
 
-    query = query.order("created_at", desc=True).order("id", desc=True).limit(HISTORY_PAGE_SIZE + 1)
+    query = (
+        query.order("created_at", desc=True)
+        .order("id", desc=True)
+        .limit(HISTORY_PAGE_SIZE + 1)
+    )
 
     result = query.execute()
     rows = result.data or []
@@ -1094,8 +1115,16 @@ async def list_generation_history(
         next_cursor = _encode_cursor(last["created_at"], last["id"])
 
     logger.info(
-        "history list brand_id=%s provider=%s status=%s cursor=%s returned=%d has_next=%s",
-        brand_id, provider, status, bool(cursor), len(items), has_next,
+        (
+            "history list brand_id=%s provider=%s status=%s cursor=%s "
+            "returned=%d has_next=%s"
+        ),
+        brand_id,
+        provider,
+        status,
+        bool(cursor),
+        len(items),
+        has_next,
     )
 
     return GenerationHistoryPage(
@@ -1125,7 +1154,9 @@ async def get_generation_detail(
 
     logger.info(
         "history detail brand_id=%s generation_id=%s status=%s",
-        brand_id, generation_id, row.get("status"),
+        brand_id,
+        generation_id,
+        row.get("status"),
     )
     return _build_detail_response(row, brand["name"])
 
@@ -1164,36 +1195,52 @@ async def delete_generation(
                 pass
             else:
                 logger.warning(
-                    "storage delete failed brand_id=%s generation_id=%s path=%s error=%s",
-                    brand_id, generation_id, image_path, exc,
+                    (
+                        "storage delete failed brand_id=%s generation_id=%s "
+                        "path=%s error=%s"
+                    ),
+                    brand_id,
+                    generation_id,
+                    image_path,
+                    exc,
                 )
                 raise _error_response(
-                    502, "STORAGE_DELETE_FAILED",
+                    502,
+                    "STORAGE_DELETE_FAILED",
                     "Failed to delete stored image. Please try again.",
                 )
 
-    # Storage is removed first (above) so a "deleted" image is never left publicly
-    # reachable. If the DB delete fails after that, surface a clean retryable error:
-    # the row briefly points at a now-missing object, and a retry heals it (the
-    # storage remove tolerates an already-missing object via _is_already_missing_storage_error).
+    # Storage is removed first (above) so a "deleted" image is never left
+    # publicly reachable. If the DB delete fails after that, surface a clean
+    # retryable error: the row briefly points at a now-missing object, and a
+    # retry heals it (storage removal tolerates an already-missing object).
     try:
         client.table("generations").delete().eq("id", str(generation_id)).eq(
             "brand_id", str(brand_id)
         ).execute()
     except Exception as exc:
         logger.error(
-            "db delete failed after storage removal brand_id=%s generation_id=%s path=%s error=%s",
-            brand_id, generation_id, image_path, exc,
+            (
+                "db delete failed after storage removal brand_id=%s "
+                "generation_id=%s path=%s error=%s"
+            ),
+            brand_id,
+            generation_id,
+            image_path,
+            exc,
         )
         raise _error_response(
-            502, "DELETE_FAILED",
+            502,
+            "DELETE_FAILED",
             "Failed to delete the generation. Please try again.",
         )
 
     logger.info(
         "generation deleted brand_id=%s generation_id=%s",
-        brand_id, generation_id,
+        brand_id,
+        generation_id,
     )
+
 
 def _get_product_asset_or_400(
     *,
@@ -1221,6 +1268,7 @@ def _get_product_asset_or_400(
         )
 
     return result.data
+
 
 def _create_idempotency_record(
     *,

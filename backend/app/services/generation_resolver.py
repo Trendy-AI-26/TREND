@@ -56,14 +56,10 @@ def _validate_provider(
     feature_name: str,
 ) -> None:
     if not provider:
-        raise RuntimeError(
-            f"Provider is not configured for {feature_name}."
-        )
+        raise RuntimeError(f"Provider is not configured for {feature_name}.")
 
     if provider.lower() != "openai":
-        raise RuntimeError(
-            f"Only OpenAI is supported for {feature_name}."
-        )
+        raise RuntimeError(f"Only OpenAI is supported for {feature_name}.")
 
 
 def _validate_key(
@@ -71,9 +67,7 @@ def _validate_key(
     feature_name: str,
 ) -> None:
     if not api_key:
-        raise RuntimeError(
-            f"OpenAI API key is not configured for {feature_name}."
-        )
+        raise RuntimeError(f"OpenAI API key is not configured for {feature_name}.")
 
 
 def _validate_model(
@@ -81,9 +75,7 @@ def _validate_model(
     feature_name: str,
 ) -> None:
     if not model:
-        raise RuntimeError(
-            f"OpenAI model is not configured for {feature_name}."
-        )
+        raise RuntimeError(f"OpenAI model is not configured for {feature_name}.")
 
 
 def resolve_generation_config() -> ManagedGenerationConfig:
@@ -167,8 +159,8 @@ def resolve_caption_config() -> ManagedGenerationConfig:
 
 
 __all__ = [
-    "ManagedGenerationConfig",
     "GenerationConfig",
-    "resolve_generation_config",
+    "ManagedGenerationConfig",
     "resolve_caption_config",
+    "resolve_generation_config",
 ]

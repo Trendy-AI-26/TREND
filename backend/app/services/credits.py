@@ -6,7 +6,6 @@ from uuid import UUID, uuid4
 
 from app.core.supabase import get_service_client
 
-
 GENERATION_CREDIT_COST = 1
 
 
@@ -110,15 +109,10 @@ def _read_reservation(
         data = {}
 
     reservation_id = str(
-        data.get("reservation_id")
-        or data.get("id")
-        or fallback_reservation_id
+        data.get("reservation_id") or data.get("id") or fallback_reservation_id
     )
 
-    returned_amount = int(
-        data.get("amount")
-        or amount
-    )
+    returned_amount = int(data.get("amount") or amount)
 
     return CreditReservation(
         reservation_id=reservation_id,
@@ -180,14 +174,9 @@ def reserve_credits(
     """
 
     if amount <= 0:
-        raise ValueError(
-            "Credit amount must be positive."
-        )
+        raise ValueError("Credit amount must be positive.")
 
-    reservation_id = (
-        idempotency_key
-        or f"credit-reservation-{uuid4()}"
-    )
+    reservation_id = idempotency_key or f"credit-reservation-{uuid4()}"
 
     client = get_service_client()
 
@@ -302,10 +291,10 @@ def release_credits(
 
 __all__ = [
     "GENERATION_CREDIT_COST",
-    "CreditsError",
     "CreditReservation",
-    "get_available_credits",
-    "reserve_credits",
+    "CreditsError",
     "commit_credits",
+    "get_available_credits",
     "release_credits",
+    "reserve_credits",
 ]

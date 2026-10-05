@@ -40,9 +40,7 @@ def acquire_generation_lock(
         )
 
         if current_expiry > now:
-            raise GenerationLockError(
-                "A generation is already in progress."
-            )
+            raise GenerationLockError("A generation is already in progress.")
 
         client.table("generation_locks").delete().eq(
             "user_id",
@@ -58,9 +56,7 @@ def acquire_generation_lock(
             }
         ).execute()
     except Exception as exc:
-        raise GenerationLockError(
-            "A generation is already in progress."
-        ) from exc
+        raise GenerationLockError("A generation is already in progress.") from exc
 
 
 def release_generation_lock(
