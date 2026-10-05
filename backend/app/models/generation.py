@@ -22,6 +22,14 @@ class LogoModeEnum(str, Enum):
     both = "both"
 
 
+class LogoPlacementEnum(str, Enum):
+    none = "none"
+    corner = "corner"
+    prominent = "prominent"
+    watermark = "watermark"
+    auto = "auto"
+
+
 class GenerationStatusEnum(str, Enum):
     pending = "pending"
     processing = "processing"
@@ -93,6 +101,7 @@ class GenerationHistoryPage(BaseModel):
     items: list[GenerationHistoryItem]
     next_cursor: str | None
     page_size: Literal[24]
+    successful_count: int | None
 
 
 class GenerationDetailResponse(BaseModel):
@@ -357,6 +366,7 @@ class GenerateRequest(BaseModel):
     brief: GenerationBrief
     platform_preset: PlatformPresetEnum
     logo_mode: LogoModeEnum = LogoModeEnum.none
+    logo_placement: LogoPlacementEnum = LogoPlacementEnum.none
     product_asset_id: UUID | None = None
     product_edit_instruction: str | None = Field(
         default=None,
@@ -373,6 +383,7 @@ __all__ = [
     "ProviderEnum",
     "TextLanguageEnum",
     "LogoModeEnum",
+    "LogoPlacementEnum",
     "GenerationStatusEnum",
     "PlatformPresetEnum",
     "GenerateRequest",

@@ -35,7 +35,8 @@ function getPageLabelKey(pathname: string, currentBrandId?: string) {
   if (pathname === '/admin' || pathname.startsWith('/admin/')) return 'breadcrumb_admin'
   if (!currentBrandId || isNeutralRoute(pathname)) return null
   const brandPath = pathname.replace(`/${currentBrandId}`, '') || '/'
-  if (brandPath === '/') return 'breadcrumb_content'
+  if (brandPath === '/') return 'breadcrumb_dashboard'
+  if (brandPath === '/generate') return 'breadcrumb_content'
   if (brandPath === '/kit') return 'breadcrumb_brand_kit'
   if (brandPath === '/studio') return 'breadcrumb_studio'
   if (brandPath === '/history') return 'breadcrumb_library'
@@ -66,6 +67,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const crumbBrand = brands.find((b) => b.id === currentBrandId)
   const pageLabelKey = getPageLabelKey(pathname, currentBrandId)
   const pageLabels = {
+    breadcrumb_dashboard: t('breadcrumb_dashboard'),
     breadcrumb_brands: t('breadcrumb_brands'),
     breadcrumb_notifications: t('breadcrumb_notifications'),
     breadcrumb_account: t('breadcrumb_account'),
@@ -79,6 +81,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   }
   const fallbackPageLabels = locale === 'ar'
     ? {
+      breadcrumb_dashboard: 'لوحة التحكم الرئيسية',
       breadcrumb_brands: 'العلامات التجارية',
       breadcrumb_notifications: 'الإشعارات',
       breadcrumb_account: 'الحساب الشخصي',
@@ -91,6 +94,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       breadcrumb_settings: 'الإعدادات',
     }
     : {
+      breadcrumb_dashboard: 'Main Dashboard',
       breadcrumb_brands: 'Brands',
       breadcrumb_notifications: 'Notifications',
       breadcrumb_account: 'Personal account',

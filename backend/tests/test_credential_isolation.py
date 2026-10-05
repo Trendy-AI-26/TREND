@@ -143,6 +143,7 @@ def test_openapi_contract_exposes_no_credential_fields():
     assert sorted(model["properties"]) == [
         "brief",
         "logo_mode",
+        "logo_placement",
         "platform_preset",
         "product_asset_id",
         "product_edit_instruction",
