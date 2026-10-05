@@ -1,9 +1,5 @@
-import { BrandDashboard } from '@/components/brand/brand-dashboard'
+import { redirect } from 'next/navigation'
 
-export default function BrandDashboardPage({
-  params,
-}: {
-  params: { brandId: string }
-}) {
-  return <BrandDashboard brandId={params.brandId} />
+export default function BrandPage({ params }: { params: { brandId: string } }) {
+  redirect(`/dashboard?brandId=${params.brandId}`)
 }

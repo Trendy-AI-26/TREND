@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { useTranslations, useLocale } from 'next-intl'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { useParams, usePathname, useRouter } from 'next/navigation'
+import { useParams, usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { Bell, PanelLeft } from 'lucide-react'
 import { BrandWorkspace } from '@/components/brand/brand-workspace'
 import { CreateBrandModal } from '@/components/brand/create-brand-modal'
@@ -17,8 +17,8 @@ import type { Brand } from '@/types'
 
 function isNeutralRoute(pathname: string) {
   return (
-    pathname === '/brands' ||
-    pathname.startsWith('/brands/') ||
+    pathname === '/dashboard' ||
+    pathname.startsWith('/dashboard/') ||
     pathname === '/account' ||
     pathname.startsWith('/account/') ||
     pathname === '/notifications' ||
@@ -29,6 +29,7 @@ function isNeutralRoute(pathname: string) {
 }
 
 function getPageLabelKey(pathname: string, currentBrandId?: string) {
+  if (pathname === '/dashboard') return 'breadcrumb_dashboard'
   if (pathname === '/brands') return 'breadcrumb_brands'
   if (pathname === '/notifications' || pathname.startsWith('/notifications/')) return 'breadcrumb_notifications'
   if (pathname === '/account' || pathname.startsWith('/account/')) return 'breadcrumb_account'
@@ -49,9 +50,12 @@ export function AppShell({ children }: { children: ReactNode }) {
   const t = useTranslations('components.layout.app-shell')
   const locale = useLocale()
   const params = useParams()
+  const searchParams = useSearchParams()
   const pathname = usePathname()
   const router = useRouter()
-  const currentBrandId = typeof params.brandId === 'string' ? params.brandId : undefined
+  const queryBrandId = searchParams.get('brandId') || undefined
+  const currentBrandId =
+    (typeof params.brandId === 'string' ? params.brandId : undefined) || queryBrandId
   const { brands, accents, addBrand } = useBrands()
   const { notifications } = useNotifications()
   const { profile } = useProfile()
@@ -111,6 +115,16 @@ export function AppShell({ children }: { children: ReactNode }) {
     ? (pageLabelKey ? fallbackPageLabels[pageLabelKey as keyof typeof fallbackPageLabels] : null)
     : translatedPageLabel
 
+  useEffect(() => {
+    const dir = locale === 'ar' ? 'rtl' : 'ltr'
+    if (document.documentElement.dir !== dir) {
+      document.documentElement.dir = dir
+    }
+    if (document.documentElement.lang !== locale) {
+      document.documentElement.lang = locale
+    }
+  }, [locale])
+
   useEffect(() => setNavOpen(false), [pathname])
 
   useEffect(() => {
@@ -134,7 +148,10 @@ export function AppShell({ children }: { children: ReactNode }) {
   }
 
   const shell = (
-    <div className={cn('grid h-screen grid-cols-1 overflow-hidden bg-background', sidebarClosed ? 'md:grid-cols-[0_1fr]' : 'md:grid-cols-[224px_1fr]')}>
+    <div
+      dir={locale === 'ar' ? 'rtl' : 'ltr'}
+      className={cn('grid h-screen grid-cols-1 overflow-hidden bg-background', sidebarClosed ? 'md:grid-cols-[0_1fr]' : 'md:grid-cols-[224px_1fr]')}
+    >
       {navOpen && <button type="button" aria-label={t('close_menu')} className="fixed inset-0 z-30 bg-[#0B1220]/40 md:hidden" onClick={() => setNavOpen(false)} />}
       <div ref={drawerRef} className={cn('z-40 h-full w-[224px] bg-brand-cream max-md:fixed max-md:inset-y-0 max-md:start-0 max-md:shadow-lg max-md:transition-transform max-md:duration-fast max-md:ease-out md:static md:translate-x-0 md:transform-none md:transition-all md:duration-fast', sidebarClosed && 'md:w-0 md:-translate-x-full md:overflow-hidden', navOpen ? 'max-md:translate-x-0' : 'max-md:-translate-x-full rtl:max-md:translate-x-full')}>
         <AppSidebar brands={brands} accents={accents} currentBrandId={currentBrandId} profile={profile} onCreateBrand={() => setCreateOpen(true)} onClose={() => { setNavOpen(false); setSidebarClosed(true) }} />
@@ -143,18 +160,18 @@ export function AppShell({ children }: { children: ReactNode }) {
         <header className="flex h-[60px] shrink-0 items-center gap-2 border-b border-brand-accent/30 bg-brand-cream px-3 md:px-[52px]">
           <button type="button" onClick={() => { setSidebarClosed(false); setNavOpen(true) }} aria-label={t('open_menu')} className={cn('inline-flex h-9 w-9 items-center justify-center rounded-md hover:bg-accent', !sidebarClosed && 'md:hidden')}><PanelLeft className="h-4 w-4" /></button>
           <span className="font-logo text-[20px] font-semibold leading-none text-brand-headline md:hidden">TRENDY AI</span>
-          <div dir={locale === 'ar' ? 'ltr' : 'rtl'} className="flex min-w-0 flex-1 items-center justify-between gap-3">
-            <div className="flex items-center gap-2">
+          <div className="flex min-w-0 flex-1 items-center justify-between gap-3">
+            <nav aria-label={t('breadcrumb_label')} className="hidden items-center gap-[5px] font-readex text-[13px] md:flex">
+              {crumbBrand && <span className="text-brand-headline/50">{crumbBrand.name}</span>}
+              {pageLabel && <><span className="text-brand-headline/40">/</span><span className="font-semibold text-brand-primary">{pageLabel}</span></>}
+            </nav>
+            <div className="ms-auto flex items-center gap-2">
               <Link href="/notifications" aria-label={t('notifications')} aria-current={pathname === '/notifications' ? 'page' : undefined} className={cn('relative inline-flex h-9 w-9 items-center justify-center rounded-full text-brand-headline/70 no-underline transition-colors duration-fast hover:bg-brand-bg/60', pathname === '/notifications' && 'bg-brand-bg text-brand-primary')}>
                 <Bell className="h-[18px] w-[18px]" />
                 {hasUnreadNotifications && <span className="absolute end-2 top-2 h-1.5 w-1.5 rounded-full bg-brand-primary" />}
               </Link>
               <LanguageSwitcher />
             </div>
-            <nav dir={locale} aria-label={t('breadcrumb_label')} className="hidden items-center gap-[5px] font-readex text-[13px] md:flex">
-              {crumbBrand && <span className="text-brand-headline/50">{crumbBrand.name}</span>}
-              {pageLabel && <><span className="text-brand-headline/40">/</span><span className="font-semibold text-brand-primary">{pageLabel}</span></>}
-            </nav>
           </div>
         </header>
         <main className="min-w-0 flex-1 overflow-y-auto px-4 py-5 md:px-[30px] md:py-6">{children}</main>

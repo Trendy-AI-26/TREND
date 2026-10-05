@@ -39,7 +39,7 @@ export async function middleware(request: NextRequest) {
   // Auth pages: redirect authenticated users to /brands
   if (user && (pathname === '/login' || pathname === '/signup')) {
     const url = request.nextUrl.clone()
-    url.pathname = '/brands'
+    url.pathname = '/dashboard'
     const redirectResponse = NextResponse.redirect(url)
     supabaseResponse.headers.getSetCookie().forEach((cookie) => {
       redirectResponse.headers.append('set-cookie', cookie)
@@ -74,5 +74,3 @@ export const config = {
     '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
   ],
 }
-
-

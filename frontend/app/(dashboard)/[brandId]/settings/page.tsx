@@ -149,7 +149,7 @@ export default function BrandSettingsPage() {
         brand={brand}
         open={showDeleteDialog}
         onOpenChange={setShowDeleteDialog}
-        onBrandDeleted={() => { removeBrand(brandId); router.push('/brands') }}
+        onBrandDeleted={() => { removeBrand(brandId); router.push('/dashboard') }}
       />
     </div>
   )

@@ -18,7 +18,12 @@ export default function LanguageSwitcher({ variant = 'pill' }: LanguageSwitcherP
   const next = locale === 'ar' ? 'en' : 'ar'
 
   function switchLanguage() {
+    const nextDir = next === 'ar' ? 'rtl' : 'ltr'
     document.cookie = `NEXT_LOCALE=${next};path=/;max-age=31536000;sameSite=lax`
+    if (typeof document !== 'undefined') {
+      document.documentElement.dir = nextDir
+      document.documentElement.lang = next
+    }
     startTransition(() => router.refresh())
   }
 
