@@ -741,7 +741,7 @@ async def generate_image(
             credit_reservation = reserve_credits(
                 user_id=current_user.id,
                 generation_id=generation_id,
-                amount=getattr(settings, "GENERATION_CREDIT_COST", 1),
+                amount=settings.GENERATION_CREDIT_COST,
                 idempotency_key=f"generation:{generation_id}:reserve",
             )
         except CreditsError as exc:
@@ -758,7 +758,7 @@ async def generate_image(
             feature="image_generation",
             provider="openai",
             model=resolved_model,
-            credits=getattr(settings, "GENERATION_CREDIT_COST", 1),
+            credits=settings.GENERATION_CREDIT_COST,
         )
         usage_timer.start()
 
