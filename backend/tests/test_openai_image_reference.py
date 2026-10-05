@@ -27,6 +27,20 @@ class FakeResponse:
         return None
 
 
+class ErrorResponse(FakeResponse):
+    def __init__(self, status_code, body):
+        self.status_code = status_code
+        self.body = body
+        self.headers = {"x-request-id": "request-error"}
+
+    @property
+    def text(self):
+        return self.body
+
+    def json(self):
+        raise ValueError("not json")
+
+
 class FakeAsyncClient:
     def __init__(self, *args, **kwargs):
         self.last_call = None
@@ -108,3 +122,59 @@ async def test_without_reference_image_uses_generation_endpoint(
 
     assert "json" in fake_client.kwargs
     assert "files" not in fake_client.kwargs
+
+
+@pytest.mark.asyncio
+async def test_reference_image_unsupported_error_is_classified(monkeypatch):
+    fake_client = FakeAsyncClient()
+
+    async def post(_url, **_kwargs):
+        return ErrorResponse(422, "image edits are not supported")
+
+    fake_client.post = post
+    monkeypatch.setattr(
+        openai_image.httpx,
+        "AsyncClient",
+        lambda **kwargs: fake_client,
+    )
+
+    with pytest.raises(openai_image.ProviderError) as error:
+        await openai_image.openai_generate(
+            api_key="test-key",
+            prompt="Create an advertisement",
+            width=1024,
+            height=1024,
+            model="gpt-image-2",
+            reference_image=ReferenceImage(
+                content=b"fake-image",
+                mime_type="image/png",
+            ),
+        )
+
+    assert error.value.code == "REFERENCE_IMAGE_UNSUPPORTED"
+
+
+@pytest.mark.asyncio
+async def test_invalid_key_error_is_classified(monkeypatch):
+    fake_client = FakeAsyncClient()
+
+    async def post(_url, **_kwargs):
+        return ErrorResponse(401, "invalid api key")
+
+    fake_client.post = post
+    monkeypatch.setattr(
+        openai_image.httpx,
+        "AsyncClient",
+        lambda **kwargs: fake_client,
+    )
+
+    with pytest.raises(openai_image.ProviderError) as error:
+        await openai_image.openai_generate(
+            api_key="bad-key",
+            prompt="Create an advertisement",
+            width=1024,
+            height=1024,
+            model="gpt-image-2",
+        )
+
+    assert error.value.code == "INVALID_KEY"

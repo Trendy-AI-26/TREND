@@ -34,7 +34,7 @@ def _get_brand_or_404(brand_id: UUID, user_id: str) -> dict:
 
 
 def _empty_answers() -> KitAnswers:
-    return KitAnswers(tagline=None, tone=None, audience=None, colors=[], avoid_words=None)
+    return KitAnswers(product_asset_id=None, tagline=None, tone=None, industry=None, audience=None, colors=[], avoid_words=None)
 
 
 def _row_to_response(brand: dict, row: dict | None) -> KitResponse:
@@ -49,8 +49,10 @@ def _row_to_response(brand: dict, row: dict | None) -> KitResponse:
             updated_at=None,
         )
     answers = KitAnswers(
+        product_asset_id=row.get("product_asset_id"),
         tagline=row.get("tagline"),
         tone=row.get("tone"),
+        industry=row.get("industry"),
         audience=row.get("audience"),
         colors=row.get("colors") or [],
         avoid_words=row.get("avoid_words"),
@@ -100,9 +102,22 @@ async def upsert_kit(
     existing = existing_result.data if existing_result is not None else None
 
     a = body.answers
+    if a.product_asset_id is not None:
+        asset_result = (
+            client.table("product_assets")
+            .select("id")
+            .eq("id", str(a.product_asset_id))
+            .eq("brand_id", str(brand_id))
+            .eq("owner_user_id", brand["owner_user_id"])
+            .maybe_single()
+            .execute()
+        )
+        if asset_result is None or asset_result.data is None:
+            raise _error_response(404, "PRODUCT_ASSET_NOT_FOUND", "Product image not found")
+
     new_status = derive_status(
         tagline=a.tagline,
-        tone=a.tone.value if a.tone else None,
+        industry=a.industry,
         audience=a.audience,
         colors=a.colors,
         avoid_words=a.avoid_words,
@@ -110,7 +125,7 @@ async def upsert_kit(
     summary = derive_summary(
         brand_name=brand["name"],
         tagline=a.tagline,
-        tone=a.tone.value if a.tone else None,
+        industry=a.industry,
         audience=a.audience,
         colors=a.colors,
         avoid_words=a.avoid_words,
@@ -130,8 +145,10 @@ async def upsert_kit(
 
     payload = {
         "brand_id": str(brand_id),
+        "product_asset_id": str(a.product_asset_id) if a.product_asset_id else None,
         "tagline": a.tagline,
         "tone": a.tone.value if a.tone else None,
+        "industry": a.industry,
         "audience": a.audience,
         "colors": a.colors,
         "avoid_words": a.avoid_words,

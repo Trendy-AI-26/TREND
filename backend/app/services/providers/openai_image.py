@@ -7,8 +7,7 @@ from app.services.providers.base import (
     ProviderError,
     ProviderResult,
     ReferenceImage,
- )
-from app.services.error_mapping import ERROR_USER_MESSAGES
+)
 
 logger = logging.getLogger(__name__)
 
@@ -62,9 +61,9 @@ async def openai_generate(
         "Authorization": f"Bearer {api_key}",
     }
 
-    timeout = httpx.Timeout(120.0 )
+    timeout = httpx.Timeout(120.0)
 
-    async with httpx.AsyncClient(timeout=timeout ) as client:
+    async with httpx.AsyncClient(timeout=timeout) as client:
         if reference_image is None:
             response = await client.post(
                 OPENAI_IMAGES_GENERATIONS_URL,
@@ -108,9 +107,9 @@ async def openai_generate(
                 response.text[:1000],
             )
 
-            raise ProviderError(
-                "PROVIDER_REQUEST_FAILED",
-                "The image provider could not generate the image.",
+            raise _provider_error_from_response(
+                response,
+                reference_image=reference_image is not None,
             )
 
         try:
@@ -141,7 +140,9 @@ def _filename_for_mime(mime_type: str) -> str:
 
 def _provider_error_from_response(
     response: httpx.Response,
- ) -> ProviderError:
+    *,
+    reference_image: bool,
+) -> ProviderError:
     body = response.text.lower()
 
     if response.status_code == 401:
@@ -156,7 +157,7 @@ def _provider_error_from_response(
             "The provider is rate limiting requests.",
         )
 
-    if (
+    if reference_image and (
         "image edit" in body
         or "images/edits" in body
         or "unsupported" in body
@@ -183,9 +184,6 @@ def _provider_error_from_response(
         )
 
     return ProviderError(
-    "REFERENCE_IMAGE_UNSUPPORTED",
-    ERROR_USER_MESSAGES[
-        "REFERENCE_IMAGE_UNSUPPORTED"
-    ],
-)
-
+        "PROVIDER_REQUEST_FAILED",
+        "The image provider could not generate the image.",
+    )

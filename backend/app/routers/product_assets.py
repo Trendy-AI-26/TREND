@@ -8,7 +8,7 @@ from PIL import Image
 from app.config import settings
 from app.core.auth import User, get_current_user
 from app.core.supabase import get_service_client
-from app.models.product_asset import ProductAssetUploadResponse
+from app.models.product_asset import ProductAssetResponse, ProductAssetUploadResponse
 
 logger = logging.getLogger(__name__)
 
@@ -115,7 +115,7 @@ async def upload_product_asset(
         raise _error_response(
             status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
             "FILE_TOO_LARGE",
-            "Product image must not exceed 5 MB",
+            "Product image must not exceed 10 MB",
         )
 
     try:
@@ -221,6 +221,45 @@ async def upload_product_asset(
             "PRODUCT_ASSET_UPLOAD_FAILED",
             "Could not upload product image",
         ) from exc
+
+@router.get(
+    "/{asset_id}",
+    response_model=ProductAssetResponse,
+)
+async def get_product_asset(
+    brand_id: UUID,
+    asset_id: UUID,
+    current_user: User = Depends(get_current_user),
+):
+    _get_owned_brand(brand_id, current_user.id)
+    client = get_service_client()
+    result = (
+        client.table("product_assets")
+        .select("id, brand_id, owner_user_id, storage_path, content_type, file_size_bytes, width, height, created_at")
+        .eq("id", str(asset_id))
+        .eq("brand_id", str(brand_id))
+        .eq("owner_user_id", current_user.id)
+        .maybe_single()
+        .execute()
+    )
+    if result is None or result.data is None:
+        raise _error_response(
+            status.HTTP_404_NOT_FOUND,
+            "PRODUCT_ASSET_NOT_FOUND",
+            "Product image not found",
+        )
+    asset = result.data
+    return ProductAssetResponse(
+        id=asset["id"],
+        brand_id=asset["brand_id"],
+        image_url=_signed_url(client, asset["storage_path"]),
+        content_type=asset["content_type"],
+        file_size_bytes=asset["file_size_bytes"],
+        width=asset["width"],
+        height=asset["height"],
+        created_at=asset["created_at"],
+    )
+
 
 @router.delete(
     "/{asset_id}",

@@ -1,7 +1,7 @@
 import { headers } from 'next/headers'
 import { notFound, redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
-import { GeneratorForm } from '@/components/generation/generator-form'
+import { GenerationWizard } from '@/components/generation/wizard/generation-wizard'
 import type { Brand } from '@/types'
 
 async function getServerApiUrl(path: string) {
@@ -58,7 +58,7 @@ export default async function BrandGeneratorPage({
   const { brandId } = params
   const brand = await loadBrand(brandId)
   return (
-    <GeneratorForm
+      <GenerationWizard
       brandId={brandId}
       brandName={brand.name}
       brandHasLogo={Boolean(brand.logo_url)}

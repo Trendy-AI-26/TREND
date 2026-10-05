@@ -183,7 +183,7 @@ def _get_brand_kit_context(brand_id: UUID, brand_name: str) -> BrandContext | No
     client = get_service_client()
     result = (
         client.table("brand_kits")
-        .select("tagline, tone, audience, colors, avoid_words, status,language")
+        .select("tagline, tone, audience, colors, avoid_words, status")
         .eq("brand_id", str(brand_id))
         .maybe_single()
         .execute()
@@ -196,7 +196,7 @@ def _get_brand_kit_context(brand_id: UUID, brand_name: str) -> BrandContext | No
     return BrandContext(
         name=brand_name,
         tagline=row.get("tagline"),
-        tone=row.get("tone"),
+        industry=row.get("industry"),
         audience=row.get("audience"),
         colors=row.get("colors") or [],
         avoid_words=row.get("avoid_words"),
@@ -1019,8 +1019,8 @@ async def generate_image(
                 generation_id=generation_id,
             )
 
-
-_VALID_HISTORY_PROVIDERS = {"openai"}
+_VALID_HISTORY_STATUSES = {s.value for s in GenerationHistoryStatusEnum}
+_VALID_HISTORY_PROVIDERS = {p.value for p in ProviderEnum}
 
 
 @router.get("/generations", response_model=GenerationHistoryPage)

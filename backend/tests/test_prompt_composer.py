@@ -32,6 +32,7 @@ SAMPLE_BRAND = BrandContext(
     audience="startup founders aged 25-40",
     colors=["#1E3A8A", "#3B82F6"],
     avoid_words="cheap, discount, budget",
+    industry="interior design",
 )
 
 SAMPLE_PLATFORM = PlatformContext(
@@ -106,6 +107,7 @@ def test_full_brand_context_includes_all_fields():
         brand_has_logo=False,
     )
     assert "Brand: Acme" in result
+    assert "Business field: interior design" in result
     assert 'Tagline: "Build the future"' in result
     assert "Visual style:" in result
     assert "Target audience: startup founders aged 25-40" in result

@@ -11,7 +11,7 @@ export function KitQuestion({
   emphasis: string
   after?: string
   helper?: string
-  
+
   align?: 'start' | 'center'
 }) {
   const centered = align === 'center'
@@ -19,18 +19,18 @@ export function KitQuestion({
     <div className={cn('space-y-2', centered && 'text-center')}>
       <h2
         className={cn(
-          'font-display text-[31px] leading-[1.12] text-foreground',
+          'font-el-messiri text-[29px] font-bold leading-[1.2] text-foreground sm:text-[31px]',
           centered ? 'mx-auto max-w-none' : 'max-w-[20ch]',
         )}
       >
         {before}
-        <em className="text-brand">{emphasis}</em>
+        <em className="not-italic text-brand">{emphasis}</em>
         {after}
       </h2>
       {helper && (
         <p
           className={cn(
-            'max-w-[56ch] text-[14px] text-muted-foreground',
+            'font-tajawal max-w-[56ch] text-[14px] text-muted-foreground',
             centered && 'mx-auto',
           )}
         >

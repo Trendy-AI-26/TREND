@@ -16,6 +16,9 @@ class Settings(BaseSettings):
 
     STORAGE_BUCKET: str = "brand-assets"
     PRODUCT_ASSETS_BUCKET: str = "product-assets"
+    PRODUCT_ASSET_MAX_BYTES: int = 10 * 1024 * 1024
+    AVATARS_BUCKET: str = "avatars"
+    AVATAR_MAX_BYTES: int = 2 * 1024 * 1024
 
     # --------------------------------------------------
     # Application

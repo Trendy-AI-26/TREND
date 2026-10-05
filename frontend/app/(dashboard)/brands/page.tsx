@@ -9,6 +9,7 @@ import { CreateBrandModal } from '@/components/brand/create-brand-modal'
 import { DeleteBrandDialog } from '@/components/brand/delete-brand-dialog'
 import { BrandStats, type StatusFilter } from '@/components/brand/brand-stats'
 import { BrandsTable, type BrandSort } from '@/components/brand/brands-table'
+import { AiPromoBanner } from '@/components/brand/ai-promo-banner'
 import { Button } from '@/components/ui/button'
 import { Brand, BrandListItem } from '@/types'
 
@@ -18,10 +19,10 @@ const selectClass =
 export default function BrandsPage() {
   const t = useTranslations('app.(dashboard).brands.page');
   const [showCreateModal, setShowCreateModal] = useState(false)
-  const { brands, loading, error, accents, addBrand, removeBrand } = useBrands()
+  const { brands, loading, error, accents, industries, brandColors, taglines, addBrand, removeBrand } = useBrands()
   const router = useRouter()
 
-  
+
   const [search, setSearch] = useState('')
   const [status, setStatus] = useState<StatusFilter>('all')
   const [sort, setSort] = useState<BrandSort>('newest')
@@ -31,6 +32,9 @@ export default function BrandsPage() {
   const handleBrandCreated = (brand: Brand) => {
     addBrand(brand)
     router.push(`/${brand.id}`)
+  }
+  const handleStartGeneration = () => {
+    if (brands[0]) router.push(`/${brands[0].id}`)
   }
 
   // أعداد بطاقات الأرقام (من كل العلامات، مش من نتيجة الفلترة)
@@ -44,7 +48,7 @@ export default function BrandsPage() {
     [brands],
   )
 
- 
+
   const visible = useMemo(() => {
     const q = search.trim().toLowerCase()
     return brands
@@ -91,8 +95,7 @@ export default function BrandsPage() {
           <BrandStats counts={counts} value={status} onChange={changeStatus} />
 
           {/* شريط البحث والفلاتر */}
-          <div className="mt-4 flex flex-wrap items-center gap-3 rounded-2xl border border-brand-accent/30 bg-brand-cream p-4 shadow-xs">
-            <div className="relative w-full sm:w-[288px]">
+          <div className="mt-4 flex flex-wrap items-center justify-end gap-3 rounded-2xl border border-brand-accent/30 bg-brand-cream p-4 shadow-xs">            <div className="relative w-full sm:w-[288px]">
               <Search className="pointer-events-none absolute start-3 top-1/2 h-4 w-4 -translate-y-1/2 text-brand-headline/40" />
               <input
                 type="search"
@@ -137,6 +140,9 @@ export default function BrandsPage() {
             <BrandsTable
               brands={visible}
               accents={accents}
+              industries={industries}
+              brandColors={brandColors}
+              taglines={taglines}
               page={page}
               onPageChange={setPage}
               sort={sort}
@@ -144,6 +150,8 @@ export default function BrandsPage() {
               onDelete={setDeleteTarget}
             />
           )}
+
+          <AiPromoBanner brandName={brands[0]?.name} onStart={handleStartGeneration} />
         </>
       )}
 
