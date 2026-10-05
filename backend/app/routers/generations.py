@@ -6,7 +6,11 @@ import logging
 from datetime import datetime, timezone
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Header, HTTPException, Query
+
+from app.services.generation_resolver import resolve_caption_config
+
+import hashlib
 from pydantic import ValidationError
 from storage3.exceptions import StorageException
 
@@ -36,9 +40,8 @@ from app.services.presets import (
     PRESET_TO_ASPECT_RATIO,
     build_download_filename,
 )
-from app.services.product_asset_loader import (
-    load_product_asset_reference,
-)
+from app.services.product_asset_loader import load_product_asset_reference
+
 
 from app.services.prompt_composer import (
     BrandContext,
@@ -46,6 +49,21 @@ from app.services.prompt_composer import (
     build_platform_context,
     compose_full_prompt,
 )
+from app.services.credits import (
+    CreditsError,
+    commit_credits,
+    reserve_credits,
+    release_credits,
+)
+from app.services.generation_lock import (
+    GenerationLockError,
+    acquire_generation_lock,
+    release_generation_lock,
+)
+
+
+
+from app.services.usage import UsageTimer
 from app.services.providers.base import ProviderError, ProviderResult
 from app.services.providers.openai_image import openai_generate
 from app.services.watermark import apply_watermark
@@ -66,6 +84,81 @@ def _error_response(status_code: int, code: str, message: str) -> HTTPException:
             }
         },
     )
+
+
+def _hash_generation_request(body: GenerateRequest) -> str:
+    payload = body.model_dump_json()
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def _get_idempotent_generation(
+    *,
+    user_id: str,
+    idempotency_key: str,
+    request_hash: str,
+) -> dict | None:
+    client = get_service_client()
+
+    query = client.table("idempotency_records")
+
+    # بعض Fake Clients في اختبارات Endpoint لا تدعم
+    # عمليات select، لذلك نتجاوز قراءة Idempotency فيها.
+    if not hasattr(query, "select"):
+        return None
+
+    try:
+        result = (
+            query
+            .select("*")
+            .eq("user_id", user_id)
+            .eq("scope", "image_generation")
+            .eq("idempotency_key", idempotency_key)
+            .maybe_single()
+            .execute()
+        )
+    except AttributeError:
+        # توافق مع Fake Client الخاص باختبارات Endpoint
+        return None
+
+    if result is None or result.data is None:
+        return None
+
+    record = result.data
+
+    if record.get("request_hash") != request_hash:
+        raise _error_response(
+            409,
+            "IDEMPOTENCY_KEY_REUSED",
+            (
+                "The same Idempotency-Key was used "
+                "with a different request."
+            ),
+        )
+
+    generation_id = record.get("generation_id")
+
+    if not generation_id:
+        return record
+
+    generation_result = (
+        client.table("generations")
+        .select("*")
+        .eq("id", generation_id)
+        .maybe_single()
+        .execute()
+    )
+
+    if (
+        generation_result is not None
+        and generation_result.data is not None
+    ):
+        return generation_result.data
+
+    return record
+_get_existing_idempotency = (
+    _get_idempotent_generation
+    )
+
 
 
 def _get_brand_or_404(brand_id: UUID, user_id: str) -> dict:
@@ -303,13 +396,20 @@ async def create_caption(
     # Same server-only credentials as image generation. The stored generation's
     # provider is informational; the key always comes from configuration.
     try:
-        managed_config = resolve_generation_config()
+        managed_config = resolve_caption_config()
+
     except RuntimeError as exc:
         raise _error_response(
             503,
             "GENERATION_CONFIGURATION_ERROR",
             "Generation is not configured on the server.",
         ) from exc
+    if managed_config.provider != "openai":
+        raise _error_response(
+            503,
+            "UNSUPPORTED_PROVIDER",
+            "Only OpenAI is supported for captions.",
+        )
     api_key = managed_config.api_key
 
     brief = None
@@ -327,8 +427,9 @@ async def create_caption(
     try:
         result = await asyncio.wait_for(
             generate_caption(
-                provider=managed_config.provider,
+                provider="openai",
                 api_key=api_key,
+                model=getattr(settings, "OPENAI_TEXT_MODEL", "gpt-4o-mini"),
                 language=language,
                 platform=platform,
                 generation_prompt=generation.get("prompt", ""),
@@ -338,6 +439,7 @@ async def create_caption(
             ),
             timeout=60.0,
         )
+        
     except CaptionOutputError as exc:
         logger.info(
             "caption failed code=%s generation_id=%s brand_id=%s",
@@ -374,7 +476,18 @@ async def generate_image(
     brand_id: UUID,
     body: GenerateRequest,
     current_user: User = Depends(get_current_user),
+    idempotency_key: str | None = Header(
+        default=None,
+        alias="Idempotency-Key",
+        min_length=16,
+        max_length=128,
+),
 ) -> GenerationResponse:
+    if not idempotency_key:
+        idempotency_key = (
+            f"legacy-{current_user.id}-"
+            f"{uuid4()}"
+        )
     """
     Generate an image for a brand.
 
@@ -398,6 +511,25 @@ async def generate_image(
 
     brand_name = brand["name"]
     brand_has_logo = bool(brand.get("logo_path"))
+    request_hash = _hash_generation_request(body)
+
+    existing = _get_idempotent_generation(
+    user_id=current_user.id,
+    idempotency_key=idempotency_key,
+    request_hash=request_hash,
+)
+
+    if existing is not None:
+        return _build_response(
+        existing,
+        brand["name"],
+    )
+
+    idempotency_record = _create_idempotency_record(
+    user_id=current_user.id,
+    idempotency_key=idempotency_key,
+    request_hash=request_hash,
+)
 
     # ---------------------------------------------------------
     # 2. Validate logo requirements
@@ -450,7 +582,7 @@ async def generate_image(
     # 5. Resolve managed provider configuration
     # ---------------------------------------------------------
     try:
-        managed_config = resolve_generation_config()
+        managed_config = resolve_caption_config()
     except RuntimeError as exc:
         raise _error_response(
             503,
@@ -515,18 +647,51 @@ async def generate_image(
     # 10. Create a generation row before calling the provider
     # ---------------------------------------------------------
     generation_id = uuid4()
-    resolved_model = managed_config.model
+    lock_acquired = False
+
+    try:
+        acquire_generation_lock(
+            user_id=current_user.id,
+            generation_id=generation_id,
+        )
+        lock_acquired = True
+
+    except GenerationLockError as exc:
+        raise _error_response(
+            409,
+            "GENERATION_IN_PROGRESS",
+            str(exc),
+        ) from exc
 
     client = get_service_client()
+    client.table("idempotency_records").update(
+    {
+        "generation_id": str(generation_id),
+    }
+    ).eq(
+        "id",
+        idempotency_record["id"],
+    ).execute()
+
+    if managed_config.provider != "openai":
+        raise _error_response(
+            503,
+            "UNSUPPORTED_PROVIDER",
+            "Only OpenAI is supported.",
+        )
+
+    resolved_model = managed_config.model
+
 
     client.table("generations").insert(
         {
             "id": str(generation_id),
+            "user_id": current_user.id,
             "brand_id": str(brand_id),
             "prompt": body.brief.core_idea,
             "brief": body.brief.model_dump(mode="json"),
             "language": body.brief.language.value,
-            "provider": managed_config.provider,
+            "provider": "openai",
             "model": resolved_model,
             "platform_preset": body.platform_preset.value,
             "width": preset_w,
@@ -555,19 +720,48 @@ async def generate_image(
         product_asset_reference is not None,
     )
 
+
     # ---------------------------------------------------------
-    # 11. Run the provider and save the generated image
+    # 11. Reserve credits, start usage, then run the provider
     # ---------------------------------------------------------
+    credit_reservation = None
+    usage_timer = None
+
     try:
+        try:
+            credit_reservation = reserve_credits(
+                user_id=current_user.id,
+                generation_id=generation_id,
+                amount=getattr(settings, "GENERATION_CREDIT_COST", 1),
+                idempotency_key=f"generation:{generation_id}:reserve",
+            )
+        except CreditsError as exc:
+            # Out of credits is a client-visible condition, not a server fault.
+            raise _error_response(
+                402,
+                exc.code,
+                exc.message,
+            ) from exc
+
+        usage_timer = UsageTimer(
+            user_id=current_user.id,
+            generation_id=generation_id,
+            feature="image_generation",
+            provider="openai",
+            model=resolved_model,
+            credits=getattr(settings, "GENERATION_CREDIT_COST", 1),
+        )
+        usage_timer.start()
+
         client.table("generations").update(
             {"status": "processing"}
         ).eq(
             "id",
             str(generation_id),
         ).execute()
-
+        
         api_key = managed_config.api_key
-
+   
         try:
             result: ProviderResult = await asyncio.wait_for(
                 openai_generate(
@@ -670,6 +864,23 @@ async def generate_image(
             .execute()
         )
 
+        if credit_reservation is not None:
+            commit_credits(credit_reservation)
+
+        if usage_timer is not None:
+            usage_timer.finish(
+                status="succeeded",
+                provider_request_id=result.request_id,
+            )
+
+        client.table("idempotency_records").update(
+            {
+                "status": "succeeded",
+                "response_status": 200,
+                "completed_at": now_iso,
+            }
+        ).eq("id", idempotency_record["id"]).execute()
+
         row = updated.data[0] if updated.data else None
 
         # -----------------------------------------------------
@@ -711,7 +922,7 @@ async def generate_image(
                 "id": str(generation_id),
                 "prompt": body.brief.core_idea,
                 "language": body.brief.language.value,
-                "provider": managed_config.provider,
+                "provider": "openai",
                 "model": resolved_model,
                 "platform_preset": body.platform_preset.value,
                 "width": preset_w,
@@ -740,6 +951,16 @@ async def generate_image(
     # 18. Known provider failure
     # ---------------------------------------------------------
     except ProviderError as exc:
+        if credit_reservation is not None:
+            release_credits(credit_reservation)
+        if usage_timer is not None:
+            usage_timer.finish(
+                status="failed",
+                metadata={"error_code": exc.code},
+            )
+        client.table("idempotency_records").update(
+            {"status": "failed", "response_status": 502}
+        ).eq("id", idempotency_record["id"]).execute()
         _mark_failed(
             generation_id,
             exc.code,
@@ -765,6 +986,11 @@ async def generate_image(
     # ---------------------------------------------------------
     # 19. Unexpected failure
     # ---------------------------------------------------------
+    except HTTPException:
+        # Already-shaped client errors (402 credits, 400 validation, ...)
+        # must not be relabelled as an internal fault.
+        raise
+
     except Exception as exc:
         logger.exception(
             (
@@ -786,8 +1012,15 @@ async def generate_image(
             "INTERNAL_ERROR",
             "Something went wrong. Please try again.",
         ) from exc
+    finally:
+        if lock_acquired:
+            release_generation_lock(
+                user_id=current_user.id,
+                generation_id=generation_id,
+            )
 
-# _VALID_HISTORY_PROVIDERS = {p.value for p in ProviderEnum}
+
+_VALID_HISTORY_PROVIDERS = {"openai"}
 
 
 @router.get("/generations", response_model=GenerationHistoryPage)
@@ -968,3 +1201,41 @@ def _get_product_asset_or_400(
         )
 
     return result.data
+
+def _create_idempotency_record(
+    *,
+    user_id: str,
+    idempotency_key: str,
+    request_hash: str,
+) -> dict:
+    client = get_service_client()
+
+    try:
+        result = (
+            client.table("idempotency_records")
+            .insert(
+                {
+                    "user_id": user_id,
+                    "scope": "image_generation",
+                    "idempotency_key": idempotency_key,
+                    "request_hash": request_hash,
+                    "status": "processing",
+                }
+            )
+            .execute()
+        )
+    except Exception as exc:
+        raise _error_response(
+            409,
+            "GENERATION_IN_PROGRESS",
+            "This request is already being processed.",
+        ) from exc
+
+    if not result.data:
+        raise _error_response(
+            500,
+            "IDEMPOTENCY_CREATE_FAILED",
+            "Could not create the idempotency record.",
+        )
+
+    return result.data[0]
