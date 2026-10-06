@@ -6,7 +6,6 @@ from uuid import UUID, uuid4
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from PIL import Image
 from postgrest.exceptions import APIError
-from pydantic import BaseModel
 
 from app.config import settings
 from app.core.auth import User, get_current_user
@@ -21,6 +20,7 @@ from app.models.brand import (
     UpdateBrandRequest,
 )
 from app.models.generation import PreviewBriefRequest
+from app.services.quota import QuotaError, create_brand_if_allowed
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +30,9 @@ router = APIRouter(prefix="/brands", tags=["brands"])
 def _error_response(status_code: int, code: str, message: str) -> HTTPException:
     return HTTPException(
         status_code=status_code,
-        detail={"error": {"code": code, "message": message, "request_id": str(uuid4())}},
+        detail={
+            "error": {"code": code, "message": message, "request_id": str(uuid4())}
+        },
     )
 
 
@@ -99,7 +101,9 @@ def _platform_preview_note(platform_preset: str) -> str:
         "youtube_thumbnail": "High-contrast thumbnail art designed to spark curiosity instantly.",
         "youtube_banner": "Wide-format visual identity for a trusted channel presence.",
     }
-    return labels.get(platform_preset, "Creative direction tuned for the selected platform format.")
+    return labels.get(
+        platform_preset, "Creative direction tuned for the selected platform format."
+    )
 
 
 @router.post("/{brand_id}/preview-brief")
@@ -150,21 +154,12 @@ async def preview_brand_brief(
 async def create_brand(
     body: CreateBrandRequest, current_user: User = Depends(get_current_user)
 ):
-    client = get_service_client()
     name = body.name.strip()
     try:
-        result = (
-            client.table("brands")
-            .insert({"owner_user_id": current_user.id, "name": name})
-            .execute()
-        )
-    except APIError as e:
-        if "uq_brands_owner_name_ci" in str(e) or "duplicate key" in str(e):
-            raise _error_response(
-                409, "DUPLICATE_BRAND_NAME", "A brand with this name already exists"
-            ) from e
-        raise
-    row = result.data[0]
+        row = create_brand_if_allowed(user_id=current_user.id, name=name)
+    except QuotaError as exc:
+        status_code = 403 if exc.code == "BRAND_LIMIT_REACHED" else 409
+        raise _error_response(status_code, exc.code, exc.message) from exc
     kit_status = _get_kit_status(row["id"])
     return _brand_response(row, kit_status)
 
@@ -267,7 +262,9 @@ async def delete_brand(
         try:
             client.storage.from_(settings.STORAGE_BUCKET).remove([gen["image_path"]])
         except Exception as e:
-            logger.warning(f"Failed to delete generation image {gen['image_path']}: {e}")
+            logger.warning(
+                f"Failed to delete generation image {gen['image_path']}: {e}"
+            )
 
     # Step 2: Delete brand logo from storage
     if brand.get("logo_path"):
@@ -310,10 +307,16 @@ async def upload_logo(
         img.thumbnail((512, 512))
     except Exception as e:
         logger.warning(f"Image processing failed: {e}")
-        raise _error_response(400, "VALIDATION_ERROR", "Invalid or corrupted image file") from e
+        raise _error_response(
+            400, "VALIDATION_ERROR", "Invalid or corrupted image file"
+        ) from e
 
     # Validate actual image format (don't trust client content_type)
-    allowed_formats = {"PNG": ("png", "image/png"), "JPEG": ("jpg", "image/jpeg"), "WEBP": ("webp", "image/webp")}
+    allowed_formats = {
+        "PNG": ("png", "image/png"),
+        "JPEG": ("jpg", "image/jpeg"),
+        "WEBP": ("webp", "image/webp"),
+    }
     if img.format not in allowed_formats:
         raise _error_response(
             400, "INVALID_FILE_TYPE", "Only PNG, JPG, and WebP images are accepted"
@@ -334,15 +337,20 @@ async def upload_logo(
     )
 
     try:
-        update_result = client.table("brands").update({"logo_path": storage_path}).eq(
-            "id", str(brand_id)
-        ).execute()
+        update_result = (
+            client.table("brands")
+            .update({"logo_path": storage_path})
+            .eq("id", str(brand_id))
+            .execute()
+        )
     except Exception:
         if old_logo_path != storage_path:
             try:
                 client.storage.from_(settings.STORAGE_BUCKET).remove([storage_path])
             except Exception as cleanup_err:
-                logger.warning(f"Failed to clean up uploaded logo after DB error: {cleanup_err}")
+                logger.warning(
+                    f"Failed to clean up uploaded logo after DB error: {cleanup_err}"
+                )
         raise
 
     if old_logo_path and old_logo_path != storage_path:
@@ -377,6 +385,4 @@ async def delete_logo(brand_id: UUID, current_user: User = Depends(get_current_u
         client.storage.from_(settings.STORAGE_BUCKET).remove([brand["logo_path"]])
     except Exception as e:
         logger.warning(f"Failed to delete logo from storage: {e}")
-    client.table("brands").update({"logo_path": None}).eq(
-        "id", str(brand_id)
-    ).execute()
+    client.table("brands").update({"logo_path": None}).eq("id", str(brand_id)).execute()

@@ -68,7 +68,7 @@ def test_section_ordering_full():
     )
     brand_idx = result.index("=== BRAND IDENTITY ===")
     composition_idx = result.index("=== COMPOSITION ===")
-    logo_idx = result.index("=== LOGO ===")
+    logo_idx = result.index("=== LOGO PLACEMENT ===")
     request_idx = result.index("=== IMAGE REQUEST ===")
     assert brand_idx < composition_idx < logo_idx < request_idx
 
@@ -112,6 +112,8 @@ def test_full_brand_context_includes_all_fields():
     assert "Visual style:" in result
     assert "Target audience: startup founders aged 25-40" in result
     assert "Brand colors: #1E3A8A, #3B82F6" in result
+    assert "exact user-provided colors" in result
+    assert "strong contrast" in result
     assert "AVOID" in result
     assert "cheap, discount, budget" in result
 
@@ -208,8 +210,10 @@ def test_logo_prompt_mode_with_logo():
         logo_mode="prompt",
         brand_has_logo=True,
     )
-    assert "=== LOGO ===" in result
-    assert "corner" in result
+    assert "=== LOGO PLACEMENT ===" in result
+    assert "safest visually balanced area" in result
+    assert "Do not generate" in result
+    assert "invent" in result
 
 
 def test_logo_prompt_mode_without_logo():
@@ -242,7 +246,7 @@ def test_logo_both_mode_with_logo():
         logo_mode="both",
         brand_has_logo=True,
     )
-    assert "=== LOGO ===" in result
+    assert "=== LOGO PLACEMENT ===" in result
 
 
 def test_logo_both_mode_without_logo():
@@ -298,7 +302,7 @@ def test_build_generation_prompt_section_ordering_full():
     brief_idx = result.index("=== CAMPAIGN BRIEF ===")
     brand_idx = result.index("=== BRAND IDENTITY ===")
     composition_idx = result.index("=== COMPOSITION ===")
-    logo_idx = result.index("=== LOGO ===")
+    logo_idx = result.index("=== LOGO PLACEMENT ===")
     output_idx = result.index("=== OUTPUT RULES ===")
 
     assert system_idx < brief_idx < brand_idx < composition_idx < logo_idx < output_idx
@@ -592,4 +596,3 @@ def test_prompt_preserves_core_idea_exactly():
     )
 
     assert idea in prompt
-

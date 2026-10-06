@@ -20,6 +20,7 @@ export interface WizardGenerateRequest {
   brief: GenerationBrief & { language: TextLanguage }
   platform_preset: PlatformPreset
   logo_mode: LogoMode
+  logo_placement: LogoPlacement
   product_asset_id?: string | null
   product_edit_instruction?: string | null
 }
@@ -229,6 +230,7 @@ export function buildGenerateRequest({
     },
     platform_preset: platform.preset || 'instagram_post',
     logo_mode: logoMode(style.logoPlacement, brandHasLogo),
+    logo_placement: brandHasLogo ? style.logoPlacement || 'none' : 'none',
     product_asset_id: productAssetId,
     product_edit_instruction: productEditInstruction,
   }
