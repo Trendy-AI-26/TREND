@@ -19,9 +19,9 @@ def use_server_config(monkeypatch):
     """Caption generation reads credentials from server config, not the vault."""
     monkeypatch.setattr(
         generations,
-        "resolve_generation_config",
+        "resolve_caption_config",
         lambda: ManagedGenerationConfig(
-            provider="openai", model="gpt-image-2", api_key=SERVER_KEY
+            provider="openai", model="gpt-4o-mini", api_key=SERVER_KEY
         ),
     )
 

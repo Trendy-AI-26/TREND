@@ -93,9 +93,9 @@ def test_legitimate_client_choices_still_accepted():
 
 def test_resolver_is_the_only_credential_source(monkeypatch):
     """Even with injected-looking input, the resolver returns env values."""
-    monkeypatch.setattr(settings, "GENERATION_PROVIDER", "openai")
-    monkeypatch.setattr(settings, "GENERATION_MODEL", "gpt-image-2")
-    monkeypatch.setattr(settings, "GENERATION_API_KEY", "server-secret-key")
+    monkeypatch.setattr(settings, "MANAGED_PROVIDER", "openai")
+    monkeypatch.setattr(settings, "MANAGED_MODEL", "gpt-image-2")
+    monkeypatch.setattr(settings, "MANAGED_API_KEY", "server-secret-key")
 
     request = GenerateRequest.model_validate(_base_payload())
     resolved = resolve_generation_config()
