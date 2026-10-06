@@ -17,7 +17,9 @@ import { useBrand } from '@/hooks/use-brand'
 import { useGenerationHistory } from '@/hooks/use-generation-history'
 import { useKit } from '@/hooks/use-kit'
 import { useProfile } from '@/hooks/use-profile'
+
 import type { GenerationHistoryItem } from '@/types'
+import { useQuota } from '@/hooks/use-quota'
 
 interface BrandDashboardProps {
   brandId: string
@@ -25,7 +27,6 @@ interface BrandDashboardProps {
 
 const panelClass =
   'rounded-xl border border-brand-accent/15 bg-white shadow-[0_1px_8px_rgba(0,0,0,0.035)]'
-const FREE_GENERATION_LIMIT = 3
 
 export function BrandDashboard({ brandId }: BrandDashboardProps) {
   const t = useTranslations('app.(dashboard).[brandId].page')
@@ -35,11 +36,11 @@ export function BrandDashboard({ brandId }: BrandDashboardProps) {
   const { kit, loading: kitLoading, error: kitError } = useKit(brandId)
   const {
     items,
-    successfulCount,
     loading: historyLoading,
     error: historyError,
     hasNext,
   } = useGenerationHistory(brandId)
+  const { quota, loading: quotaLoading, error: quotaError } = useQuota()
 
   const answers = kit?.answers
   const completedSections = [
@@ -57,8 +58,12 @@ export function BrandDashboard({ brandId }: BrandDashboardProps) {
   const savedRecentCount = recentItems.filter(
     (item) => item.status === 'succeeded' && Boolean(item.image_url),
   ).length
-  const freeUsageCount = Math.min(successfulCount ?? 0, FREE_GENERATION_LIMIT)
-  const freeUsageRemaining = FREE_GENERATION_LIMIT - freeUsageCount
+  const generationLimit = quota?.generation_limit ?? 0
+  const generationConsumed = quota?.generation_consumed ?? 0
+  const generationRemaining = quota?.generation_remaining ?? 0
+  const usageProgress = generationLimit > 0
+    ? Math.min(100, Math.round((generationConsumed / generationLimit) * 100))
+    : 0
   const usageRingCircumference = 2 * Math.PI * 43
   const userName =
     profile?.full_name?.trim() || profile?.email.split('@')[0] || t('user_name_fallback')
@@ -106,12 +111,12 @@ export function BrandDashboard({ brandId }: BrandDashboardProps) {
         </Link>
       </section>
 
-      {(brandError || kitError || historyError) && (
+      {(brandError || kitError || historyError || quotaError) && (
         <div
           role="alert"
           className="rounded-xl border border-destructive/20 bg-destructive/5 px-4 py-3 text-[13px] text-destructive"
         >
-          {[brandError, kitError, historyError].filter(Boolean).join(' · ')}
+          {[brandError, kitError, historyError, quotaError].filter(Boolean).join(' · ')}
         </div>
       )}
 
@@ -123,8 +128,8 @@ export function BrandDashboard({ brandId }: BrandDashboardProps) {
         <MetricCard
           icon={<Sun className="h-5 w-5" />}
           label={t('remaining_generations')}
-          value={t('metric_unavailable_value')}
-          note={t('generation_quota_unavailable')}
+          value={quotaLoading ? '—' : String(generationRemaining)}
+          note={quotaLoading ? t('loading') : t('free_usage_total', { total: generationLimit })}
           accent="text-amber-500 bg-amber-50"
           noteAccent="text-amber-600"
         />
@@ -162,11 +167,10 @@ export function BrandDashboard({ brandId }: BrandDashboardProps) {
               <p className="mt-1 text-[12px] text-brand-headline/50">{t('brand_identity_note')}</p>
             </div>
             <span
-              className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-bold ${
-                kit?.status === 'complete'
-                  ? 'bg-emerald-50 text-emerald-700'
-                  : 'bg-amber-50 text-amber-700'
-              }`}
+              className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-bold ${kit?.status === 'complete'
+                ? 'bg-emerald-50 text-emerald-700'
+                : 'bg-amber-50 text-amber-700'
+                }`}
             >
               {kitLoading ? t('loading') : t(`kit_status.${kit?.status ?? 'not_started'}`)}
             </span>
@@ -225,12 +229,12 @@ export function BrandDashboard({ brandId }: BrandDashboardProps) {
           <div className="flex items-center justify-between gap-3">
             <h2 className="text-[16px] font-bold text-brand-headline">{t('free_usage_title')}</h2>
             <span className="shrink-0 rounded-full border border-[#f4dadd] bg-[#fff5f6] px-3 py-1.5 text-[12px] font-semibold text-[#8b1726]">
-              {historyLoading || successfulCount === null
+              {quotaLoading || !quota
                 ? '—'
                 : t('free_usage_counter', {
-                    used: freeUsageCount,
-                    total: FREE_GENERATION_LIMIT,
-                  })}
+                  used: generationConsumed,
+                  total: generationLimit,
+                })}
             </span>
           </div>
 
@@ -239,12 +243,12 @@ export function BrandDashboard({ brandId }: BrandDashboardProps) {
               className="relative h-[88px] w-[88px] shrink-0"
               role="img"
               aria-label={
-                successfulCount === null
+                quotaLoading || !quota
                   ? t('loading')
                   : t('free_usage_counter', {
-                      used: freeUsageCount,
-                      total: FREE_GENERATION_LIMIT,
-                    })
+                    used: generationConsumed,
+                    total: generationLimit,
+                  })
               }
             >
               <svg viewBox="0 0 100 100" className="h-full w-full -rotate-90">
@@ -259,29 +263,30 @@ export function BrandDashboard({ brandId }: BrandDashboardProps) {
                   strokeLinecap="round"
                   strokeDasharray={usageRingCircumference}
                   strokeDashoffset={
-                    usageRingCircumference * (1 - freeUsageCount / FREE_GENERATION_LIMIT)
+                    usageRingCircumference * (1 - usageProgress / 100)
                   }
                 />
               </svg>
               <span className="absolute inset-0 flex flex-col items-center justify-center text-brand-headline">
                 <span className="text-[22px] font-bold leading-none">
-                  {successfulCount === null
+                  {quotaLoading || !quota
                     ? '—'
-                    : freeUsageCount}
+                    : generationConsumed}
                 </span>
                 <span className="mt-1 text-[10px] text-brand-headline/45">
-                  {t('free_usage_total', { total: FREE_GENERATION_LIMIT })}
+                  {t('free_usage_total', { total: generationLimit })}
                 </span>
               </span>
             </div>
             <p className="min-w-0 flex-1 text-[13px] leading-6 text-brand-headline/65">
-              {historyLoading || successfulCount === null
+              {quotaLoading || !quota
                 ? t('loading')
-                : freeUsageRemaining === 0
-                  ? t('free_usage_exhausted')
+                : generationRemaining === 0
+                  ? t('free_usage_exhausted', { total: generationLimit })
                   : t('free_usage_remaining', {
-                      remaining: freeUsageRemaining,
-                    })}
+                    remaining: generationRemaining,
+                    total: generationLimit,
+                  })}
             </p>
           </div>
 
@@ -413,9 +418,8 @@ function ActivityRow({
       className="flex items-center gap-3 py-3 text-brand-headline no-underline hover:bg-brand-cream/50"
     >
       <span
-        className={`inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${
-          succeeded ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-600'
-        }`}
+        className={`inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${succeeded ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-600'
+          }`}
       >
         {succeeded ? <CheckCircle2 className="h-4 w-4" /> : <Clock3 className="h-4 w-4" />}
       </span>
@@ -459,11 +463,10 @@ function DesignCard({
           </div>
         )}
         <span
-          className={`absolute start-3 top-3 rounded-full px-2 py-1 text-[10px] font-bold ${
-            item.status === 'succeeded'
-              ? 'bg-white/90 text-emerald-700'
-              : 'bg-white/90 text-amber-700'
-          }`}
+          className={`absolute start-3 top-3 rounded-full px-2 py-1 text-[10px] font-bold ${item.status === 'succeeded'
+            ? 'bg-white/90 text-emerald-700'
+            : 'bg-white/90 text-amber-700'
+            }`}
         >
           {item.status === 'succeeded' ? t('status.succeeded') : t('status.failed')}
         </span>

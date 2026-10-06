@@ -24,6 +24,16 @@ export interface ErrorResponse {
   }
 }
 
+export interface QuotaSummary {
+  plan: string
+  max_active_brands: number
+  active_brands: number
+  generation_limit: number
+  generation_reserved: number
+  generation_consumed: number
+  generation_remaining: number
+}
+
 export interface Brand {
   id: string
   name: string
