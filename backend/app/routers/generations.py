@@ -60,6 +60,12 @@ from app.services.prompt_composer import (
 )
 from app.services.providers.base import ProviderError, ProviderResult
 from app.services.providers.openai_image import openai_generate
+from app.services.quota import (
+    QuotaError,
+    commit_generation_slot,
+    release_generation_slot,
+    reserve_generation_slot,
+)
 from app.services.rate_limit import (
     RateLimitExceeded,
 )
@@ -658,6 +664,7 @@ async def generate_image(
     # ---------------------------------------------------------
     generation_id = uuid4()
     lock_acquired = False
+    quota_reserved = False
 
     try:
         acquire_generation_lock(
@@ -737,6 +744,16 @@ async def generate_image(
     usage_timer = None
 
     try:
+        try:
+            reserve_generation_slot(
+                user_id=current_user.id,
+                generation_id=generation_id,
+            )
+            quota_reserved = True
+        except QuotaError as exc:
+            status_code = 402 if exc.code == "GENERATION_LIMIT_REACHED" else 503
+            raise _error_response(status_code, exc.code, exc.message) from exc
+
         try:
             credit_reservation = reserve_credits(
                 user_id=current_user.id,
@@ -861,6 +878,12 @@ async def generate_image(
         if credit_reservation is not None:
             commit_credits(credit_reservation)
 
+        if quota_reserved:
+            commit_generation_slot(
+                user_id=current_user.id,
+                generation_id=generation_id,
+            )
+
         if usage_timer is not None:
             usage_timer.finish(
                 status="succeeded",
@@ -942,6 +965,11 @@ async def generate_image(
     # 18. Known provider failure
     # ---------------------------------------------------------
     except ProviderError as exc:
+        if quota_reserved:
+            release_generation_slot(
+                user_id=current_user.id,
+                generation_id=generation_id,
+            )
         if credit_reservation is not None:
             release_credits(credit_reservation)
         if usage_timer is not None:
@@ -978,6 +1006,14 @@ async def generate_image(
         # Already-shaped client errors (402 credits, 400 validation, ...)
         # must not be relabelled as an internal fault, but resources created
         # before the error still need to be finalized.
+        if quota_reserved:
+            try:
+                release_generation_slot(
+                    user_id=current_user.id,
+                    generation_id=generation_id,
+                )
+            except Exception:
+                logger.exception("Failed to release image quota after HTTP failure")
         if credit_reservation is not None:
             try:
                 release_credits(credit_reservation)
@@ -1006,6 +1042,16 @@ async def generate_image(
             brand_id,
         )
 
+        if quota_reserved:
+            try:
+                release_generation_slot(
+                    user_id=current_user.id,
+                    generation_id=generation_id,
+                )
+            except Exception:
+                logger.exception(
+                    "Failed to release image quota after unexpected failure"
+                )
         if credit_reservation is not None:
             try:
                 release_credits(credit_reservation)

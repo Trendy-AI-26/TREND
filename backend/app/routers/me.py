@@ -13,6 +13,8 @@ from app.models.profile import (
     ProfileResponse,
     UpdateProfileRequest,
 )
+from app.models.quota import QuotaSummaryResponse
+from app.services.quota import QuotaError, get_quota_summary
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -28,15 +30,24 @@ AVATAR_SIGNED_URL_TTL = 3600
 def _error_response(status_code: int, code: str, message: str) -> HTTPException:
     return HTTPException(
         status_code=status_code,
-        detail={"error": {"code": code, "message": message, "request_id": str(uuid4())}},
+        detail={
+            "error": {"code": code, "message": message, "request_id": str(uuid4())}
+        },
     )
 
 
+@router.get("/me/quota", response_model=QuotaSummaryResponse)
+async def get_my_quota(current_user: User = Depends(get_current_user)):
+    try:
+        summary = get_quota_summary(user_id=current_user.id)
+    except QuotaError as exc:
+        raise _error_response(503, exc.code, exc.message) from exc
+    return QuotaSummaryResponse(**summary.__dict__)
+
+
 def _create_avatar_signed_url(client, storage_path: str) -> str:
-    result = (
-        client.storage
-        .from_(settings.AVATARS_BUCKET)
-        .create_signed_url(storage_path, AVATAR_SIGNED_URL_TTL)
+    result = client.storage.from_(settings.AVATARS_BUCKET).create_signed_url(
+        storage_path, AVATAR_SIGNED_URL_TTL
     )
 
     if isinstance(result, dict):
@@ -116,7 +127,11 @@ async def update_profile(
 
     row = result.data[0]
     avatar_path = row.get("avatar_path")
-    avatar_url = _create_avatar_signed_url(client, avatar_path) if avatar_path else row.get("avatar_url")
+    avatar_url = (
+        _create_avatar_signed_url(client, avatar_path)
+        if avatar_path
+        else row.get("avatar_url")
+    )
 
     return ProfileResponse(
         user_id=row["user_id"],
@@ -228,7 +243,11 @@ async def upload_avatar(
             try:
                 client.storage.from_(settings.AVATARS_BUCKET).remove([old_avatar_path])
             except Exception:
-                logger.warning("Failed to remove old avatar path=%s", old_avatar_path, exc_info=True)
+                logger.warning(
+                    "Failed to remove old avatar path=%s",
+                    old_avatar_path,
+                    exc_info=True,
+                )
 
         return AvatarUploadResponse(avatar_url=signed_url)
 
@@ -237,14 +256,18 @@ async def upload_avatar(
             try:
                 client.storage.from_(settings.AVATARS_BUCKET).remove([storage_path])
             except Exception:
-                logger.warning("Failed to clean up avatar path=%s", storage_path, exc_info=True)
+                logger.warning(
+                    "Failed to clean up avatar path=%s", storage_path, exc_info=True
+                )
         raise
     except Exception as exc:
         if uploaded:
             try:
                 client.storage.from_(settings.AVATARS_BUCKET).remove([storage_path])
             except Exception:
-                logger.warning("Failed to clean up avatar path=%s", storage_path, exc_info=True)
+                logger.warning(
+                    "Failed to clean up avatar path=%s", storage_path, exc_info=True
+                )
         logger.exception("Avatar upload failed user_id=%s", current_user.id)
         raise _error_response(
             status.HTTP_502_BAD_GATEWAY,

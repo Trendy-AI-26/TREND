@@ -10,7 +10,12 @@ from fastapi.testclient import TestClient
 from app.main import app
 from app.core.auth import User, get_current_user
 from app.routers import generations
-from app.models.generation import GenerateRequest, ProviderEnum, PlatformPresetEnum, LogoModeEnum
+from app.models.generation import (
+    GenerateRequest,
+    ProviderEnum,
+    PlatformPresetEnum,
+    LogoModeEnum,
+)
 
 from pydantic import ValidationError
 
@@ -31,6 +36,7 @@ VALID_BRIEF = {
     "text_to_include": "خصم 20%",
 }
 
+
 # Fake objects for Supabase mocking
 class FakeStorageBucket:
     def __init__(self):
@@ -43,12 +49,14 @@ class FakeStorageBucket:
     def download(self, path):
         return b"fake-logo-bytes"
 
+
 class FakeStorage:
     def __init__(self):
         self.bucket = FakeStorageBucket()
 
     def from_(self, bucket_name):
         return self.bucket
+
 
 class FakeQuery:
     def __init__(self, table_name, client):
@@ -60,6 +68,7 @@ class FakeQuery:
         data = data.copy()
         if "created_at" not in data:
             from datetime import datetime, timezone
+
             data["created_at"] = datetime.now(timezone.utc).isoformat()
         self.client.inserted_rows[self.table_name].append(data)
         self.client.last_row = data
@@ -83,6 +92,7 @@ class FakeQuery:
             row = {**row, "id": f"row-{self.table_name}"}
         return MagicMock(data=[row])
 
+
 class FakeSupabaseClient:
     def __init__(self):
         # Any table the router touches must be writable: idempotency_records,
@@ -96,6 +106,7 @@ class FakeSupabaseClient:
     def table(self, table_name):
         return FakeQuery(table_name, self)
 
+
 @pytest.fixture
 def mock_supabase(monkeypatch):
     fake_client = FakeSupabaseClient()
@@ -105,7 +116,23 @@ def mock_supabase(monkeypatch):
         "enforce_generation_rate_limit",
         lambda **_: None,
     )
+    monkeypatch.setattr(
+        generations,
+        "reserve_generation_slot",
+        lambda **_: None,
+    )
+    monkeypatch.setattr(
+        generations,
+        "commit_generation_slot",
+        lambda **_: None,
+    )
+    monkeypatch.setattr(
+        generations,
+        "release_generation_slot",
+        lambda **_: None,
+    )
     return fake_client
+
 
 @pytest.fixture
 def no_generation_guards(monkeypatch):
@@ -119,12 +146,8 @@ def no_generation_guards(monkeypatch):
     # so patching the service module attribute is what actually takes effect.
     from app.services import generation_lock
 
-    monkeypatch.setattr(
-        generation_lock, "acquire_generation_lock", lambda **_: None
-    )
-    monkeypatch.setattr(
-        generation_lock, "release_generation_lock", lambda **_: None
-    )
+    monkeypatch.setattr(generation_lock, "acquire_generation_lock", lambda **_: None)
+    monkeypatch.setattr(generation_lock, "release_generation_lock", lambda **_: None)
     monkeypatch.setattr(
         generations, "acquire_generation_lock", lambda **_: None, raising=False
     )
@@ -178,17 +201,25 @@ def override_auth():
     yield
     app.dependency_overrides.pop(get_current_user, None)
 
+
 @pytest.fixture
 def mock_helpers(monkeypatch):
     # Mock database helper calls
-    monkeypatch.setattr(generations, "_get_brand_or_404", lambda brand_id, user_id: {
-        "id": str(brand_id),
-        "name": "Acme Brand",
-        "logo_path": "brands/logo.png"
-    })
-    monkeypatch.setattr(generations, "_get_brand_kit_context", lambda brand_id, brand_name: None)
+    monkeypatch.setattr(
+        generations,
+        "_get_brand_or_404",
+        lambda brand_id, user_id: {
+            "id": str(brand_id),
+            "name": "Acme Brand",
+            "logo_path": "brands/logo.png",
+        },
+    )
+    monkeypatch.setattr(
+        generations, "_get_brand_kit_context", lambda brand_id, brand_name: None
+    )
     # Credentials come from server config, never from the request body.
     from app.services.generation_resolver import ManagedGenerationConfig
+
     monkeypatch.setattr(
         generations,
         "resolve_generation_config",
@@ -196,6 +227,7 @@ def mock_helpers(monkeypatch):
             provider="openai", model="gpt-image-2", api_key="fake-server-key"
         ),
     )
+
 
 @pytest.mark.asyncio
 async def test_generate_endpoint_success_openai(
@@ -213,9 +245,7 @@ async def test_generate_endpoint_success_openai(
         request_id="req-123",
     )
 
-    provider_mock = AsyncMock(
-        return_value=mock_result
-    )
+    provider_mock = AsyncMock(return_value=mock_result)
 
     monkeypatch.setattr(
         generations,
@@ -252,45 +282,61 @@ async def test_generate_endpoint_success_openai(
 async def test_generate_endpoint_validation_error(override_auth, mock_helpers):
     client = TestClient(app)
     brand_id = uuid4()
-    
+
     # Payload is missing required field 'brief'
     payload = {
         "platform_preset": "instagram_post",
     }
-    
+
     response = client.post(f"/brands/{brand_id}/generate", json=payload)
     assert response.status_code == 400
     res_data = response.json()
     assert res_data["error"]["code"] == "VALIDATION_ERROR"
 
+
 @pytest.mark.asyncio
-async def test_generate_endpoint_logo_required_check(no_generation_guards, override_auth, mock_supabase, monkeypatch):
+async def test_generate_endpoint_logo_required_check(
+    no_generation_guards, override_auth, mock_supabase, monkeypatch
+):
     # Mock brand has no logo
-    monkeypatch.setattr(generations, "_get_brand_or_404", lambda brand_id, user_id: {
-        "id": str(brand_id),
-        "name": "No Logo Brand",
-        "logo_path": None
-    })
-    
+    monkeypatch.setattr(
+        generations,
+        "_get_brand_or_404",
+        lambda brand_id, user_id: {
+            "id": str(brand_id),
+            "name": "No Logo Brand",
+            "logo_path": None,
+        },
+    )
+
     client = TestClient(app)
     brand_id = uuid4()
-    
+
     # Requesting a watermark logo mode when brand has no logo
     payload = {
         "brief": VALID_BRIEF,
         "platform_preset": "instagram_post",
-        "logo_mode": "watermark"
+        "logo_mode": "watermark",
     }
-    
+
     response = client.post(f"/brands/{brand_id}/generate", json=payload)
     assert response.status_code == 400
     res_data = response.json()
     assert res_data["error"]["code"] == "LOGO_REQUIRED"
 
+
 @pytest.mark.asyncio
-async def test_generate_endpoint_accepts_language_param(no_generation_guards, mock_credits_and_usage, override_auth, mock_supabase, mock_helpers, monkeypatch):
+async def test_generate_endpoint_accepts_language_param(
+    no_generation_guards,
+    mock_credits_and_usage,
+    override_auth,
+    mock_supabase,
+    mock_helpers,
+    monkeypatch,
+):
     """Test that the endpoint accepts the language parameter and sends a 200 response on success."""
     from app.services.providers.base import ProviderResult
+
     mock_result = ProviderResult(image_bytes=b"fake-image-bytes", request_id="req-123")
     provider_mock = AsyncMock(return_value=mock_result)
     monkeypatch.setattr(generations, "openai_generate", provider_mock)
@@ -298,14 +344,14 @@ async def test_generate_endpoint_accepts_language_param(no_generation_guards, mo
 
     client = TestClient(app)
     brand_id = uuid4()
-    
+
     # نمرر brief يحتوي على language="en"
     payload_with_lang = {
         "brief": {**VALID_BRIEF, "language": "en"},
         "platform_preset": "instagram_post",
-        "logo_mode": "none"
+        "logo_mode": "none",
     }
-    
+
     response = client.post(f"/brands/{brand_id}/generate", json=payload_with_lang)
     assert response.status_code == 200
     res_data = response.json()
@@ -316,24 +362,23 @@ async def test_generate_endpoint_accepts_language_param(no_generation_guards, mo
     assert "خصم 20%" in sent_prompt
 
 
-
-
 @pytest.mark.asyncio
 async def test_generate_endpoint_rejects_invalid_language(override_auth, mock_helpers):
     """When the brief contains an invalid language, the endpoint should return a 400 validation error."""
     client = TestClient(app)
     brand_id = uuid4()
-    
+
     payload_bad_lang = {
         "brief": {**VALID_BRIEF, "language": "invalid_lang"},
         "platform_preset": "instagram_post",
-        "logo_mode": "none"
+        "logo_mode": "none",
     }
-    
+
     response = client.post(f"/brands/{brand_id}/generate", json=payload_bad_lang)
     assert response.status_code == 400
     res_data = response.json()
-    assert res_data["error"]["code"] == "VALIDATION_ERROR"     
+    assert res_data["error"]["code"] == "VALIDATION_ERROR"
+
 
 @pytest.mark.asyncio
 async def test_generate_endpoint_persists_language(
@@ -446,8 +491,11 @@ def test_history_filter_constants_match_supported_enums():
         provider.value for provider in ProviderEnum
     }
 
+
 @pytest.mark.asyncio
-async def test_generate_passes_product_reference_to_provider(no_generation_guards, mock_credits_and_usage, 
+async def test_generate_passes_product_reference_to_provider(
+    no_generation_guards,
+    mock_credits_and_usage,
     override_auth,
     mock_supabase,
     mock_helpers,
@@ -495,9 +543,7 @@ async def test_generate_passes_product_reference_to_provider(no_generation_guard
         "platform_preset": "instagram_post",
         "logo_mode": "none",
         "product_asset_id": str(product_asset_id),
-        "product_edit_instruction": (
-            "Place the product on a white background."
-        ),
+        "product_edit_instruction": ("Place the product on a white background."),
     }
 
     client = TestClient(app)
@@ -515,10 +561,8 @@ async def test_generate_passes_product_reference_to_provider(no_generation_guard
     call_kwargs = provider_mock.call_args.kwargs
 
     assert call_kwargs["reference_image"] is fake_reference_image
-    assert (
-        "Place the product on a white background."
-        in call_kwargs["prompt"]
-    )
+    assert "Place the product on a white background." in call_kwargs["prompt"]
+
 
 @pytest.fixture
 def mock_credits_and_usage(monkeypatch):
@@ -567,6 +611,7 @@ def mock_credits_and_usage(monkeypatch):
     )
 
     return reservation
+
 
 def test_generation_returns_402_when_credits_are_missing(
     mock_credits_and_usage,
@@ -619,8 +664,10 @@ def test_generation_returns_402_when_credits_are_missing(
     # The app-level HTTPException handler flattens the envelope to "error".
     assert body["error"]["code"] == "INSUFFICIENT_CREDITS"
 
+
 @pytest.mark.asyncio
-async def test_provider_failure_releases_credits(no_generation_guards, 
+async def test_provider_failure_releases_credits(
+    no_generation_guards,
     override_auth,
     mock_supabase,
     mock_helpers,
@@ -630,6 +677,7 @@ async def test_provider_failure_releases_credits(no_generation_guards,
 
     reservation = object()
     release_calls = []
+    quota_release_calls = []
 
     monkeypatch.setattr(
         generations,
@@ -640,9 +688,12 @@ async def test_provider_failure_releases_credits(no_generation_guards,
     monkeypatch.setattr(
         generations,
         "release_credits",
-        lambda reservation: release_calls.append(
-            reservation
-        ),
+        lambda reservation: release_calls.append(reservation),
+    )
+    monkeypatch.setattr(
+        generations,
+        "release_generation_slot",
+        lambda **kwargs: quota_release_calls.append(kwargs),
     )
 
     class FakeUsageTimer:
@@ -687,6 +738,8 @@ async def test_provider_failure_releases_credits(no_generation_guards,
 
     assert response.status_code == 502
     assert release_calls == [reservation]
+    assert len(quota_release_calls) == 1
+
 
 def test_same_idempotency_key_is_not_processed_twice(
     monkeypatch,
@@ -712,6 +765,7 @@ def test_same_idempotency_key_is_not_processed_twice(
     )
 
     assert result["generation_id"] == "generation-1"
+
 
 def test_second_generation_is_rejected_when_lock_exists(
     mock_credits_and_usage,
