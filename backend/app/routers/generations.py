@@ -1091,7 +1091,7 @@ _VALID_HISTORY_PROVIDERS = {p.value for p in ProviderEnum}
 
 
 @router.get("/generations", response_model=GenerationHistoryPage)
-async def list_generation_history(
+def list_generation_history(
     brand_id: UUID,
     current_user: User = Depends(get_current_user),
     provider: str | None = Query(None),
@@ -1182,7 +1182,7 @@ async def list_generation_history(
 
 
 @router.get("/generations/{generation_id}", response_model=GenerationDetailResponse)
-async def get_generation_detail(
+def get_generation_detail(
     brand_id: UUID,
     generation_id: UUID,
     current_user: User = Depends(get_current_user),

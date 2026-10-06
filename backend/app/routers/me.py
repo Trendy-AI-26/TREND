@@ -37,7 +37,7 @@ def _error_response(status_code: int, code: str, message: str) -> HTTPException:
 
 
 @router.get("/me/quota", response_model=QuotaSummaryResponse)
-async def get_my_quota(current_user: User = Depends(get_current_user)):
+def get_my_quota(current_user: User = Depends(get_current_user)):
     try:
         summary = get_quota_summary(user_id=current_user.id)
     except QuotaError as exc:
@@ -64,7 +64,7 @@ def _create_avatar_signed_url(client, storage_path: str) -> str:
 
 
 @router.get("/me", response_model=ProfileResponse)
-async def get_profile(current_user: User = Depends(get_current_user)):
+def get_profile(current_user: User = Depends(get_current_user)):
     client = get_service_client()
     result = (
         client.table("profiles")

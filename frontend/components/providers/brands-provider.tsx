@@ -41,12 +41,6 @@ function toBrandListItem(brand: Brand | BrandListItem): BrandListItem {
   }
 }
 
-function colorFromKit(kit: BrandKit): string | null {
-  const raw = kit.answers.colors?.[0]
-  const hex = raw ? normalizeHex(raw) : null
-  return hex ? `#${hex}` : null
-}
-
 export function BrandsProvider({ children }: { children: React.ReactNode }) {
   const [brands, setBrands] = useState<BrandListItem[]>([])
   const [loading, setLoading] = useState(true)
@@ -60,14 +54,19 @@ export function BrandsProvider({ children }: { children: React.ReactNode }) {
     const entries = await Promise.all(
       items.map(async (brand) => {
         try {
-          const kit = await apiRequest<BrandKit>(`/brands/${brand.id}/kit`)
-          const color = colorFromKit(kit)
-          const industry = kit.answers.industry || null
-          const colors = (kit.answers.colors || [])
+          // Older deployments omit colors; keep a fallback during rolling deploys.
+          const answers = brand.colors !== undefined
+            ? brand
+            : (await apiRequest<BrandKit>(`/brands/${brand.id}/kit`)).answers
+          const firstColor = answers.colors?.[0]
+          const normalizedColor = firstColor ? normalizeHex(firstColor) : null
+          const color = normalizedColor ? `#${normalizedColor}` : null
+          const industry = answers.industry || null
+          const colors = (answers.colors || [])
             .map((c) => normalizeHex(c))
             .filter((h): h is string => Boolean(h))
             .map((h) => `#${h}`)
-          const tagline = kit.answers.tagline || null
+          const tagline = answers.tagline || null
           return { id: brand.id, color, industry, colors, tagline }
         } catch {
           return null
