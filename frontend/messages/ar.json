@@ -355,6 +355,8 @@
           "readiness_unavailable": "لا تتوفر درجة الجاهزية",
           "publishing_unavailable": "لا تتوفر بيانات النشر",
           "generation_quota_unavailable": "حصة التوليد غير متاحة",
+          "quota_load_failed": "تعذّر تحميل حصة التوليد",
+          "quota_retry": "إعادة المحاولة",
           "free_usage_title": "استهلاك التوليدات المجانية",
           "free_usage_counter": "{used}/{total} مستخدمة",
           "free_usage_total": "من {total}",

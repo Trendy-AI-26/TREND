@@ -355,6 +355,8 @@
           "readiness_unavailable": "Readiness score unavailable",
           "publishing_unavailable": "Publishing data unavailable",
           "generation_quota_unavailable": "Generation quota unavailable",
+          "quota_load_failed": "Unable to load generation quota",
+          "quota_retry": "Retry",
           "free_usage_title": "Free generation usage",
           "free_usage_counter": "{used}/{total} used",
           "free_usage_total": "of {total}",

@@ -40,7 +40,9 @@ export function BrandDashboard({ brandId }: BrandDashboardProps) {
     error: historyError,
     hasNext,
   } = useGenerationHistory(brandId)
-  const { quota, loading: quotaLoading, error: quotaError } = useQuota()
+  const { quota, loading: quotaLoading, error: quotaError, refetch: refetchQuota } = useQuota()
+  const quotaUnavailable = quotaLoading || !!quotaError || !quota
+  const quotaStatus = quotaLoading ? t('loading') : t('quota_load_failed')
 
   const answers = kit?.answers
   const completedSections = [
@@ -116,7 +118,12 @@ export function BrandDashboard({ brandId }: BrandDashboardProps) {
           role="alert"
           className="rounded-xl border border-destructive/20 bg-destructive/5 px-4 py-3 text-[13px] text-destructive"
         >
-          {[brandError, kitError, historyError, quotaError].filter(Boolean).join(' · ')}
+          {[brandError, kitError, historyError, quotaError ? t('quota_load_failed') : null].filter(Boolean).join(' · ')}
+          {quotaError && (
+            <button type="button" onClick={refetchQuota} disabled={quotaLoading} className="ms-3 rounded-lg border border-current px-3 py-1 disabled:opacity-50">
+              {t('quota_retry')}
+            </button>
+          )}
         </div>
       )}
 
@@ -128,8 +135,8 @@ export function BrandDashboard({ brandId }: BrandDashboardProps) {
         <MetricCard
           icon={<Sun className="h-5 w-5" />}
           label={t('remaining_generations')}
-          value={quotaLoading ? '—' : String(generationRemaining)}
-          note={quotaLoading ? t('loading') : t('free_usage_total', { total: generationLimit })}
+          value={quotaUnavailable ? '—' : String(generationRemaining)}
+          note={quotaUnavailable ? quotaStatus : t('free_usage_total', { total: generationLimit })}
           accent="text-amber-500 bg-amber-50"
           noteAccent="text-amber-600"
         />
@@ -244,7 +251,7 @@ export function BrandDashboard({ brandId }: BrandDashboardProps) {
               role="img"
               aria-label={
                 quotaLoading || !quota
-                  ? t('loading')
+                  ? quotaStatus
                   : t('free_usage_counter', {
                     used: generationConsumed,
                     total: generationLimit,
@@ -274,13 +281,13 @@ export function BrandDashboard({ brandId }: BrandDashboardProps) {
                     : generationConsumed}
                 </span>
                 <span className="mt-1 text-[10px] text-brand-headline/45">
-                  {t('free_usage_total', { total: generationLimit })}
+                  {quotaUnavailable ? '—' : t('free_usage_total', { total: generationLimit })}
                 </span>
               </span>
             </div>
             <p className="min-w-0 flex-1 text-[13px] leading-6 text-brand-headline/65">
               {quotaLoading || !quota
-                ? t('loading')
+                ? quotaStatus
                 : generationRemaining === 0
                   ? t('free_usage_exhausted', { total: generationLimit })
                   : t('free_usage_remaining', {
