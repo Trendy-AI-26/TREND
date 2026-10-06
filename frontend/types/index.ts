@@ -49,6 +49,9 @@ export interface BrandListItem {
   logo_url: string | null
   kit_status: KitStatus
   created_at: string
+  colors?: string[]
+  industry?: string | null
+  tagline?: string | null
 }
 
 export interface CreateBrandRequest {

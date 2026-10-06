@@ -332,7 +332,7 @@ async def _get_detail_with_fake_client(monkeypatch, fake_client):
         "_get_brand_or_404",
         lambda brand_id, user_id: {"id": str(brand_id), "name": "Test Brand"},
     )
-    return await generations.get_generation_detail(
+    return generations.get_generation_detail(
         UUID("10000000-0000-0000-0000-000000000001"),
         UUID("00000000-0000-0000-0000-000000000001"),
         current_user=SimpleNamespace(id="user-1"),

@@ -165,7 +165,7 @@ async def create_brand(
 
 
 @router.get("", response_model=list[BrandListItem])
-async def list_brands(current_user: User = Depends(get_current_user)):
+def list_brands(current_user: User = Depends(get_current_user)):
     client = get_service_client()
     result = (
         client.table("brands")
@@ -175,25 +175,29 @@ async def list_brands(current_user: User = Depends(get_current_user)):
         .execute()
     )
     brand_ids = [row["id"] for row in result.data or []]
-    kit_statuses: dict[str, str] = {}
+    kits: dict[str, dict] = {}
     if brand_ids:
         kit_result = (
             client.table("brand_kits")
-            .select("brand_id, status")
+            .select("brand_id, status, colors, industry, tagline")
             .in_("brand_id", brand_ids)
             .execute()
         )
-        kit_statuses = {k["brand_id"]: k["status"] for k in kit_result.data or []}
+        kits = {k["brand_id"]: k for k in kit_result.data or []}
 
     items = []
     for row in result.data or []:
-        kit_status = kit_statuses.get(row["id"], "not_started")
+        kit = kits.get(row["id"], {})
+        kit_status = kit.get("status", "not_started")
         items.append(
             BrandListItem(
                 id=row["id"],
                 name=row["name"],
                 logo_url=_build_logo_url(row.get("logo_path"), row.get("updated_at")),
                 kit_status=kit_status,
+                colors=kit.get("colors") or [],
+                industry=kit.get("industry"),
+                tagline=kit.get("tagline"),
                 created_at=row["created_at"],
             )
         )
@@ -201,7 +205,7 @@ async def list_brands(current_user: User = Depends(get_current_user)):
 
 
 @router.get("/{brand_id}", response_model=BrandResponse)
-async def get_brand(brand_id: UUID, current_user: User = Depends(get_current_user)):
+def get_brand(brand_id: UUID, current_user: User = Depends(get_current_user)):
     brand = _get_brand_or_404(brand_id, current_user.id)
     kit_status = _get_kit_status(brand["id"])
     return _brand_response(brand, kit_status)
