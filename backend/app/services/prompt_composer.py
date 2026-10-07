@@ -319,6 +319,59 @@ def _build_logo_section(
         )
     return None
 
+def _build_trend_section(
+    trend_context: dict | None,
+) -> str | None:
+    if not trend_context:
+        return None
+
+    lines = [
+        f"Selected trend: {trend_context.get('name', '')}",
+    ]
+
+    visual_style = trend_context.get(
+        "visual_style"
+    ) or []
+
+    if visual_style:
+        lines.append("Apply the trend through:")
+        lines.extend(
+            f"- {item}"
+            for item in visual_style
+        )
+
+    content_patterns = trend_context.get(
+        "content_patterns"
+    ) or []
+
+    if content_patterns:
+        lines.append("Suggested content patterns:")
+        lines.extend(
+            f"- {item}"
+            for item in content_patterns
+        )
+
+    avoid_patterns = trend_context.get(
+        "avoid_patterns"
+    ) or []
+
+    if avoid_patterns:
+        lines.append("Avoid:")
+        lines.extend(
+            f"- {item}"
+            for item in avoid_patterns
+        )
+
+    lines.append(
+        "The selected trend is optional creative guidance. "
+        "It must not override safety rules, brand identity, "
+        "user-provided text, or platform constraints."
+    )
+
+    return (
+        "=== TREND DIRECTION ===\n"
+        + "\n".join(lines)
+    )
 
 def build_generation_prompt(
     *,
@@ -329,6 +382,7 @@ def build_generation_prompt(
     brand_has_logo: bool,
     logo_placement: str = "none",
     product_edit_instruction: str | None = None,
+    trend_context: dict | None = None,
 ) -> str:
     """Deterministic prompt composer combining GenerationBrief with Brand, Platform and Logo rules."""
     sections: list[str] = [SYSTEM_ROLE_PROMPT]
@@ -379,6 +433,11 @@ def build_generation_prompt(
             f"User product instruction: "
             f"{product_edit_instruction}"
         )
+    trend_section = _build_trend_section(trend_context)
+
+    if trend_section:
+        sections.append(trend_section)
+    
 
     # Layer 7: Output rules
     sections.append(

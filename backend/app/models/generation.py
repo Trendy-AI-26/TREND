@@ -376,6 +376,7 @@ class GenerateRequest(BaseModel):
             "should be used or visually modified."
         ),
     )
+    trend_id: UUID | None = None
     model_config = {"extra": "forbid"}
     
 

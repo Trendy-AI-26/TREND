@@ -147,6 +147,7 @@ def test_openapi_contract_exposes_no_credential_fields():
         "platform_preset",
         "product_asset_id",
         "product_edit_instruction",
+        "trend_id",
 ]
 
     assert model["additionalProperties"] is False
