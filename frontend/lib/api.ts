@@ -72,7 +72,9 @@ export async function apiRequest<T = unknown>(
     headers.set('Authorization', `Bearer ${session.access_token}`)
   }
 
-  const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}${endpoint}`, {
+  const apiBase = process.env.NEXT_PUBLIC_API_URL || '/api'
+
+  const response = await fetch(`${apiBase}${endpoint}`, {
     ...options,
     headers,
   })

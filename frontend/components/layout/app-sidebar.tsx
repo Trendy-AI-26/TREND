@@ -60,7 +60,7 @@ export function AppSidebar({
           <button
             type="button"
             onClick={onClose}
-            aria-label={t('layout.close_menu')}
+            aria-label={t('layout.app-shell.close_menu')}
             className="absolute end-0 top-3 inline-flex h-8 w-8 items-center justify-center rounded-md text-brand-headline/60 transition-colors hover:bg-brand-bg/60 hover:text-brand-primary"
           >
             <X className="h-4 w-4" />
@@ -88,7 +88,7 @@ export function AppSidebar({
 
       <div className={cn('mt-3 rounded-[10px] border border-brand-accent/30 bg-brand-bg/40', collapsed ? 'flex flex-col items-center px-1 py-2' : 'px-3 py-[10px]')}>
         {collapsed ? (
-          <div className="flex flex-col items-center gap-2" aria-label={t('dashboard.currentBrand')}>
+          <div className="flex flex-wrap items-center justify-center gap-2" aria-label={t('dashboard.currentBrand')}>
             {activeBrand && (() => {
               const hex = normalizeHex(accents[activeBrand.id] ?? '')
               return <span className="block h-8 w-8 rounded-lg ring-1 ring-inset ring-black/10" style={{ background: hex ? `#${hex}` : TRENDY_AI_ACCENT }} title={activeBrand.name} />

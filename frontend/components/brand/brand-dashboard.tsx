@@ -11,12 +11,12 @@ import {
   ImagePlus,
   Sparkle,
   Sparkles,
-  Sun,
 } from 'lucide-react'
 import { useBrand } from '@/hooks/use-brand'
 import { useGenerationHistory } from '@/hooks/use-generation-history'
 import { useKit } from '@/hooks/use-kit'
 import { useProfile } from '@/hooks/use-profile'
+import { useBrands } from '@/hooks/use-brands'
 
 import type { GenerationHistoryItem } from '@/types'
 import { useQuota } from '@/hooks/use-quota'
@@ -32,6 +32,7 @@ export function BrandDashboard({ brandId }: BrandDashboardProps) {
   const t = useTranslations('app.(dashboard).[brandId].page')
   const locale = useLocale()
   const { profile } = useProfile()
+  const { brands } = useBrands()
   const { brand, loading: brandLoading, error: brandError } = useBrand(brandId)
   const { kit, loading: kitLoading, error: kitError } = useKit(brandId)
   const {
@@ -40,7 +41,9 @@ export function BrandDashboard({ brandId }: BrandDashboardProps) {
     error: historyError,
     hasNext,
   } = useGenerationHistory(brandId)
-  const { quota, loading: quotaLoading, error: quotaError } = useQuota()
+  const { quota, loading: quotaLoading, error: quotaError, refetch: refetchQuota } = useQuota()
+  const quotaUnavailable = quotaLoading || !!quotaError || !quota
+  const quotaStatus = quotaLoading ? t('loading') : t('quota_load_failed')
 
   const answers = kit?.answers
   const completedSections = [
@@ -116,44 +119,41 @@ export function BrandDashboard({ brandId }: BrandDashboardProps) {
           role="alert"
           className="rounded-xl border border-destructive/20 bg-destructive/5 px-4 py-3 text-[13px] text-destructive"
         >
-          {[brandError, kitError, historyError, quotaError].filter(Boolean).join(' · ')}
+          {[brandError, kitError, historyError, quotaError ? t('quota_load_failed') : null].filter(Boolean).join(' · ')}
+          {quotaError && (
+            <button type="button" onClick={refetchQuota} disabled={quotaLoading} className="ms-3 rounded-lg border border-current px-3 py-1 disabled:opacity-50">
+              {t('quota_retry')}
+            </button>
+          )}
         </div>
       )}
 
       <section
         dir={locale === 'ar' ? 'rtl' : 'ltr'}
-        className="grid grid-cols-2 gap-3 lg:grid-cols-4"
+        className="grid grid-cols-1 gap-3 sm:grid-cols-3"
         aria-label={t('overview')}
       >
         <MetricCard
-          icon={<Sun className="h-5 w-5" />}
-          label={t('remaining_generations')}
-          value={quotaLoading ? '—' : String(generationRemaining)}
-          note={quotaLoading ? t('loading') : t('free_usage_total', { total: generationLimit })}
-          accent="text-amber-500 bg-amber-50"
-          noteAccent="text-amber-600"
-        />
-        <MetricCard
-          icon={<Bell className="h-5 w-5" />}
-          label={t('saved_designs')}
-          value={historyLoading ? '—' : `${savedRecentCount}${hasNext ? '+' : ''}`}
-          note={t('recent_period')}
-          accent="text-violet-500 bg-violet-50"
-          noteAccent="text-brand-headline/45"
-        />
-        <MetricCard
           icon={<Sparkle className="h-5 w-5" />}
-          label={t('published_content')}
-          value={t('metric_unavailable_value')}
-          note={t('publishing_unavailable')}
+          label={t('executed_designs')}
+          value={historyLoading ? '—' : `${savedRecentCount}${hasNext ? '+' : ''}`}
+          note={t('designs_ready_for_use')}
           accent="text-amber-500 bg-emerald-50"
           noteAccent="text-emerald-600"
         />
         <MetricCard
+          icon={<Bell className="h-5 w-5" />}
+          label={t('generated_content')}
+          value={quotaUnavailable ? '—' : `${generationConsumed}/${generationLimit}`}
+          note={t('content_includes_image_caption')}
+          accent="text-brand-headline/70 bg-brand-bg/45"
+          noteAccent="text-brand-headline/45"
+        />
+        <MetricCard
           icon={<Heart className="h-5 w-5" />}
-          label={t('latest_post_readiness')}
-          value={t('metric_unavailable_value')}
-          note={t('readiness_unavailable')}
+          label={t('active_brands')}
+          value={quotaUnavailable ? '—' : `${brands.length}/${quota.max_active_brands}`}
+          note={t('active_brands_limit', { total: quota?.max_active_brands ?? 0 })}
           accent="text-purple-500 bg-purple-50"
           noteAccent="text-brand-headline/45"
         />
@@ -244,7 +244,7 @@ export function BrandDashboard({ brandId }: BrandDashboardProps) {
               role="img"
               aria-label={
                 quotaLoading || !quota
-                  ? t('loading')
+                  ? quotaStatus
                   : t('free_usage_counter', {
                     used: generationConsumed,
                     total: generationLimit,
@@ -274,13 +274,13 @@ export function BrandDashboard({ brandId }: BrandDashboardProps) {
                     : generationConsumed}
                 </span>
                 <span className="mt-1 text-[10px] text-brand-headline/45">
-                  {t('free_usage_total', { total: generationLimit })}
+                  {quotaUnavailable ? '—' : t('free_usage_total', { total: generationLimit })}
                 </span>
               </span>
             </div>
             <p className="min-w-0 flex-1 text-[13px] leading-6 text-brand-headline/65">
               {quotaLoading || !quota
-                ? t('loading')
+                ? quotaStatus
                 : generationRemaining === 0
                   ? t('free_usage_exhausted', { total: generationLimit })
                   : t('free_usage_remaining', {
@@ -388,14 +388,14 @@ function MetricCard({
 }) {
   return (
     <article className={`${panelClass} relative min-h-[116px] rounded-2xl p-4`}>
-      <div className="min-w-0 pe-14 pt-1 text-end">
+      <div className="min-w-0 ps-14 pt-1 text-start">
         <p className="truncate text-[14px] leading-5 text-brand-headline/55">{label}</p>
         <p className="mt-1 text-[30px] font-bold leading-none text-brand-headline">{value}</p>
       </div>
       <span className={`absolute start-4 top-4 inline-flex h-12 w-12 items-center justify-center rounded-2xl ${accent}`}>
         {icon}
       </span>
-      <p className={`mt-2 text-end text-[12px] ${noteAccent}`}>{note}</p>
+      <p className={`mt-2 text-start text-[12px] ${noteAccent}`}>{note}</p>
     </article>
   )
 }
