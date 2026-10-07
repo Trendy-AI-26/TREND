@@ -150,11 +150,11 @@ export function AppShell({ children }: { children: ReactNode }) {
   const shell = (
     <div
       dir={locale === 'ar' ? 'rtl' : 'ltr'}
-      className={cn('grid h-screen grid-cols-1 overflow-hidden bg-background', sidebarClosed ? 'md:grid-cols-[0_1fr]' : 'md:grid-cols-[224px_1fr]')}
+      className={cn('grid h-screen grid-cols-1 overflow-hidden bg-background', sidebarClosed ? 'md:grid-cols-[84px_1fr]' : 'md:grid-cols-[224px_1fr]')}
     >
       {navOpen && <button type="button" aria-label={t('close_menu')} className="fixed inset-0 z-30 bg-[#0B1220]/40 md:hidden" onClick={() => setNavOpen(false)} />}
-      <div ref={drawerRef} className={cn('z-40 h-full w-[224px] bg-brand-cream max-md:fixed max-md:inset-y-0 max-md:start-0 max-md:shadow-lg max-md:transition-transform max-md:duration-fast max-md:ease-out md:static md:translate-x-0 md:transform-none md:transition-all md:duration-fast', sidebarClosed && 'md:w-0 md:-translate-x-full md:overflow-hidden', navOpen ? 'max-md:translate-x-0' : 'max-md:-translate-x-full rtl:max-md:translate-x-full')}>
-        <AppSidebar brands={brands} accents={accents} currentBrandId={currentBrandId} profile={profile} onCreateBrand={() => setCreateOpen(true)} onClose={() => { setNavOpen(false); setSidebarClosed(true) }} />
+      <div ref={drawerRef} className={cn('z-40 h-full w-[224px] bg-brand-cream max-md:fixed max-md:inset-y-0 max-md:start-0 max-md:shadow-lg max-md:transition-transform max-md:duration-fast max-md:ease-out md:static md:translate-x-0 md:transform-none md:transition-all md:duration-fast', sidebarClosed && 'md:w-[84px] md:overflow-hidden', navOpen ? 'max-md:translate-x-0' : 'max-md:-translate-x-full rtl:max-md:translate-x-full')}>
+        <AppSidebar brands={brands} accents={accents} currentBrandId={currentBrandId} profile={profile} collapsed={sidebarClosed} onCreateBrand={() => setCreateOpen(true)} onClose={() => { setNavOpen(false); if (!narrow) setSidebarClosed(true) }} />
       </div>
       <div className="flex min-w-0 flex-col overflow-hidden">
         <header className="flex h-[60px] shrink-0 items-center gap-2 border-b border-brand-accent/30 bg-brand-cream px-3 md:px-[52px]">

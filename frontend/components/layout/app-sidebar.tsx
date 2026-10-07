@@ -16,6 +16,7 @@ interface AppSidebarProps {
   accents: Record<string, string>
   currentBrandId?: string
   profile: Profile | null
+  collapsed?: boolean
   onCreateBrand: () => void
   onClose?: () => void
 }
@@ -25,6 +26,7 @@ export function AppSidebar({
   accents,
   currentBrandId,
   profile,
+  collapsed = false,
   onCreateBrand,
   onClose,
 }: AppSidebarProps) {
@@ -52,19 +54,21 @@ export function AppSidebar({
     : []
 
   return (
-    <aside className="flex h-full w-[224px] shrink-0 flex-col overflow-y-auto border-e border-brand-accent/30 bg-brand-cream px-3 font-readex text-brand-headline">
-      <div className="relative shrink-0 border-b border-brand-accent/30 py-3">
-        <button
-          type="button"
-          onClick={onClose}
-          aria-label={t('layout.close_menu')}
-          className="absolute end-0 top-3 inline-flex h-8 w-8 items-center justify-center rounded-md text-brand-headline/60 transition-colors hover:bg-brand-bg/60 hover:text-brand-primary"
-        >
-          <X className="h-4 w-4" />
-        </button>
+    <aside className={cn('flex h-full shrink-0 flex-col overflow-y-auto border-e border-brand-accent/30 bg-brand-cream font-readex text-brand-headline transition-[width,padding] duration-fast', collapsed ? 'w-[84px] px-2' : 'w-[224px] px-3')}>
+      <div className={cn('relative shrink-0 border-b border-brand-accent/30 py-3', collapsed ? 'flex items-center justify-center' : '')}>
+        {!collapsed && (
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label={t('layout.close_menu')}
+            className="absolute end-0 top-3 inline-flex h-8 w-8 items-center justify-center rounded-md text-brand-headline/60 transition-colors hover:bg-brand-bg/60 hover:text-brand-primary"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        )}
         <Link
           href="/dashboard"
-          className="flex flex-col gap-1 px-1 pe-10 no-underline"
+          className={cn('flex flex-col gap-1 no-underline', collapsed ? 'items-center px-1' : 'px-1 pe-10')}
         >
           <span className="flex items-center gap-2">
             <Image
@@ -74,67 +78,81 @@ export function AppSidebar({
               height={32}
               className="h-8 w-8 object-contain"
             />
-            <span className="font-logo text-[22px] font-semibold leading-none text-brand-headline">
+            <span className={cn('font-logo text-[22px] font-semibold leading-none text-brand-headline', collapsed && 'sr-only')}>
               TRENDY AI
             </span>
           </span>
-          <span className="text-[11px] text-brand-headline/50">{t('dashboard.tagline')}</span>
+          {!collapsed && <span className="text-[11px] text-brand-headline/50">{t('dashboard.tagline')}</span>}
         </Link>
       </div>
 
-      <div className="mt-3 rounded-[10px] border border-brand-accent/30 bg-brand-bg/40 px-3 py-[10px]">
-        <Link
-          href="/dashboard"
-          className="flex items-center gap-1 text-[11px] text-brand-primary no-underline hover:underline"
-        >
-          <span className="inline-block ltr:order-last ltr:rotate-180">‹</span>
-          <span>{t('dashboard.allBrandsShort')}</span>
-        </Link>
-        <p className="mt-[6px] truncate text-[13px] font-bold leading-[20px]">
-          {t('dashboard.currentBrand')} : {activeBrand?.name ?? t('dashboard.workspace')}
-        </p>
-        <div className="mt-[6px] flex flex-wrap items-center gap-[4px]">
-          {brands.map((brand) => {
-            const selected = brand.id === currentBrandId || (!currentBrandId && brand.id === activeBrand?.id)
-            const hex = normalizeHex(accents[brand.id] ?? '')
-            return (
-              <Link
-                key={brand.id}
-                href={`/dashboard?brandId=${brand.id}`}
-                title={brand.name}
-                aria-label={brand.name}
-                className="flex flex-col items-center gap-[2px] rounded-[4px] no-underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-primary/40"
+      <div className={cn('mt-3 rounded-[10px] border border-brand-accent/30 bg-brand-bg/40', collapsed ? 'flex flex-col items-center px-1 py-2' : 'px-3 py-[10px]')}>
+        {collapsed ? (
+          <div className="flex flex-col items-center gap-2" aria-label={t('dashboard.currentBrand')}>
+            {activeBrand && (() => {
+              const hex = normalizeHex(accents[activeBrand.id] ?? '')
+              return <span className="block h-8 w-8 rounded-lg ring-1 ring-inset ring-black/10" style={{ background: hex ? `#${hex}` : TRENDY_AI_ACCENT }} title={activeBrand.name} />
+            })()}
+            <button type="button" onClick={onCreateBrand} title={t('dashboard.createBrand')} aria-label={t('dashboard.createBrand')} className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-brand-accent/40 bg-brand-bg/60 text-brand-headline/60 transition-colors hover:border-brand-primary hover:text-brand-primary">
+              <Plus className="h-[14px] w-[14px]" />
+            </button>
+          </div>
+        ) : (
+          <>
+            <Link
+              href="/dashboard"
+              className="flex items-center gap-1 text-[11px] text-brand-primary no-underline hover:underline"
+            >
+              <span className="inline-block ltr:order-last ltr:rotate-180">‹</span>
+              <span>{t('dashboard.allBrandsShort')}</span>
+            </Link>
+            <p className="mt-[6px] truncate text-[13px] font-bold leading-[20px]">
+              {t('dashboard.currentBrand')} : {activeBrand?.name ?? t('dashboard.workspace')}
+            </p>
+            <div className="mt-[6px] flex flex-wrap items-center gap-[4px]">
+              {brands.map((brand) => {
+                const selected = brand.id === currentBrandId || (!currentBrandId && brand.id === activeBrand?.id)
+                const hex = normalizeHex(accents[brand.id] ?? '')
+                return (
+                  <Link
+                    key={brand.id}
+                    href={`/dashboard?brandId=${brand.id}`}
+                    title={brand.name}
+                    aria-label={brand.name}
+                    className="flex flex-col items-center gap-[2px] rounded-[4px] no-underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-primary/40"
+                  >
+                    <span
+                      className={cn(
+                        'block h-[26px] w-[26px] rounded-[6px] ring-1 ring-inset ring-black/10',
+                        selected && 'shadow-[0_1px_4px_rgba(26,26,26,0.3)]',
+                      )}
+                      style={{ background: hex ? `#${hex}` : TRENDY_AI_ACCENT }}
+                    />
+                    <span
+                      className={cn(
+                        'h-[2px] w-[26px] rounded-full',
+                        selected ? 'bg-brand-headline/50' : 'bg-transparent',
+                      )}
+                    />
+                  </Link>
+                )
+              })}
+              <button
+                type="button"
+                onClick={onCreateBrand}
+                title={t('dashboard.createBrand')}
+                aria-label={t('dashboard.createBrand')}
+                className="mb-[2px] inline-flex h-[26px] w-[26px] items-center justify-center rounded-[6px] border border-brand-accent/40 bg-brand-bg/60 text-brand-headline/60 transition-colors duration-fast hover:border-brand-primary hover:text-brand-primary"
               >
-                <span
-                  className={cn(
-                    'block h-[26px] w-[26px] rounded-[6px] ring-1 ring-inset ring-black/10',
-                    selected && 'shadow-[0_1px_4px_rgba(26,26,26,0.3)]',
-                  )}
-                  style={{ background: hex ? `#${hex}` : TRENDY_AI_ACCENT }}
-                />
-                <span
-                  className={cn(
-                    'h-[2px] w-[26px] rounded-full',
-                    selected ? 'bg-brand-headline/50' : 'bg-transparent',
-                  )}
-                />
-              </Link>
-            )
-          })}
-          <button
-            type="button"
-            onClick={onCreateBrand}
-            title={t('dashboard.createBrand')}
-            aria-label={t('dashboard.createBrand')}
-            className="mb-[2px] inline-flex h-[26px] w-[26px] items-center justify-center rounded-[6px] border border-brand-accent/40 bg-brand-bg/60 text-brand-headline/60 transition-colors duration-fast hover:border-brand-primary hover:text-brand-primary"
-          >
-            <Plus className="h-[13px] w-[13px]" />
-          </button>
-        </div>
-        <p className="mt-1 text-[11px] text-brand-headline/50">{t('dashboard.identityColors')}</p>
+                <Plus className="h-[13px] w-[13px]" />
+              </button>
+            </div>
+            <p className="mt-1 text-[11px] text-brand-headline/50">{t('dashboard.identityColors')}</p>
+          </>
+        )}
       </div>
 
-      <nav className="-mx-3 mt-4 flex flex-col gap-[2px]" aria-label={t('dashboard.workspaceNavigation')}>
+      <nav className={cn('mt-4 flex flex-col gap-[6px]', collapsed ? '' : '-mx-3 gap-[2px]')} aria-label={t('dashboard.workspaceNavigation')}>
         {nav.map((item) => {
           const itemPath = item.href.split('?')[0]
           const active =
@@ -150,37 +168,41 @@ export function AppSidebar({
               href={item.href}
               aria-current={active ? 'page' : undefined}
               className={cn(
-                'flex h-[42px] items-center gap-3 border-s-[3px] ps-[23px] pe-4 text-[13.5px] no-underline transition-colors duration-fast',
+                'flex h-[42px] items-center border-s-[3px] text-[13.5px] no-underline transition-colors duration-fast',
+                collapsed ? 'justify-center rounded-lg border-transparent px-0' : 'gap-3 ps-[23px] pe-4',
                 active
-                  ? 'rounded-e-lg border-brand bg-brand-weaker font-bold'
+                  ? cn('rounded-e-lg border-brand bg-brand-weaker font-bold', collapsed && 'rounded-lg')
                   : 'border-transparent text-brand-headline/70 hover:bg-brand-bg/60',
               )}
+              title={collapsed ? item.label : undefined}
             >
               <Icon className={cn('h-[17px] w-[17px]', active ? 'text-brand' : 'text-brand-headline/60')} />
-              <span className="flex-1">{item.label}</span>
+              {!collapsed && <span className="flex-1">{item.label}</span>}
             </Link>
           )
         })}
       </nav>
 
-      <div className="mt-auto pb-5">
+      <div className={cn('mt-auto pb-5', collapsed && 'flex flex-col items-center')}>
         {profile?.is_admin && (
           <Link
             href="/admin"
             className={cn(
-              'mb-2 flex h-9 items-center gap-3 rounded-lg px-2 text-[13.5px] text-brand-headline/70 no-underline transition-colors duration-fast hover:bg-brand-bg/60',
+              'mb-2 flex h-9 items-center gap-3 rounded-lg text-[13.5px] text-brand-headline/70 no-underline transition-colors duration-fast hover:bg-brand-bg/60',
+              collapsed ? 'w-10 justify-center px-0' : 'px-2',
               pathname.startsWith('/admin') && 'bg-brand-bg/60 font-bold text-brand-headline',
             )}
           >
             <Sliders className="h-[17px] w-[17px] text-brand-headline/60" />
-            <span className="flex-1">{t('dashboard.admin')}</span>
-            <Badge>Op</Badge>
+            {!collapsed && <span className="flex-1">{t('dashboard.admin')}</span>}
+            {!collapsed && <Badge>Op</Badge>}
           </Link>
         )}
         <div className="border-t border-brand-accent/30 pt-[10px]">
           <Link
             href="/account"
-            className="flex items-center gap-[10px] rounded-lg px-1 py-1 no-underline transition-colors duration-fast hover:bg-brand-bg/60"
+            className={cn('flex items-center gap-[10px] rounded-lg py-1 no-underline transition-colors duration-fast hover:bg-brand-bg/60', collapsed ? 'justify-center px-0' : 'px-1')}
+            title={collapsed ? (profile?.full_name || t('dashboard.you')) : undefined}
           >
             {profile?.avatar_url ? (
               <img src={profile.avatar_url} alt="" className="h-8 w-8 shrink-0 rounded-full object-cover" />
@@ -189,29 +211,32 @@ export function AppSidebar({
                 <User className="h-[15px] w-[15px] text-white" />
               </span>
             )}
-            <span className="truncate text-[13px] font-medium">{profile?.full_name || t('dashboard.you')}</span>
+            {!collapsed && <span className="truncate text-[13px] font-medium">{profile?.full_name || t('dashboard.you')}</span>}
           </Link>
 
-          <div className="mt-1 flex flex-col gap-[2px]">
+          <div className={cn('mt-1 flex flex-col gap-[2px]', collapsed && 'items-center')}>
             <Link
               href="#"
-              className="flex h-9 items-center gap-3 rounded-lg px-2 text-[13px] text-brand-headline/70 no-underline transition-colors duration-fast hover:bg-brand-bg/60"
+              aria-label={t('dashboard.subscription')}
+              title={collapsed ? t('dashboard.subscription') : undefined}
+              className={cn('flex h-9 items-center gap-3 rounded-lg text-[13px] text-brand-headline/70 no-underline transition-colors duration-fast hover:bg-brand-bg/60', collapsed ? 'w-10 justify-center px-0' : 'px-2')}
             >
               <CreditCard className="h-[16px] w-[16px] text-brand-headline/60" />
-              <span>{t('dashboard.subscription')}</span>
+              {!collapsed && <span>{t('dashboard.subscription')}</span>}
             </Link>
             {workspaceId && (
               <Link
                 href={`/${workspaceId}/settings`}
                 className={cn(
-                  'flex h-9 items-center gap-3 rounded-lg px-2 text-[13px] no-underline transition-colors duration-fast hover:bg-brand-bg/60',
+                  'flex h-9 items-center gap-3 rounded-lg text-[13px] no-underline transition-colors duration-fast hover:bg-brand-bg/60',
+                  collapsed ? 'w-10 justify-center px-0' : 'px-2',
                   pathname.startsWith(`/${workspaceId}/settings`)
                     ? 'font-bold text-brand-headline'
                     : 'text-brand-headline/70',
                 )}
               >
                 <Settings className="h-[16px] w-[16px] text-brand-headline/60" />
-                <span>{t('dashboard.settings')}</span>
+                {!collapsed && <span>{t('dashboard.settings')}</span>}
               </Link>
             )}
           </div>
@@ -219,10 +244,15 @@ export function AppSidebar({
           <button
             type="button"
             onClick={handleLogout}
-            className="mt-3 flex h-[34px] w-full items-center justify-center gap-2 rounded-md border border-brand-primary text-[12px] text-brand-headline/60 transition-colors duration-fast hover:bg-brand-primary hover:text-white"
+            aria-label={t('dashboard.logout')}
+            title={collapsed ? t('dashboard.logout') : undefined}
+            className={cn(
+              'mt-3 flex h-[34px] items-center justify-center gap-2 rounded-md border border-brand-primary text-[12px] text-brand-headline/60 transition-colors duration-fast hover:bg-brand-primary hover:text-white',
+              collapsed ? 'w-10' : 'w-full',
+            )}
           >
             <LogOut className="h-[13px] w-[13px] rtl:-scale-x-100" />
-            {t('dashboard.logout')}
+            {!collapsed && t('dashboard.logout')}
           </button>
         </div>
       </div>
