@@ -546,6 +546,12 @@ async def generate_image(
     if existing is not None:
         return _build_response(existing, brand["name"])
 
+    # Validate the selected trend before creating idempotency or generation
+    # records. Invalid or expired selections must be safely retryable.
+    selected_trend = None
+    if body.trend_id is not None:
+        selected_trend = get_active_trend_or_404(body.trend_id)
+
     try:
         enforce_generation_rate_limit(
             user_id=current_user.id,
@@ -566,17 +572,7 @@ async def generate_image(
     )
     logo_placement = _resolve_logo_placement(body)
     # ---------------------------------------------------------
-    # 2. Validate selected trend by id
-    # ---------------------------------------------------------
-    selected_trend = None
-
-    if body.trend_id is not None:
-        selected_trend = get_active_trend_or_404(
-            body.trend_id
-    )
-
-    # ---------------------------------------------------------
-    # 3. Validate logo requirements
+    # 2. Validate logo requirements
     # ---------------------------------------------------------
     if logo_placement != LogoPlacementEnum.none and not brand_has_logo:
         raise _error_response(
