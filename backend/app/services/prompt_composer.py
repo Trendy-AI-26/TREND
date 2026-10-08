@@ -437,7 +437,6 @@ def build_generation_prompt(
 
     if trend_section:
         sections.append(trend_section)
-    
 
     # Layer 7: Output rules
     sections.append(
