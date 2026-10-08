@@ -21,7 +21,7 @@ export async function GET(request: NextRequest) {
     const { error } = await supabase.auth.verifyOtp({ type, token_hash })
 
     if (!error) {
-      redirectTo.pathname = type === 'recovery' && next?.startsWith('/') ? next : '/brands'
+      redirectTo.pathname = type === 'recovery' && next?.startsWith('/') ? next : '/dashboard'
       redirectTo.searchParams.delete('token_hash')
       redirectTo.searchParams.delete('type')
       redirectTo.searchParams.delete('next')

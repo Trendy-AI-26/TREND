@@ -30,6 +30,7 @@ export function useQuota(): UseQuotaResult {
                 if (!cancelled) setQuota(data)
             } catch (err) {
                 if (!cancelled) {
+                    setQuota(null)
                     setError(err instanceof Error ? err.message : 'Failed to load quota')
                 }
             } finally {

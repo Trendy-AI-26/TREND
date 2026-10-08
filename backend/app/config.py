@@ -2,42 +2,82 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    SUPABASE_URL: str
-    SUPABASE_SECRET_KEY: str
-    SUPABASE_ANON_KEY: str = ""
+    # --------------------------------------------------
+    # Supabase
+    # --------------------------------------------------
+
+    SUPABASE_URL: str = "http://localhost"
+    SUPABASE_SECRET_KEY: str = "test-secret-key"
+
+    # --------------------------------------------------
+    # Storage
+    # --------------------------------------------------
+
     STORAGE_BUCKET: str = "brand-assets"
     PRODUCT_ASSETS_BUCKET: str = "product-assets"
     PRODUCT_ASSET_MAX_BYTES: int = 10 * 1024 * 1024
     AVATARS_BUCKET: str = "avatars"
     AVATAR_MAX_BYTES: int = 2 * 1024 * 1024
-    ADMIN_EMAILS: str = ""
-    # Server-side image generation credentials. These are the ONLY source for
-    # provider/model/key: nothing is ever read from a request body.
-    GENERATION_PROVIDER: str = "openai"
-    GENERATION_MODEL: str = "gpt-image-2"
-    GENERATION_API_KEY: str = ""
+
+    # --------------------------------------------------
+    # Application
+    # --------------------------------------------------
+
     HOST: str = "127.0.0.1"
     PORT: int = 8000
+
     CORS_ORIGINS: str = (
-        "http://localhost:3001,http://127.0.0.1:3001,http://localhost,http://localhost:3000"
+        "http://localhost:3000,"
+        "http://127.0.0.1:3000,"
+        "http://localhost:3001,"
+        "http://127.0.0.1:3001"
     )
 
-    # Managed Generation Settings
-    MANAGED_GENERATION_ENABLED: bool = False
+    ADMIN_EMAILS: str = ""
 
-    MANAGED_IMAGE_PROVIDER: str = "openai"
-    MANAGED_IMAGE_MODEL: str = ""
-    MANAGED_IMAGE_API_KEY: str = ""
+    # --------------------------------------------------
+    # Managed AI configuration
+    # --------------------------------------------------
 
-    MANAGED_TEXT_PROVIDER: str = "openai"
-    MANAGED_TEXT_MODEL: str = ""
-    MANAGED_TEXT_API_KEY: str = ""
+    # القيمة الافتراضية الفارغة مهمة للاختبارات.
+    # في التشغيل الحقيقي يجب وضع المفتاح داخل backend/.env.
+    OPENAI_API_KEY: str = ""
+
+    IMAGE_PROVIDER: str = "openai"
+    TEXT_PROVIDER: str = "openai"
+
+    OPENAI_IMAGE_MODEL: str = "gpt-image-2"
+    OPENAI_TEXT_MODEL: str = "gpt-4o-mini"
+
+    # --------------------------------------------------
+    # Generation settings
+    # --------------------------------------------------
+
+    GENERATION_CREDIT_COST: int = 1
+    CAPTION_CREDIT_COST: int = 0
+
+    GENERATION_RATE_LIMIT: int = 5
+    GENERATION_RATE_WINDOW_SECONDS: int = 60
+
+    GENERATION_LOCK_TTL_SECONDS: int = 180
+
+    ALLOWED_IMAGE_TYPES: str = "image/png,image/jpeg,image/webp"
+
+    # Managed generation compatibility settings. None means use the primary
+    # IMAGE_PROVIDER/OPENAI_* settings above.
+    MANAGED_PROVIDER: str | None = None
+    MANAGED_API_KEY: str | None = None
+    MANAGED_MODEL: str | None = None
+
+    # --------------------------------------------------
+    # Pydantic Settings
+    # --------------------------------------------------
 
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
         case_sensitive=True,
-        extra="ignore", 
+        extra="ignore",
     )
 
 

@@ -69,7 +69,7 @@ def _row_to_response(brand: dict, row: dict | None) -> KitResponse:
 
 
 @router.get("", response_model=KitResponse)
-async def get_kit(brand_id: UUID, current_user: User = Depends(get_current_user)):
+def get_kit(brand_id: UUID, current_user: User = Depends(get_current_user)):
     brand = _get_brand_or_404(brand_id, current_user.id)
     client = get_service_client()
     result = (
