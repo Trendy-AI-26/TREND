@@ -11,12 +11,12 @@ import {
   ImagePlus,
   Sparkle,
   Sparkles,
-  Sun,
 } from 'lucide-react'
 import { useBrand } from '@/hooks/use-brand'
 import { useGenerationHistory } from '@/hooks/use-generation-history'
 import { useKit } from '@/hooks/use-kit'
 import { useProfile } from '@/hooks/use-profile'
+import { useBrands } from '@/hooks/use-brands'
 
 import type { GenerationHistoryItem } from '@/types'
 import { useQuota } from '@/hooks/use-quota'
@@ -32,6 +32,7 @@ export function BrandDashboard({ brandId }: BrandDashboardProps) {
   const t = useTranslations('app.(dashboard).[brandId].page')
   const locale = useLocale()
   const { profile } = useProfile()
+  const { brands } = useBrands()
   const { brand, loading: brandLoading, error: brandError } = useBrand(brandId)
   const { kit, loading: kitLoading, error: kitError } = useKit(brandId)
   const {
@@ -129,38 +130,30 @@ export function BrandDashboard({ brandId }: BrandDashboardProps) {
 
       <section
         dir={locale === 'ar' ? 'rtl' : 'ltr'}
-        className="grid grid-cols-2 gap-3 lg:grid-cols-4"
+        className="grid grid-cols-1 gap-3 sm:grid-cols-3"
         aria-label={t('overview')}
       >
         <MetricCard
-          icon={<Sun className="h-5 w-5" />}
-          label={t('remaining_generations')}
-          value={quotaUnavailable ? '—' : String(generationRemaining)}
-          note={quotaUnavailable ? quotaStatus : t('free_usage_total', { total: generationLimit })}
-          accent="text-amber-500 bg-amber-50"
-          noteAccent="text-amber-600"
-        />
-        <MetricCard
-          icon={<Bell className="h-5 w-5" />}
-          label={t('saved_designs')}
-          value={historyLoading ? '—' : `${savedRecentCount}${hasNext ? '+' : ''}`}
-          note={t('recent_period')}
-          accent="text-violet-500 bg-violet-50"
-          noteAccent="text-brand-headline/45"
-        />
-        <MetricCard
           icon={<Sparkle className="h-5 w-5" />}
-          label={t('published_content')}
-          value={t('metric_unavailable_value')}
-          note={t('publishing_unavailable')}
+          label={t('executed_designs')}
+          value={historyLoading ? '—' : `${savedRecentCount}${hasNext ? '+' : ''}`}
+          note={t('designs_ready_for_use')}
           accent="text-amber-500 bg-emerald-50"
           noteAccent="text-emerald-600"
         />
         <MetricCard
+          icon={<Bell className="h-5 w-5" />}
+          label={t('generated_content')}
+          value={quotaUnavailable ? '—' : `${generationConsumed}/${generationLimit}`}
+          note={t('content_includes_image_caption')}
+          accent="text-brand-headline/70 bg-brand-bg/45"
+          noteAccent="text-brand-headline/45"
+        />
+        <MetricCard
           icon={<Heart className="h-5 w-5" />}
-          label={t('latest_post_readiness')}
-          value={t('metric_unavailable_value')}
-          note={t('readiness_unavailable')}
+          label={t('active_brands')}
+          value={quotaUnavailable ? '—' : `${brands.length}/${quota.max_active_brands}`}
+          note={t('active_brands_limit', { total: quota?.max_active_brands ?? 0 })}
           accent="text-purple-500 bg-purple-50"
           noteAccent="text-brand-headline/45"
         />
@@ -395,14 +388,14 @@ function MetricCard({
 }) {
   return (
     <article className={`${panelClass} relative min-h-[116px] rounded-2xl p-4`}>
-      <div className="min-w-0 pe-14 pt-1 text-end">
+      <div className="min-w-0 ps-14 pt-1 text-start">
         <p className="truncate text-[14px] leading-5 text-brand-headline/55">{label}</p>
         <p className="mt-1 text-[30px] font-bold leading-none text-brand-headline">{value}</p>
       </div>
       <span className={`absolute start-4 top-4 inline-flex h-12 w-12 items-center justify-center rounded-2xl ${accent}`}>
         {icon}
       </span>
-      <p className={`mt-2 text-end text-[12px] ${noteAccent}`}>{note}</p>
+      <p className={`mt-2 text-start text-[12px] ${noteAccent}`}>{note}</p>
     </article>
   )
 }

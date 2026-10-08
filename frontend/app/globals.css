@@ -11,8 +11,8 @@
 @layer base {
   :root {
     /* TRENDY AI product theme — light mode */
-    --background: 42 60% 92%;
-    /* Cream canvas: #F7F0DF */
+    --background: 0 27.27% 97.84%;
+    /* Dashboard canvas matched to verification pages: #fbf8f8 */
     --foreground: 0 0% 10%;
     /* Charcoal text: #1A1A1A */
 
