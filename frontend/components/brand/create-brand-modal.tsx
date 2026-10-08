@@ -67,6 +67,7 @@ export function CreateBrandModal({ open, onOpenChange, onBrandCreated }: CreateB
   const [name, setName] = useState('')
   const [color, setColor] = useState(CURATED_COLORS[0].hex)
   const [pickerPosition, setPickerPosition] = useState({ x: 0.78, y: 0.12 })
+  const [hasPickerPosition, setHasPickerPosition] = useState(false)
   const [pickerOpen, setPickerOpen] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -76,6 +77,7 @@ export function CreateBrandModal({ open, onOpenChange, onBrandCreated }: CreateB
     setName('')
     setColor(CURATED_COLORS[0].hex)
     setPickerPosition({ x: 0.78, y: 0.12 })
+    setHasPickerPosition(false)
     setPickerOpen(false)
     setError(null)
   }
@@ -180,6 +182,7 @@ export function CreateBrandModal({ open, onOpenChange, onBrandCreated }: CreateB
                         type="button"
                         onClick={() => {
                           setColor(hex)
+                          setHasPickerPosition(false)
                           setPickerOpen(false)
                         }}
                         aria-label={tColors(nameKey)}
@@ -214,8 +217,13 @@ export function CreateBrandModal({ open, onOpenChange, onBrandCreated }: CreateB
                 </button>
                 {pickerOpen && (
                   <div
-                    role="application"
+                    role="slider"
+                    tabIndex={0}
                     aria-label={tColors('curated_palette')}
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                    aria-valuenow={Math.round(pickerPosition.x * 100)}
+                    aria-valuetext={color}
                     className="relative h-28 w-full cursor-crosshair overflow-hidden rounded-xl border border-black/10 shadow-inner"
                     style={{
                       backgroundImage: 'linear-gradient(to bottom, transparent 0%, rgba(0,0,0,.72) 100%), linear-gradient(to right, #f00 0%, #ff0 16%, #0f0 33%, #0ff 50%, #00f 66%, #f0f 83%, #f00 100%)',
@@ -225,15 +233,31 @@ export function CreateBrandModal({ open, onOpenChange, onBrandCreated }: CreateB
                       const x = (event.clientX - rect.left) / rect.width
                       const y = (event.clientY - rect.top) / rect.height
                       setPickerPosition({ x, y })
+                      setHasPickerPosition(true)
                       setColor(spectrumColor(event.clientX - rect.left, event.clientY - rect.top, rect.width, rect.height))
                       setPickerOpen(false)
                     }}
+                    onKeyDown={(event) => {
+                      const step = event.shiftKey ? 0.1 : 0.02
+                      let { x, y } = pickerPosition
+                      if (event.key === 'ArrowLeft') x -= step
+                      else if (event.key === 'ArrowRight') x += step
+                      else if (event.key === 'ArrowUp') y -= step
+                      else if (event.key === 'ArrowDown') y += step
+                      else return
+                      event.preventDefault()
+                      x = Math.max(0, Math.min(1, x))
+                      y = Math.max(0, Math.min(1, y))
+                      setPickerPosition({ x, y })
+                      setHasPickerPosition(true)
+                      setColor(spectrumColor(x * 100, y * 100, 100, 100))
+                    }}
                   >
-                    <span
+                    {hasPickerPosition && <span
                       aria-hidden="true"
-                      className="pointer-events-none absolute h-5 w-5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white shadow-[0_1px_4px_rgba(0,0,0,.55)]"
+                      className="pointer-events-none absolute h-5 w-5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white shadow-[0_1px_4px_rgba(26,26,26,0.55)]"
                       style={{ left: `${pickerPosition.x * 100}%`, top: `${pickerPosition.y * 100}%`, backgroundColor: color }}
-                    />
+                    />}
                   </div>
                 )}
               </div>
