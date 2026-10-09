@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.config import settings
-from app.routers import admin, brands, generations, health, keys, kit, me, preview, product_assets
+from app.routers import admin, brands, generations, health, keys, kit, me, preview, product_assets, trends
 
 
 @asynccontextmanager
@@ -46,6 +46,7 @@ app.include_router(kit.router)
 app.include_router(generations.router)
 app.include_router(preview.router)
 app.include_router(product_assets.router)
+app.include_router(trends.router)
 
 @app.exception_handler(HTTPException)
 async def http_exception_handler(request: Request, exc: HTTPException ):

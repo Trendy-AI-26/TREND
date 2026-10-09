@@ -36,6 +36,10 @@ from app.services.credits import (
     release_credits,
     reserve_credits,
 )
+from app.services.trend_service import (
+    get_active_trend_or_404,
+)
+
 from app.services.error_mapping import classify_provider_error
 from app.services.generation_lock import (
     GenerationLockError,
@@ -542,6 +546,12 @@ async def generate_image(
     if existing is not None:
         return _build_response(existing, brand["name"])
 
+    # Validate the selected trend before creating idempotency or generation
+    # records. Invalid or expired selections must be safely retryable.
+    selected_trend = None
+    if body.trend_id is not None:
+        selected_trend = get_active_trend_or_404(body.trend_id)
+
     try:
         enforce_generation_rate_limit(
             user_id=current_user.id,
@@ -561,7 +571,6 @@ async def generate_image(
         request_hash=request_hash,
     )
     logo_placement = _resolve_logo_placement(body)
-
     # ---------------------------------------------------------
     # 2. Validate logo requirements
     # ---------------------------------------------------------
@@ -576,7 +585,7 @@ async def generate_image(
         )
 
     # ---------------------------------------------------------
-    # 3. Validate product instruction usage
+    # 4. Validate product instruction usage
     # ---------------------------------------------------------
     if body.product_edit_instruction and body.product_asset_id is None:
         raise _error_response(
@@ -589,7 +598,7 @@ async def generate_image(
         )
 
     # ---------------------------------------------------------
-    # 4. Load product image if the user selected one
+    # 5. Load product image if the user selected one
     # ---------------------------------------------------------
     product_asset_reference = None
 
@@ -601,7 +610,7 @@ async def generate_image(
         )
 
     # ---------------------------------------------------------
-    # 5. Resolve managed provider configuration
+    # 6. Resolve managed provider configuration
     # ---------------------------------------------------------
     try:
         managed_config = resolve_generation_config()
@@ -613,7 +622,7 @@ async def generate_image(
         ) from exc
 
     # ---------------------------------------------------------
-    # 6. Resolve platform dimensions and context
+    # 7. Resolve platform dimensions and context
     # ---------------------------------------------------------
     preset_w, preset_h, _label = PLATFORM_PRESETS[body.platform_preset.value]
 
@@ -627,7 +636,7 @@ async def generate_image(
     )
 
     # ---------------------------------------------------------
-    # 7. Load the completed Brand Kit context
+    # 8. Load the completed Brand Kit context
     # ---------------------------------------------------------
     brand_context = _get_brand_kit_context(
         brand_id=brand_id,
@@ -635,7 +644,7 @@ async def generate_image(
     )
 
     # ---------------------------------------------------------
-    # 8. Resolve product image instructions
+    # 9. Resolve product image instructions
     # ---------------------------------------------------------
     product_edit_instruction = None
 
@@ -647,7 +656,7 @@ async def generate_image(
         )
 
     # ---------------------------------------------------------
-    # 9. Create the full prompt
+    # 10. Create the full prompt
     # ---------------------------------------------------------
     full_prompt = build_generation_prompt(
         brief=body.brief,
@@ -657,10 +666,11 @@ async def generate_image(
         brand_has_logo=brand_has_logo,
         logo_placement=logo_placement.value,
         product_edit_instruction=product_edit_instruction,
+        trend_context=selected_trend,
     )
 
     # ---------------------------------------------------------
-    # 10. Create a generation row before calling the provider
+    # 11. Create a generation row before calling the provider
     # ---------------------------------------------------------
     generation_id = uuid4()
     lock_acquired = False
@@ -720,6 +730,14 @@ async def generate_image(
                 else None
             ),
             "status": "pending",
+            "trend_id": (
+                    str(body.trend_id)
+                    if body.trend_id is not None
+                    else None
+                ),
+           "trend_snapshot": selected_trend,
+           "trend_applied": selected_trend is not None,
+
         }
     ).execute()
 
@@ -738,7 +756,7 @@ async def generate_image(
     )
 
     # ---------------------------------------------------------
-    # 11. Reserve credits, start usage, then run the provider
+    # 12. Reserve credits, start usage, then run the provider
     # ---------------------------------------------------------
     credit_reservation = None
     usage_timer = None
@@ -817,7 +835,7 @@ async def generate_image(
             ) from exc
 
         # -----------------------------------------------------
-        # 12. Resize generated image to the selected platform
+        # 13. Resize generated image to the selected platform
         # -----------------------------------------------------
         image_bytes = resize_to_preset(
             result.image_bytes,
@@ -826,7 +844,7 @@ async def generate_image(
         )
 
         # -----------------------------------------------------
-        # 13. Apply the brand logo watermark if requested
+        # 14. Apply the brand logo watermark if requested
         # -----------------------------------------------------
         if logo_placement != LogoPlacementEnum.none and brand_has_logo:
             logo_bytes = client.storage.from_(settings.STORAGE_BUCKET).download(
@@ -840,7 +858,7 @@ async def generate_image(
             )
 
         # -----------------------------------------------------
-        # 14. Save the generated image to Storage
+        # 15. Save the generated image to Storage
         # -----------------------------------------------------
         image_path = f"brands/{brand_id}/generations/{generation_id}.png"
 
@@ -854,7 +872,7 @@ async def generate_image(
         )
 
         # -----------------------------------------------------
-        # 15. Mark generation as succeeded
+        # 16. Mark generation as succeeded
         # -----------------------------------------------------
         now_iso = datetime.now(timezone.utc).isoformat()
 
@@ -901,7 +919,7 @@ async def generate_image(
         row = updated.data[0] if updated.data else None
 
         # -----------------------------------------------------
-        # 16. Refetch the saved row if update returned no data
+        # 17. Refetch the saved row if update returned no data
         # -----------------------------------------------------
         if row is None:
             try:
@@ -920,7 +938,7 @@ async def generate_image(
                 )
 
         # -----------------------------------------------------
-        # 17. Fallback response row
+        # 18. Fallback response row
         # -----------------------------------------------------
         if row is None:
             logger.error(
@@ -962,7 +980,7 @@ async def generate_image(
         )
 
     # ---------------------------------------------------------
-    # 18. Known provider failure
+    # 19. Known provider failure
     # ---------------------------------------------------------
     except ProviderError as exc:
         if quota_reserved:
@@ -1000,7 +1018,7 @@ async def generate_image(
         ) from exc
 
     # ---------------------------------------------------------
-    # 19. Unexpected failure
+    # 20. Unexpected failure
     # ---------------------------------------------------------
     except HTTPException as exc:
         # Already-shaped client errors (402 credits, 400 validation, ...)

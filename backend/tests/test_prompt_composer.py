@@ -596,3 +596,79 @@ def test_prompt_preserves_core_idea_exactly():
     )
 
     assert idea in prompt
+
+def test_selected_trend_is_included_in_prompt():
+    result = build_generation_prompt(
+        brief=GenerationBrief.model_validate(
+            VALID_BRIEF
+        ),
+        brand_context=None,
+        platform=SAMPLE_PLATFORM,
+        logo_mode="none",
+        brand_has_logo=False,
+        trend_context={
+            "name": "Founder-led authenticity",
+            "visual_style": [
+                "natural lighting",
+                "human presence",
+            ],
+            "content_patterns": [
+                "show the product in everyday use",
+            ],
+            "avoid_patterns": [
+                "avoid artificial studio composition",
+            ],
+        },
+    )
+
+    assert "=== TREND DIRECTION ===" in result
+    assert "Founder-led authenticity" in result
+    assert "natural lighting" in result
+    assert "human presence" in result
+    assert "show the product in everyday use" in result
+
+def test_prompt_does_not_include_trend_when_not_selected():
+    result = build_generation_prompt(
+        brief=GenerationBrief.model_validate(
+            VALID_BRIEF
+        ),
+        brand_context=None,
+        platform=SAMPLE_PLATFORM,
+        logo_mode="none",
+        brand_has_logo=False,
+        trend_context=None,
+    )
+
+    assert "=== TREND DIRECTION ===" not in result
+
+def test_selected_trend_does_not_change_user_text():
+    brief_data = {
+        **VALID_BRIEF,
+        "core_idea": (
+            "إطلاق قهوة باردة — Summer launch ☕ #صباح"
+        ),
+        "text_to_include": (
+            "جرّبها اليوم | Try it today"
+        ),
+        "optional_notes": (
+            "لا تغيّر النص العربي أو الإنجليزي"
+        ),
+    }
+
+    result = build_generation_prompt(
+        brief=GenerationBrief.model_validate(
+            brief_data
+        ),
+        brand_context=None,
+        platform=SAMPLE_PLATFORM,
+        logo_mode="none",
+        brand_has_logo=False,
+        trend_context={
+            "name": "Founder-led authenticity",
+            "visual_style": ["natural lighting"],
+        },
+    )
+
+    assert brief_data["core_idea"] in result
+    assert brief_data["text_to_include"] in result
+    assert brief_data["optional_notes"] in result
