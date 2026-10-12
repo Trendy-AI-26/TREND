@@ -32,6 +32,12 @@ export interface QuotaSummary {
   generation_reserved: number
   generation_consumed: number
   generation_remaining: number
+  daily_generation_limit: number
+  daily_generation_reserved: number
+  daily_generation_consumed: number
+  daily_generation_remaining: number
+  trial_ends_at: string | null
+  trial_active: boolean
 }
 
 export interface Brand {
