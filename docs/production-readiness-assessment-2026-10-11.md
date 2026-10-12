@@ -1,36 +1,39 @@
-# TREND production-readiness assessment — 2026-10-11
+# TREND production-readiness assessment — baseline 2026-10-11; status updated 2026-10-13
 
 ## Executive decision
 
-**Do not launch this revision for unrestricted public or company-funded AI
-generation yet.** The project has substantial product implementation, a
-meaningful automated test suite, and a frontend production build that succeeds.
-However, this checkout also has an urgent database RPC privilege concern,
-non-idempotent credit mutation paths, race-prone rate limiting, a broken Gemini
-provider path, current frontend dependency advisories, and conflicting
-deployment configurations.
+**Do not treat image generation as production-ready yet.** The repository has
+made real progress since the October 11 baseline: Render's `GENERATION_*` names
+are now supported, quota/credit protections and later database hardening are in
+the source, and the backend test suite passes. But the live user flow still
+returns HTTP 409, and the production database/deployment have not been verified
+against the merged source. The failure is now a concrete release blocker, not a
+reason to assume the provider key is wrong.
 
-The project could be made suitable for a restricted beta, but only after the
-P0/P1 work below has been completed and verified against the actual production
-database and deployment. A green unit-test run alone is not sufficient for
-billing, authorization, and cloud-runtime readiness.
+Do not ask one person to solve this alone. Start with the P0 Backend/DB and
+QA/DevOps tasks in the status update below. A passing unit-test run does not
+prove production schema, permissions, deployment, provider access, or the
+end-to-end generation path.
 
 ## Scope and limits
 
-Reviewed the tracked backend, frontend, database migrations, deployment
-manifests, tests, and the existing project-health audit. The current checkout
-is commit `aa53fd5` on `main`.
+The original assessment below was against commit `aa53fd5`. This revision
+rechecked the current GitHub `main` source at commit `4a21807` and the latest
+merged changes through October 13, 2026. It also reviewed current generation
+configuration, quota/lock/idempotency code, relevant migrations, GitHub PR/issue
+state, and the user's read-only Supabase query result (no `generation_locks`
+rows for the brand owner at query time).
 
-This was a source/configuration assessment. I did not connect to the deployed
-Supabase project, inspect live database ACLs or secrets, deploy or build a
-container image, exercise the live product in a browser, run load tests, or
-verify a live provider account. Therefore:
+This remains a source/configuration assessment. I did not inspect secret values,
+query production migration history/ACLs, retrieve Render's full application
+logs, or run a paid provider call. The user reports a failed generation and a
+409 in Render/Vercel; the response body and exact database exception are not
+available. Therefore:
 
-- Database ACL findings below are confirmed omissions in the tracked migration
-  history; the effective production grants still need an immediate read-only
-  privilege check.
-- Deployment findings describe checked-in manifests, not proof of the live
-  deployment’s environment variables or running commit.
+- Source-level migration/code fixes below do not prove the corresponding
+  migrations are applied or ACLs are correct in production.
+- Deployment findings describe checked-in manifests and user-reported settings,
+  not proof of Render's running commit or production migration state.
 - Dependency audit results are for the checked-in frontend lockfile and current
   registry advisories, not proof that a particular advisory is exploitable in
   the deployed configuration.
@@ -39,24 +42,83 @@ verify a live provider account. Therefore:
   and must be revalidated against this later checkout before treating them as
   current defects.
 
-## Verification performed
+## Current status update — 2026-10-13
+
+### Progress confirmed in GitHub and source
+
+| Area | Status now | Evidence / boundary |
+| --- | --- | --- |
+| Render image-generation environment names | **Implemented and merged** | PR [#71](https://github.com/Samarbal/TREND/pull/71), merge commit `3a5f019`; backend reads `GENERATION_PROVIDER`, `GENERATION_MODEL`, and `GENERATION_API_KEY` while retaining older names as fallbacks. This proves source support, not that Render is running the commit. |
+| Generation quotas, credits, and server-side controls | **Implemented in source; live state unverified** | PR #70 and migration `00033_free_trial_and_atomic_generation_limits.sql` add quota and rate-limit RPCs, and harden service-only RPC permissions. Production migration history and effective ACLs still need checking. |
+| Product-asset access and age-range request values | **Source fixes present** | Current migrations include product-assets RLS; frontend sends API enum values for age ranges. Verify against the deployed database before declaring production closure. |
+| Image generation end-to-end | **Blocked** | User sees HTTP `409 Conflict` from `/generate`. The read-only lock query returned no rows at query time, so an active lock was not found then. This does not establish the exact cause. |
+| Most likely 409 investigation target | **Unconfirmed, high-priority** | `_create_idempotency_record()` converts *any* insert exception into `409 GENERATION_IN_PROGRESS`. A failed insert (table/migration/permission/constraint/database issue) is therefore indistinguishable from a true duplicate. The exact underlying exception is currently hidden. |
+| Deployed Render revision and migration state | **Unknown** | The repo is on current `main`, but Render's deployed commit and Supabase migration ledger were not verified. |
+| Backend verification | **Passed, limited scope** | `345 passed` under Python 3.12 in an isolated environment; Ruff passed for the three changed Python files. This is not a full-repository Ruff run, production-Python certification, or live integration test. |
+| Frontend verification and CI | **Not re-run in this update / missing gate** | No current frontend test/build was run for this status update. No tracked GitHub Actions workflow is present. |
+| Team task queue | **Created in this update** | Five open GitHub Issues now track the 409, deployment/migration verification, idempotency, quota-policy decision, and CI. The only pre-existing open PR was #15, created September 1, stale and conflicting; it is unrelated to the current production blocker. |
+
+### What this means for the current incident
+
+The 409 is not evidence that OpenAI rejected the key. The source can emit this
+status from either the generation lock or the idempotency-record insertion
+path. Since the supplied read-only query found no lock row, the idempotency
+insert path is the first thing to investigate, but a transient lock that expired
+before the query cannot be ruled out. The backend currently hides the database
+exception behind the same 409 message, so logs and a targeted code fix are
+needed before anyone can give a definitive root cause.
+
+The Vercel route also does not forward an `Idempotency-Key` header, and the
+frontend hook does not create one; the backend therefore generates a fresh
+legacy key for each request. This is a reliability/idempotency gap to fix, but
+it does not by itself prove the cause of this 409.
+
+### Next work for the team (assign people by role; don't leave this with Samar alone)
+
+1. **P0 — Backend + Database ([issue #76](https://github.com/Samarbal/TREND/issues/76)):** diagnose the 409 at its source. Verify that
+   `idempotency_records` exists with the expected columns/unique constraint and
+   that the deployed service-role connection can insert/update it; check applied
+   migrations. Log a safe server-side exception class/code and request ID, and
+   return a distinct server error for database failure instead of labelling
+   every insert failure as `GENERATION_IN_PROGRESS`. Never log API keys or auth
+   headers. Add regression tests for genuine conflicts versus database errors.
+2. **P0 — QA/DevOps + Database ([issue #77](https://github.com/Samarbal/TREND/issues/77)):** confirm Render is running a commit containing
+   `3a5f019` or later, confirm migrations `00025` and `00033` are applied, and
+   run one controlled staging generation after task 1. Record status, error
+   code, request ID, generation ID, and provider request ID if a provider call
+   occurred; do not expose secrets or repeatedly retry paid requests.
+3. **P1 — Frontend + Backend ([issue #78](https://github.com/Samarbal/TREND/issues/78)):** create and propagate an `Idempotency-Key` per
+   user-initiated generation; reuse it only for retries of that same payload.
+   Add duplicate-submit protection and show the backend's actual error code.
+4. **P1 — Product Owner + Backend/DB ([issue #79](https://github.com/Samarbal/TREND/issues/79)):** reconcile the stale Sprint 4 plan
+   (10 monthly image credits) with current code (14-day trial, daily limit 3,
+   and a beta lifetime limit configured in the database). Write down the
+   intended entitlement before inviting more users.
+5. **P1 — QA/DevOps ([issue #80](https://github.com/Samarbal/TREND/issues/80)):** restore a real GitHub work queue, add CI for backend tests,
+   full Ruff, frontend tests/lint/build, and migration checks; then rerun the
+   frontend production dependency audit before calling the release ready.
+
+**Stop condition:** no more blind changes to Render secrets, no deleting lock or
+idempotency rows, and no repeated image retries until the database error is
+visible and the current deployed revision is confirmed.
+
+## Baseline verification recorded on 2026-10-11
 
 | Check | Result |
 | --- | --- |
-| Backend tests | **339 passed**, 6 warnings |
+| Backend tests | **339 passed**, 6 warnings at the original baseline; current re-run: **345 passed** |
 | Frontend tests | **31 passed** across 4 test files |
 | Frontend production build | **Passed**, including lint/type-check and static generation |
 | Frontend lint | **Passed**, with 5 `<img>` performance warnings |
-| Backend Ruff | **Failed: 160 findings**; includes one `F821` undefined-name finding in the Gemini provider |
+| Backend Ruff | Original baseline **160 findings**; this update only checked the three modified Python files and they passed |
 | Frontend production dependency audit | **1 critical, 11 high, 1 moderate** reported by `npm audit --omit=dev` against the npm registry |
 | CI workflow definitions | No tracked GitHub Actions or other CI workflow was found |
 | Production/container deployment | Not built or deployed as part of this review |
 
-The checked local backend interpreter is Python 3.11.9 while the container
-declares Python 3.13. The tests therefore do not by themselves certify the
-declared production Python runtime.
+The latest isolated test run used Python 3.12. It does not certify the actual
+Render runtime or a clean production build.
 
-## Release-blocking and high-priority findings
+## Original October 11 findings (historical detail; current status is above)
 
 ### P0 — Verify and close public execution on privileged credit RPCs
 
