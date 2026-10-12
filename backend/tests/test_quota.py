@@ -120,3 +120,38 @@ async def test_create_brand_returns_limit_error(monkeypatch):
 
     assert getattr(error.value, "status_code", None) == 403
     assert error.value.detail["error"]["code"] == "BRAND_LIMIT_REACHED"
+
+def test_trial_and_daily_quota_errors_are_stable(monkeypatch):
+    client = FakeClient(error=Exception("DAILY_GENERATION_LIMIT_REACHED"))
+    monkeypatch.setattr(quota, "get_service_client", lambda: client)
+    with pytest.raises(quota.QuotaError) as error:
+        quota.reserve_generation_slot(user_id="user-1", generation_id=uuid4())
+    assert error.value.code == "DAILY_GENERATION_LIMIT_REACHED"
+    assert "3" in error.value.message
+
+
+def test_quota_summary_includes_trial_and_daily_fields(monkeypatch):
+    client = FakeClient(
+        responses={
+            "get_generation_quota_summary": {
+                "plan": "beta",
+                "max_active_brands": 3,
+                "active_brands": 1,
+                "generation_limit": 42,
+                "generation_reserved": 0,
+                "generation_consumed": 4,
+                "generation_remaining": 38,
+                "daily_generation_limit": 3,
+                "daily_generation_reserved": 1,
+                "daily_generation_consumed": 2,
+                "daily_generation_remaining": 0,
+                "trial_ends_at": "2026-10-26T00:00:00+00:00",
+                "trial_active": True,
+            }
+        }
+    )
+    monkeypatch.setattr(quota, "get_service_client", lambda: client)
+    summary = quota.get_quota_summary(user_id="user-1")
+    assert summary.daily_generation_remaining == 0
+    assert summary.daily_generation_consumed == 2
+    assert summary.trial_active is True

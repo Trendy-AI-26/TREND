@@ -54,6 +54,8 @@ class Settings(BaseSettings):
     # --------------------------------------------------
 
     GENERATION_CREDIT_COST: int = 1
+    FREE_TRIAL_DAYS: int = 14
+    DAILY_GENERATION_LIMIT: int = 3
     CAPTION_CREDIT_COST: int = 0
 
     GENERATION_RATE_LIMIT: int = 5

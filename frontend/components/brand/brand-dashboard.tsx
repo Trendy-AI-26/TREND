@@ -61,9 +61,9 @@ export function BrandDashboard({ brandId }: BrandDashboardProps) {
   const savedRecentCount = recentItems.filter(
     (item) => item.status === 'succeeded' && Boolean(item.image_url),
   ).length
-  const generationLimit = quota?.generation_limit ?? 0
-  const generationConsumed = quota?.generation_consumed ?? 0
-  const generationRemaining = quota?.generation_remaining ?? 0
+  const generationLimit = quota?.daily_generation_limit ?? 3
+  const generationConsumed = quota?.daily_generation_consumed ?? 0
+  const generationRemaining = quota?.daily_generation_remaining ?? 0
   const usageProgress = generationLimit > 0
     ? Math.min(100, Math.round((generationConsumed / generationLimit) * 100))
     : 0

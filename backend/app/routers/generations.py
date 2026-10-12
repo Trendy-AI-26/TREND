@@ -769,7 +769,20 @@ async def generate_image(
             )
             quota_reserved = True
         except QuotaError as exc:
-            status_code = 402 if exc.code == "GENERATION_LIMIT_REACHED" else 503
+            # The generation row and idempotency record are created before the
+            # atomic quota RPC. Mark rejected requests terminal so an expired
+            # trial or exhausted daily quota cannot leave pending records.
+            try:
+                _mark_failed(generation_id, exc.code, exc.message)
+                client.table("idempotency_records").update(
+                    {"status": "failed", "response_status": 402 if exc.code != "TRIAL_EXPIRED" else 403}
+                ).eq("id", idempotency_record["id"]).execute()
+            except Exception:
+                logger.exception("Failed to finalize generation after quota rejection")
+            status_code = 402 if exc.code in {
+                "GENERATION_LIMIT_REACHED",
+                "DAILY_GENERATION_LIMIT_REACHED",
+            } else 403 if exc.code == "TRIAL_EXPIRED" else 503
             raise _error_response(status_code, exc.code, exc.message) from exc
 
         try:
