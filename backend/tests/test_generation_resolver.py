@@ -10,10 +10,13 @@ from app.services.generation_resolver import (
 def _set_managed(monkeypatch, *, provider, model, api_key):
     """Configure the server-side values the resolver actually reads.
 
-    The resolver prefers the MANAGED_* names (compatibility layer) and falls
-    back to IMAGE_PROVIDER / OPENAI_IMAGE_MODEL / OPENAI_API_KEY.
+    Render GENERATION_* names are cleared so these tests exercise the
+    MANAGED_* compatibility layer and the legacy settings fallbacks.
     """
 
+    monkeypatch.setattr(settings, "GENERATION_PROVIDER", None)
+    monkeypatch.setattr(settings, "GENERATION_MODEL", None)
+    monkeypatch.setattr(settings, "GENERATION_API_KEY", None)
     monkeypatch.setattr(settings, "MANAGED_PROVIDER", provider)
     monkeypatch.setattr(settings, "MANAGED_MODEL", model)
     monkeypatch.setattr(settings, "MANAGED_API_KEY", api_key)
@@ -115,8 +118,11 @@ def test_resolver_rejects_provider_with_spaces(monkeypatch):
 
 
 def test_resolver_falls_back_to_primary_settings(monkeypatch):
-    """With no MANAGED_* override, the primary settings are used."""
+    """With no GENERATION_* or MANAGED_* override, legacy settings are used."""
 
+    monkeypatch.setattr(settings, "GENERATION_PROVIDER", None)
+    monkeypatch.setattr(settings, "GENERATION_MODEL", None)
+    monkeypatch.setattr(settings, "GENERATION_API_KEY", None)
     monkeypatch.setattr(settings, "MANAGED_PROVIDER", None)
     monkeypatch.setattr(settings, "MANAGED_MODEL", None)
     monkeypatch.setattr(settings, "MANAGED_API_KEY", None)
@@ -128,6 +134,23 @@ def test_resolver_falls_back_to_primary_settings(monkeypatch):
 
     assert resolved.model == "gpt-image-2"
     assert resolved.api_key == "fallback-key"
+
+
+def test_resolver_prefers_render_generation_settings(monkeypatch):
+    """The exact names configured on Render resolve before legacy names."""
+
+    monkeypatch.setattr(settings, "GENERATION_PROVIDER", "openai")
+    monkeypatch.setattr(settings, "GENERATION_MODEL", "gpt-image-2")
+    monkeypatch.setattr(settings, "GENERATION_API_KEY", "render-server-key")
+    monkeypatch.setattr(settings, "MANAGED_PROVIDER", "gemini")
+    monkeypatch.setattr(settings, "MANAGED_MODEL", "legacy-model")
+    monkeypatch.setattr(settings, "MANAGED_API_KEY", "legacy-key")
+
+    resolved = resolve_generation_config()
+
+    assert resolved.provider == "openai"
+    assert resolved.model == "gpt-image-2"
+    assert resolved.api_key == "render-server-key"
 
 
 def test_caption_resolver_uses_text_model(managed_env, monkeypatch):
@@ -144,3 +167,21 @@ def test_caption_resolver_uses_text_model(managed_env, monkeypatch):
 
     assert resolved.model == "gpt-4o-mini"
     assert resolved.api_key == "shared-key"
+
+
+def test_caption_resolver_uses_render_key_but_not_image_model(monkeypatch):
+    """Render's shared key works for captions without using the image model."""
+
+    monkeypatch.setattr(settings, "GENERATION_PROVIDER", "openai")
+    monkeypatch.setattr(settings, "GENERATION_MODEL", "gpt-image-2")
+    monkeypatch.setattr(settings, "GENERATION_API_KEY", "render-server-key")
+    monkeypatch.setattr(settings, "MANAGED_PROVIDER", None)
+    monkeypatch.setattr(settings, "MANAGED_MODEL", None)
+    monkeypatch.setattr(settings, "MANAGED_API_KEY", None)
+    monkeypatch.setattr(settings, "OPENAI_TEXT_MODEL", "gpt-4o-mini")
+
+    resolved = resolve_caption_config()
+
+    assert resolved.provider == "openai"
+    assert resolved.model == "gpt-4o-mini"
+    assert resolved.api_key == "render-server-key"

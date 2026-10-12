@@ -39,6 +39,12 @@ class Settings(BaseSettings):
     # Managed AI configuration
     # --------------------------------------------------
 
+    # Render's existing deployment variables. GENERATION_MODEL is for images;
+    # the shared provider and API key can also be used for caption generation.
+    GENERATION_PROVIDER: str | None = None
+    GENERATION_API_KEY: str | None = None
+    GENERATION_MODEL: str | None = None
+
     # القيمة الافتراضية الفارغة مهمة للاختبارات.
     # في التشغيل الحقيقي يجب وضع المفتاح داخل backend/.env.
     OPENAI_API_KEY: str = ""
