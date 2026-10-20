@@ -1,7 +1,8 @@
 'use client'
 
-import { useRef, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { apiRequest, ApiError } from '@/lib/api'
+import { GenerationIntent } from '@/lib/generation-intent'
 import type { GenerationResponse, ProductAssetUploadResponse } from '@/types'
 import type { WizardGenerateRequest } from './build-request'
 
@@ -17,12 +18,18 @@ export function useWizardGeneration(brandId: string) {
 
   // نتذكر آخر صورة رفعناها، حتى ما نرفعها مرة ثانية لما يطلب "نسخة جديدة"
   const lastUpload = useRef<{ file: File; assetId: string } | null>(null)
+  const inFlight = useRef(false)
+  const intent = useMemo(() => new GenerationIntent(brandId), [brandId])
 
   async function run(
     productImage: File | null,
     buildRequest: (productAssetId: string | null) => WizardGenerateRequest,
+    newIntent = false,
   ) {
+    if (inFlight.current) return
+    inFlight.current = true
     try {
+      if (newIntent) intent.newIntent()
       // 1. نرفع صورة المنتج (إذا موجودة)
       let productAssetId: string | null = null
       if (productImage) {
@@ -43,9 +50,12 @@ export function useWizardGeneration(brandId: string) {
 
       // 2. نطلب التوليد
       setState({ status: 'generating' })
+      const body = buildRequest(productAssetId)
+      const key = intent.key(body)
       const result = await apiRequest<GenerationResponse>(`/brands/${brandId}/generate`, {
         method: 'POST',
-        body: JSON.stringify(buildRequest(productAssetId)),
+        headers: { 'Idempotency-Key': key },
+        body: JSON.stringify(body),
       })
 
       // 3. السيرفر ممكن يرجع نجاح بس التوليد نفسه فشل
@@ -58,6 +68,7 @@ export function useWizardGeneration(brandId: string) {
         return
       }
 
+      intent.succeed()
       setState({ status: 'success', result })
     } catch (err) {
       setState({
@@ -65,10 +76,13 @@ export function useWizardGeneration(brandId: string) {
         code: err instanceof ApiError ? err.code : 'UNKNOWN',
         message: err instanceof Error ? err.message : '',
       })
+    } finally {
+      inFlight.current = false
     }
   }
 
   function reset() {
+    intent.editAfterSuccess()
     setState({ status: 'idle' })
   }
 

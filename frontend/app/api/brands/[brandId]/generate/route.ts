@@ -17,6 +17,8 @@ export async function POST(
   }
   const auth = request.headers.get('authorization')
   if (auth) headers['Authorization'] = auth
+  const idempotencyKey = request.headers.get('idempotency-key')
+  if (idempotencyKey) headers['Idempotency-Key'] = idempotencyKey
 
   let upstream: Response
   try {

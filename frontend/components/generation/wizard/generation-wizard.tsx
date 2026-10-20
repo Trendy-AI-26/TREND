@@ -95,11 +95,11 @@ export function GenerationWizard({ brandId, brandName, brandHasLogo }: Generatio
     setStep((current) => Math.max(0, current - 1))
   }
 
-  function handleGenerate() {
+  function handleGenerate(newIntent = false) {
     if (!allComplete) return
     window.scrollTo({ top: 0, behavior: 'smooth' })
     void run(answers.style.productImage, (productAssetId) =>
-      buildGenerateRequest({ answers, brandHasLogo, locale, productAssetId }),
+      buildGenerateRequest({ answers, brandHasLogo, locale, productAssetId }), newIntent,
     )
   }
 
@@ -173,7 +173,7 @@ export function GenerationWizard({ brandId, brandName, brandHasLogo }: Generatio
           withCaption={answers.platform.withCaption}
           captionPreferences={{ include_cta: answers.idea.cta !== 'none' }}
           basedOn={basedOn}
-          onRegenerate={handleGenerate}
+          onRegenerate={() => handleGenerate(true)}
           onEditAnswers={handleEditAnswers}
         />
       )}
