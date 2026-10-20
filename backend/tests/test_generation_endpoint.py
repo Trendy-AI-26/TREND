@@ -63,6 +63,17 @@ class FakeQuery:
         self.table_name = table_name
         self.client = client
         self._eq_filters = {}
+        self._delete = False
+        self._select = False
+        self._single = False
+
+    def select(self, *_):
+        self._select = True
+        return self
+
+    def maybe_single(self):
+        self._single = True
+        return self
 
     def insert(self, data):
         data = data.copy()
@@ -76,8 +87,13 @@ class FakeQuery:
 
     def update(self, data):
         self.client.updated_rows[self.table_name].append(data)
-        if self.client.last_row:
-            self.client.last_row.update(data)
+        rows = self.client.inserted_rows[self.table_name]
+        if rows:
+            rows[-1].update(data)
+        return self
+
+    def delete(self):
+        self._delete = True
         return self
 
     def eq(self, field, value):
@@ -86,7 +102,16 @@ class FakeQuery:
 
     def execute(self):
         # Return a response containing the mock row
-        row = self.client.last_row or {}
+        rows = self.client.inserted_rows[self.table_name]
+        if self._select:
+            rows = [row for row in rows if all(row.get(k) == v for k, v in self._eq_filters.items())]
+            return MagicMock(data=(rows[0] if rows else None) if self._single else rows)
+        if self._delete:
+            self.client.inserted_rows[self.table_name] = [
+                row for row in rows if not all(row.get(k) == v for k, v in self._eq_filters.items())
+            ]
+            return MagicMock(data=[])
+        row = rows[-1] if rows else {}
         # Callers read row["id"] (e.g. the idempotency record) after an insert.
         if "id" not in row:
             row = {**row, "id": f"row-{self.table_name}"}
@@ -259,7 +284,7 @@ async def test_generate_endpoint_success_openai(
         lambda image_bytes, preset_w, preset_h: image_bytes,
     )
 
-    client = TestClient(app)
+    client = TestClient(app, headers={"Idempotency-Key": str(uuid4())})
     brand_id = uuid4()
 
     payload = {
@@ -280,7 +305,7 @@ async def test_generate_endpoint_success_openai(
 
 @pytest.mark.asyncio
 async def test_generate_endpoint_validation_error(override_auth, mock_helpers):
-    client = TestClient(app)
+    client = TestClient(app, headers={"Idempotency-Key": str(uuid4())})
     brand_id = uuid4()
 
     # Payload is missing required field 'brief'
@@ -309,7 +334,7 @@ async def test_generate_endpoint_logo_required_check(
         },
     )
 
-    client = TestClient(app)
+    client = TestClient(app, headers={"Idempotency-Key": str(uuid4())})
     brand_id = uuid4()
 
     # Requesting a watermark logo mode when brand has no logo
@@ -342,7 +367,7 @@ async def test_generate_endpoint_accepts_language_param(
     monkeypatch.setattr(generations, "openai_generate", provider_mock)
     monkeypatch.setattr(generations, "resize_to_preset", lambda img, w, h: img)
 
-    client = TestClient(app)
+    client = TestClient(app, headers={"Idempotency-Key": str(uuid4())})
     brand_id = uuid4()
 
     # نمرر brief يحتوي على language="en"
@@ -365,7 +390,7 @@ async def test_generate_endpoint_accepts_language_param(
 @pytest.mark.asyncio
 async def test_generate_endpoint_rejects_invalid_language(override_auth, mock_helpers):
     """When the brief contains an invalid language, the endpoint should return a 400 validation error."""
-    client = TestClient(app)
+    client = TestClient(app, headers={"Idempotency-Key": str(uuid4())})
     brand_id = uuid4()
 
     payload_bad_lang = {
@@ -401,7 +426,7 @@ async def test_generate_endpoint_persists_language(
     # The provider stub returns non-image bytes; skip real Pillow decoding.
     monkeypatch.setattr(generations, "resize_to_preset", lambda b, w, h: b)
 
-    client = TestClient(app)
+    client = TestClient(app, headers={"Idempotency-Key": str(uuid4())})
     brand_id = uuid4()
 
     payload = {
@@ -546,7 +571,7 @@ async def test_generate_passes_product_reference_to_provider(
         "product_edit_instruction": ("Place the product on a white background."),
     }
 
-    client = TestClient(app)
+    client = TestClient(app, headers={"Idempotency-Key": str(uuid4())})
     brand_id = uuid4()
 
     response = client.post(
@@ -571,6 +596,7 @@ def mock_credits_and_usage(monkeypatch):
         (),
         {
             "amount": 1,
+            "reservation_id": "test-receipt",
             "user_id": "user-123",
             "generation_id": "generation-123",
         },
@@ -643,7 +669,7 @@ def test_generation_returns_402_when_credits_are_missing(
         reject_reservation,
     )
 
-    client = TestClient(app)
+    client = TestClient(app, headers={"Idempotency-Key": str(uuid4())})
     brand_id = uuid4()
 
     payload = {
@@ -675,7 +701,8 @@ async def test_provider_failure_releases_credits(
 ):
     from app.services.providers.base import ProviderError
 
-    reservation = object()
+    from app.services.credits import CreditReservation
+    reservation = CreditReservation("test-receipt", "user-123", "unused", 1)
     release_calls = []
     quota_release_calls = []
 
@@ -714,7 +741,7 @@ async def test_provider_failure_releases_credits(
 
     async def failing_provider(**kwargs):
         raise ProviderError(
-            "PROVIDER_ERROR",
+            "INVALID_KEY",
             "Provider failed.",
         )
 
@@ -724,7 +751,7 @@ async def test_provider_failure_releases_credits(
         failing_provider,
     )
 
-    client = TestClient(app)
+    client = TestClient(app, headers={"Idempotency-Key": str(uuid4())})
     brand_id = uuid4()
 
     response = client.post(
@@ -737,7 +764,8 @@ async def test_provider_failure_releases_credits(
     )
 
     assert response.status_code == 502
-    assert release_calls == [reservation]
+    assert len(release_calls) == 1
+    assert release_calls[0].reservation_id == reservation.reservation_id
     assert len(quota_release_calls) == 1
 
 
@@ -783,7 +811,7 @@ def test_second_generation_is_rejected_when_lock_exists(
     monkeypatch.setattr(generations, "acquire_generation_lock", locked)
     monkeypatch.setattr(generations, "release_generation_lock", lambda **_: None)
 
-    client = TestClient(app)
+    client = TestClient(app, headers={"Idempotency-Key": str(uuid4())})
 
     response = client.post(
         f"/brands/{uuid4()}/generate",

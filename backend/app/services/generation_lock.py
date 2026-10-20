@@ -42,9 +42,17 @@ def acquire_generation_lock(
         if current_expiry > now:
             raise GenerationLockError("A generation is already in progress.")
 
+        previous = client.table("generations").select("status").eq(
+            "id", current["generation_id"]
+        ).maybe_single().execute()
+        if not previous or not previous.data or previous.data["status"] not in ("succeeded", "failed"):
+            raise GenerationLockError("The previous generation needs recovery.")
+
         client.table("generation_locks").delete().eq(
             "user_id",
             user_id,
+        ).eq("generation_id", current["generation_id"]).eq(
+            "expires_at", current["expires_at"]
         ).execute()
 
     try:
@@ -56,7 +64,9 @@ def acquire_generation_lock(
             }
         ).execute()
     except Exception as exc:
-        raise GenerationLockError("A generation is already in progress.") from exc
+        if getattr(exc, "code", None) == "23505":
+            raise GenerationLockError("A generation is already in progress.") from exc
+        raise
 
 
 def release_generation_lock(
