@@ -14,7 +14,6 @@ import {
     DialogHeader,
     DialogTitle,
 } from '@/components/ui/dialog'
-import { ErrorMessage } from '@/components/generation/error-message'
 import { useCaption } from '@/hooks/use-caption'
 import type { CaptionPreferences, TextLanguage } from '@/types'
 
@@ -161,10 +160,6 @@ export function CaptionPanel({
                                     {t('regenerate')}
                                 </Button>
                             </div>
-                        )}
-
-                        {state.status === 'error' && (
-                            <ErrorMessage code={state.code} message={state.message} brandId={brandId} />
                         )}
 
                         {draft && (

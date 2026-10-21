@@ -1333,5 +1333,54 @@
     "heading": "Your next brand starts with one idea",
     "subheading": "Join Trendy and turn your idea into a complete brand — strategy, identity, and publish-ready content, in a fraction of the time and effort.",
     "cta": "Start your trial now"
+  },
+  "errors": {
+    "generic": "An unexpected server error occurred. Please try again.",
+    "network": "Connection problem. Check your internet connection and try again.",
+    "codes": {
+      "VALIDATION_ERROR": "Some of the data you entered is invalid. Please review it and try again.",
+      "DATA_CONSTRAINT_VIOLATION": "The data could not be saved because it breaks a data rule.",
+      "BRAND_NOT_FOUND": "This brand no longer exists or you do not have access to it.",
+      "BRAND_LIMIT_REACHED": "You have reached the maximum number of brands for your plan.",
+      "DUPLICATE_BRAND_NAME": "You already have a brand with this name. Choose a different name.",
+      "LOGO_REQUIRED": "Upload a brand logo first to use this logo option.",
+      "PRODUCT_ASSET_REQUIRED": "Upload a product image first, then try again.",
+      "PRODUCT_ASSET_NOT_FOUND": "The product image could not be found. Upload it again.",
+      "RATE_LIMITED": "Too many requests. Wait a moment and try again.",
+      "GENERATION_IN_PROGRESS": "A design is already being generated. Wait for it to finish.",
+      "GENERATION_LIMIT_REACHED": "You have used all the generations available on your plan.",
+      "DAILY_GENERATION_LIMIT_REACHED": "You have reached today’s generation limit. Try again tomorrow.",
+      "TRIAL_EXPIRED": "Your free trial has ended. Upgrade to keep creating.",
+      "GENERATION_CONFIGURATION_ERROR": "The generation service is not set up correctly. Please contact support.",
+      "TIMEOUT": "The request took too long. Please try again.",
+      "BACKEND_UNREACHABLE": "Could not reach the service. Please try again in a moment.",
+      "STORAGE_DELETE_FAILED": "The file could not be deleted from storage. Please try again.",
+      "INTERNAL_ERROR": "An unexpected server error occurred. Please try again.",
+      "FILE_TOO_LARGE": "The file is too large. Choose a smaller one.",
+      "INVALID_FILE_TYPE": "This file type is not supported. Use a PNG, JPG, or WebP image.",
+      "INVALID_IMAGE": "The image could not be read. Choose a different image.",
+      "CONTENT_POLICY": "The request was blocked by the content policy. Rephrase your idea and try again.",
+      "GENERATION_NOT_FOUND": "This generation no longer exists.",
+      "FORBIDDEN": "You do not have permission to do this.",
+      "UNAUTHORIZED": "Your session has expired. Please sign in again."
+    }
+  },
+  "toasts": {
+    "kitSaved": "Brand kit saved",
+    "brandCreated": "Brand created",
+    "brandRenamed": "Brand name updated",
+    "brandDeleted": "Brand deleted",
+    "logoUploaded": "Logo uploaded",
+    "logoRemoved": "Logo removed",
+    "generationDeleted": "Generation deleted",
+    "captionReady": "Caption generated",
+    "productImageUploaded": "Product image uploaded"
+  },
+  "confirm": {
+    "confirm": "Confirm",
+    "cancel": "Cancel",
+    "unsavedTitle": "Leave without saving?",
+    "leave": "Leave page",
+    "stay": "Stay here"
   }
 }

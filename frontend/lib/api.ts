@@ -1,12 +1,15 @@
 export class ApiError extends Error {
   code: string
   requestId?: string
+  /** HTTP status of the failed response; 0 when no response was received (network failure). */
+  status: number
 
-  constructor(message: string, code: string, requestId?: string) {
+  constructor(message: string, code: string, requestId?: string, status = 0) {
     super(message)
     this.name = 'ApiError'
     this.code = code
     this.requestId = requestId
+    this.status = status
   }
 }
 
@@ -91,18 +94,28 @@ export async function apiRequest<T = unknown>(
   }
 
   // The session is an httpOnly cookie set by the backend; no token handling here.
-  const response = await fetch(`${getApiBase()}${endpoint}`, {
-    ...options,
-    headers,
-    credentials: 'include',
-  })
+  let response: Response
+  try {
+    response = await fetch(`${getApiBase()}${endpoint}`, {
+      ...options,
+      headers,
+      credentials: 'include',
+    })
+  } catch (err) {
+    // fetch rejects with a TypeError when no response arrives (offline, DNS, CORS...).
+    // Anything else (e.g. an AbortError from the caller's signal) is rethrown untouched.
+    if (err instanceof TypeError) {
+      throw new ApiError(err.message || 'Network error', 'NETWORK_ERROR', undefined, 0)
+    }
+    throw err
+  }
 
   if (response.status === 401 && redirectOn401) {
     if (typeof window !== 'undefined') {
       await logout()
       window.location.href = '/login'
     }
-    throw new ApiError('Unauthorized', 'UNAUTHORIZED')
+    throw new ApiError('Unauthorized', 'UNAUTHORIZED', undefined, response.status)
   }
 
   if (!response.ok) {
@@ -123,7 +136,7 @@ export async function apiRequest<T = unknown>(
         // JSON parse failed, use default message
       }
     }
-    throw new ApiError(message, code, requestId)
+    throw new ApiError(message, code, requestId, response.status)
   }
 
   if (

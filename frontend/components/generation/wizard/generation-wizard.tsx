@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useLocale, useTranslations } from 'next-intl'
-import { AlertCircle, ChevronLeft, ChevronRight } from 'lucide-react'
+import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { addGenerationNotification } from '@/hooks/use-notifications'
@@ -263,25 +263,7 @@ export function GenerationWizard({ brandId, brandName, brandHasLogo }: Generatio
             </div>
           </section>
 
-          {/* رسالة الخطأ إذا فشل التوليد */}
-          {generation.status === 'error' && (
-            <div
-              role="alert"
-              className="flex items-start gap-3 rounded-[12px] border border-destructive/30 bg-destructive/5 px-4 py-3.5"
-            >
-              <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-destructive" />
-              <div className="min-w-0">
-                <p className="text-[13.5px] font-bold text-destructive">{t('error_title')}</p>
-                <p className="mt-0.5 text-[12.5px] text-brand-headline/70">{t('error_generic')}</p>
-                {generation.message && (
-                  <p className="mt-1 break-words text-[11.5px] text-brand-headline/40" dir="auto">
-                    {generation.message}
-                  </p>
-                )}
-              </div>
-            </div>
-          )}
-
+          {/* خطأ التوليد يظهر كإشعار (toast) من use-wizard-generation */}
           <ReadyToGenerateCard
             completedSections={completedSections}
             totalSections={steps.length}

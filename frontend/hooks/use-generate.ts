@@ -1,7 +1,10 @@
 'use client'
 
 import { useState } from 'react'
+import { useTranslations } from 'next-intl'
+import { toast } from 'sonner'
 import { apiRequest, ApiError } from '@/lib/api'
+import { errorMessage } from '@/lib/errors'
 import type { GenerateRequest, GenerationResponse } from '@/types'
 
 export type GenerateState =
@@ -17,6 +20,7 @@ interface UseGenerateResult {
 }
 
 export function useGenerate(brandId: string): UseGenerateResult {
+  const te = useTranslations('errors')
   const [state, setState] = useState<GenerateState>({ status: 'idle' })
 
   async function generate(body: GenerateRequest) {
@@ -29,8 +33,8 @@ export function useGenerate(brandId: string): UseGenerateResult {
       setState({ status: 'success', result })
     } catch (err) {
       const code = err instanceof ApiError ? err.code : 'UNKNOWN'
-      const message =
-        err instanceof Error ? err.message : 'Something went wrong. Please try again.'
+      const message = errorMessage(err, te)
+      toast.error(message)
       setState({ status: 'error', code, message })
     }
   }

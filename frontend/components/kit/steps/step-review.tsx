@@ -17,7 +17,6 @@ interface StepReviewProps {
   brandName: string
   savedStatus: KitStatus
   isDirty: boolean
-  saveError: string | null
 }
 
 export function StepReview({
@@ -26,7 +25,6 @@ export function StepReview({
   brandName,
   savedStatus,
   isDirty,
-  saveError,
 }: StepReviewProps) {
   const t = useTranslations('components.kit.steps.step-review');
   const tIndustry = useTranslations('components.kit.steps.step-industry');
@@ -38,7 +36,7 @@ export function StepReview({
   if (!answers.audience || answers.audience.trim().length < 2) missingRequired.push(t('missing_audience'))
   if (!answers.colors || answers.colors.length === 0) missingRequired.push(t('missing_colors'))
 
-  const hasSaved = !isDirty && saveError === null && savedStatus !== 'not_started'
+  const hasSaved = !isDirty && savedStatus !== 'not_started'
   const industryLabel = answers.industry
     ? industryOptions.includes(answers.industry)
       ? tIndustry(answers.industry)
@@ -103,8 +101,6 @@ export function StepReview({
       {hasSaved && savedStatus === 'in_progress' && (
         <Notice variant="warning">{t('brand_kit_saved_in')}</Notice>
       )}
-
-      {saveError && <p className="text-[13px] text-destructive">{saveError}</p>}
     </div>
   )
 }

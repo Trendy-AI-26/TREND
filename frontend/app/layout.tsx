@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import localFont from "next/font/local";
-import { Toaster } from "@/components/ui/toaster";
+import { Toaster } from "@/components/ui/sonner";
+import { ConfirmProvider } from "@/components/ui/confirm-dialog";
 
 // خطوط محلية عبر npm — ما بتحتاج أي اتصال بـ Google وقت التشغيل
 import "@fontsource/poppins/500.css";
@@ -53,7 +54,7 @@ export default async function RootLayout({
     >
       <body className="font-sans antialiased">
         <NextIntlClientProvider messages={messages}>
-          {children}
+          <ConfirmProvider>{children}</ConfirmProvider>
           <Toaster />
         </NextIntlClientProvider>
       </body>

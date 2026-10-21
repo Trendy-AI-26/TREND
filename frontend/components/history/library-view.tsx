@@ -78,13 +78,11 @@ function LibraryRow({ item, brandId, onDelete }: { item: GenerationHistoryItem; 
     const tf = useTranslations('components.history.history-filters')
     const [dialogOpen, setDialogOpen] = useState(false)
     const [deleting, setDeleting] = useState(false)
-    const [deleteError, setDeleteError] = useState<string | null>(null)
     const success = item.status === 'succeeded' && Boolean(item.image_url)
     async function confirmDelete() {
-        setDeleting(true); setDeleteError(null)
+        setDeleting(true)
         const result = await onDelete(item.id)
         if (result.ok) setDialogOpen(false)
-        else setDeleteError(result.message ?? tc('failed_to_delete_try_again'))
         setDeleting(false)
     }
     return <>
@@ -104,6 +102,6 @@ function LibraryRow({ item, brandId, onDelete }: { item: GenerationHistoryItem; 
                 <button type="button" onClick={() => setDialogOpen(true)} aria-label={tc('delete')} className="inline-flex h-9 items-center justify-center rounded-lg border border-brand-accent/25 px-3 text-[12px] text-brand-headline/60 hover:border-red-300 hover:text-red-500"><Trash2 className="h-3.5 w-3.5" /><span className="sr-only">{tc('delete')}</span></button>
             </div>
         </article>
-        <DeleteGenerationDialog open={dialogOpen} onOpenChange={setDialogOpen} onConfirm={confirmDelete} loading={deleting} error={deleteError} />
+        <DeleteGenerationDialog open={dialogOpen} onOpenChange={setDialogOpen} onConfirm={confirmDelete} loading={deleting} />
     </>
 }

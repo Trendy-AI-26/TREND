@@ -10,7 +10,8 @@ import { LogoModeSelector } from '@/components/generation/logo-mode-selector'
 import { PresetSelector } from '@/components/generation/preset-selector'
 import { ProviderSelector } from '@/components/generation/provider-selector'
 import { CanvasStage } from '@/components/generation/canvas-stage'
-import { ErrorMessage } from '@/components/generation/error-message'
+import { toast } from 'sonner'
+import { errorMessage } from '@/lib/errors'
 import { Button } from '@/components/ui/button'
 import { downloadImageFile } from '@/lib/download'
 import { PLATFORM_PRESETS } from '@/lib/presets'
@@ -34,12 +35,12 @@ export function GeneratorForm({ brandId, brandName, brandHasLogo }: GeneratorFor
   const t = useTranslations('components.generation.generator-form');
   const tOpt = useTranslations('options');
   const tNotifications = useTranslations('notifications');
+  const te = useTranslations('errors');
   const [brief, setBrief] = useState<GenerationBrief>(EMPTY_GENERATION_BRIEF)
   const [briefReviewed, setBriefReviewed] = useState(false)
   const [preset, setPreset] = useState<PlatformPreset>('instagram_post')
   const [logoMode, setLogoMode] = useState<LogoMode>('none')
   const [downloading, setDownloading] = useState(false)
-  const [downloadError, setDownloadError] = useState<string | null>(null)
 
   const { state, generate, reset } = useGenerate(brandId)
   const notifiedGenerationRef = useRef<string | null>(null)
@@ -66,8 +67,6 @@ export function GeneratorForm({ brandId, brandName, brandHasLogo }: GeneratorFor
     event.preventDefault()
     if (generateDisabled) return
 
-    setDownloadError(null)
-
     await generate({
       brief,
       platform_preset: preset,
@@ -88,12 +87,11 @@ export function GeneratorForm({ brandId, brandName, brandHasLogo }: GeneratorFor
     if (!result.image_url || !result.download_filename) return
 
     setDownloading(true)
-    setDownloadError(null)
 
     try {
       await downloadImageFile(result.image_url, result.download_filename)
     } catch (err) {
-      setDownloadError(err instanceof Error ? err.message : t('download_failed_try_again'))
+      toast.error(errorMessage(err, te))
     } finally {
       setDownloading(false)
     }
@@ -163,10 +161,6 @@ export function GeneratorForm({ brandId, brandName, brandHasLogo }: GeneratorFor
                 <Sparkles className="h-4 w-4" />{t('generate2')}</>
             )}
           </Button>
-
-          {state.status === 'error' && (
-            <ErrorMessage code={state.code} message={state.message} brandId={brandId} />
-          )}
         </div>
       </form>
 
@@ -194,7 +188,6 @@ export function GeneratorForm({ brandId, brandName, brandHasLogo }: GeneratorFor
           </Button>
         </div>
 
-        {downloadError && <p className="text-[12px] text-destructive">{downloadError}</p>}
         <CaptionPanel
           key={result?.id ?? 'pending'}
           brandId={brandId}

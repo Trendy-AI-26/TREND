@@ -1,7 +1,10 @@
 'use client'
 
 import { useRef, useState } from 'react'
+import { useTranslations } from 'next-intl'
+import { toast } from 'sonner'
 import { apiRequest, ApiError } from '@/lib/api'
+import { errorMessage } from '@/lib/errors'
 import type { GenerationResponse, ProductAssetUploadResponse } from '@/types'
 import type { WizardGenerateRequest } from './build-request'
 
@@ -13,6 +16,7 @@ export type WizardGenerationState =
   | { status: 'error'; code: string; message: string }
 
 export function useWizardGeneration(brandId: string) {
+  const te = useTranslations('errors')
   const [state, setState] = useState<WizardGenerationState>({ status: 'idle' })
 
   // نتذكر آخر صورة رفعناها، حتى ما نرفعها مرة ثانية لما يطلب "نسخة جديدة"
@@ -50,20 +54,22 @@ export function useWizardGeneration(brandId: string) {
 
       // 3. السيرفر ممكن يرجع نجاح بس التوليد نفسه فشل
       if (result.status === 'failed' || !result.image_url) {
-        setState({
-          status: 'error',
-          code: result.error_code ?? 'GENERATION_FAILED',
-          message: result.error_message ?? '',
-        })
+        const code = result.error_code ?? 'GENERATION_FAILED'
+        // The stored provider message is not translated: only a known code is shown as-is.
+        const message = errorMessage({ code }, te)
+        toast.error(message)
+        setState({ status: 'error', code, message })
         return
       }
 
       setState({ status: 'success', result })
     } catch (err) {
+      const message = errorMessage(err, te)
+      toast.error(message)
       setState({
         status: 'error',
         code: err instanceof ApiError ? err.code : 'UNKNOWN',
-        message: err instanceof Error ? err.message : '',
+        message,
       })
     }
   }
