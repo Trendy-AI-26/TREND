@@ -489,6 +489,171 @@ def test_logout_clears_the_cookie(api, outbox):
     assert api.get("/auth/session").status_code == 401
 
 
+# ------------------------------------- AUTH_REQUIRE_EMAIL_VERIFICATION
+
+
+@pytest.fixture
+def no_verification(monkeypatch):
+    monkeypatch.setattr(settings, "AUTH_REQUIRE_EMAIL_VERIFICATION", False)
+
+
+def test_verification_is_required_by_default():
+    assert settings.AUTH_REQUIRE_EMAIL_VERIFICATION is True
+
+
+def test_signup_with_verification_required_sets_no_cookie_and_login_is_403(
+    api, repo, outbox, monkeypatch
+):
+    monkeypatch.setattr(settings, "AUTH_REQUIRE_EMAIL_VERIFICATION", True)
+
+    signup = _signup(api)
+    login = api.post("/auth/login", json={"email": EMAIL, "password": PASSWORD})
+
+    assert signup.status_code == 201
+    assert signup.json() == {"email": "person@example.com", "verification_required": True}
+    assert SESSION_COOKIE_NAME not in signup.cookies
+    assert "set-cookie" not in signup.headers
+    assert login.status_code == 403
+    assert login.json()["error"]["code"] == "EMAIL_NOT_VERIFIED"
+    assert SESSION_COOKIE_NAME not in login.cookies
+
+
+def test_signup_without_verification_logs_in_and_sends_nothing(
+    api, repo, outbox, no_verification
+):
+    response = _signup(api, full_name="  Test Person ")
+
+    assert response.status_code == 201
+    body = response.json()
+    assert body["email"] == "person@example.com"
+    assert body["verification_required"] is False
+    assert set(body["user"]) == {"id", "email", "full_name", "is_admin", "email_verified"}
+    assert body["user"]["email"] == "person@example.com"
+    assert body["user"]["full_name"] == "Test Person"
+    assert body["user"]["email_verified"] is False
+
+    set_cookie = response.headers["set-cookie"].lower()
+    assert f"{SESSION_COOKIE_NAME}=" in set_cookie
+    assert "httponly" in set_cookie
+    assert "samesite=lax" in set_cookie
+    assert f"max-age={settings.AUTH_SESSION_TTL_SECONDS}" in set_cookie
+
+    user = repo.get_user_by_email("person@example.com")
+    assert user["email_verified_at"] is None
+    assert user["password_hash"].startswith("$2")
+    assert outbox == []
+    assert repo.codes == []
+
+
+def test_signup_without_verification_cookie_works_on_session(api, no_verification):
+    _signup(api)
+
+    response = api.get("/auth/session")
+
+    assert response.status_code == 200
+    assert response.json()["user"]["email"] == "person@example.com"
+    assert response.json()["user"]["email_verified"] is False
+
+
+def test_signup_without_verification_still_validates_input(api, repo, no_verification):
+    assert _signup(api, password="short").json()["error"]["code"] == "VALIDATION_ERROR"
+    assert _signup(api, full_name="x").status_code == 400
+    assert _signup(api, email="not-an-email").status_code == 400
+    assert repo.users == {}
+
+
+def test_signup_without_verification_rejects_existing_unverified_email(
+    api, repo, outbox, no_verification
+):
+    first = _signup(api, password="first password")
+    api.cookies.clear()
+
+    second = _signup(api, password="second password")
+
+    assert first.status_code == 201
+    assert second.status_code == 409
+    assert second.json()["error"]["code"] == "EMAIL_ALREADY_REGISTERED"
+    assert SESSION_COOKIE_NAME not in second.cookies
+    assert "set-cookie" not in second.headers
+    assert len(repo.users) == 1
+    # The existing account keeps its password; nobody is logged into it.
+    assert auth_service.security.verify_password(
+        "first password", repo.get_user_by_email("person@example.com")["password_hash"]
+    )
+    assert outbox == []
+
+
+def test_signup_without_verification_rejects_existing_verified_email(
+    api, repo, outbox, monkeypatch
+):
+    _verified_user(api, outbox)
+    api.cookies.clear()
+    outbox.clear()
+    monkeypatch.setattr(settings, "AUTH_REQUIRE_EMAIL_VERIFICATION", False)
+
+    response = _signup(api, "person@example.com", password="another password")
+
+    assert response.status_code == 409
+    assert response.json()["error"]["code"] == "EMAIL_ALREADY_REGISTERED"
+    assert "set-cookie" not in response.headers
+    assert auth_service.security.verify_password(
+        PASSWORD, repo.get_user_by_email("person@example.com")["password_hash"]
+    )
+    assert outbox == []
+
+
+def test_signup_without_verification_race_is_a_409(api, repo, no_verification, monkeypatch):
+    def lose_race(email, password_hash, full_name):
+        raise db.IntegrityError("insert", {}, Exception("duplicate"))
+
+    monkeypatch.setattr(repo, "create_user", lose_race)
+
+    response = _signup(api)
+
+    assert response.status_code == 409
+    assert response.json()["error"]["code"] == "EMAIL_ALREADY_REGISTERED"
+
+
+def test_login_unverified_user_without_verification_gets_cookie_and_no_code(
+    api, repo, outbox, no_verification
+):
+    _signup(api)
+    api.cookies.clear()
+
+    response = api.post("/auth/login", json={"email": "PERSON@example.com", "password": PASSWORD})
+
+    assert response.status_code == 200
+    assert SESSION_COOKIE_NAME in response.cookies
+    assert response.json()["user"]["email_verified"] is False
+    assert outbox == []
+    assert repo.codes == []
+
+
+def test_login_wrong_password_without_verification_is_401(api, outbox, no_verification):
+    _signup(api)
+    api.cookies.clear()
+
+    response = api.post("/auth/login", json={"email": EMAIL, "password": "wrong password"})
+
+    assert response.status_code == 401
+    assert response.json()["error"]["code"] == "INVALID_CREDENTIALS"
+    assert SESSION_COOKIE_NAME not in response.cookies
+    assert outbox == []
+
+
+def test_switching_verification_back_on_blocks_unverified_login(api, outbox, monkeypatch):
+    monkeypatch.setattr(settings, "AUTH_REQUIRE_EMAIL_VERIFICATION", False)
+    _signup(api)
+    api.cookies.clear()
+    monkeypatch.setattr(settings, "AUTH_REQUIRE_EMAIL_VERIFICATION", True)
+
+    response = api.post("/auth/login", json={"email": EMAIL, "password": PASSWORD})
+
+    assert response.status_code == 403
+    assert response.json()["error"]["code"] == "EMAIL_NOT_VERIFIED"
+    assert len(outbox) == 1  # today's behaviour: a fresh code is emailed
+
+
 # ---------------------------------------------------------- password reset
 
 

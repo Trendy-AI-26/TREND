@@ -14,6 +14,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from app import db
+from app.config import settings
 from app.core import security
 from app.core.auth import is_admin_email
 from app.repositories import users as users_repo
@@ -176,6 +177,31 @@ def signup(email: str, password: str, full_name: str | None) -> PendingEmail | N
     return issue_code(user, security.PURPOSE_VERIFY_EMAIL)
 
 
+def signup_without_verification(
+    email: str, password: str, full_name: str | None
+) -> dict[str, Any]:
+    """Sign-up for AUTH_REQUIRE_EMAIL_VERIFICATION=false.
+
+    Creates the account (``email_verified_at`` stays NULL) and returns it so the
+    router can start a session. No code is issued and no email is sent. An
+    existing account, verified or not, is never touched or logged into.
+    """
+    email = normalize_email(email)
+    _check_password(password)
+    name = _normalize_full_name(full_name)
+
+    if users_repo.get_user_by_email(email) is not None:
+        raise AuthError(409, "EMAIL_ALREADY_REGISTERED", "This email is already registered.")
+
+    try:
+        return users_repo.create_user(email, security.hash_password(password), name)
+    except db.IntegrityError:
+        # Lost a race with a concurrent sign-up for the same address.
+        raise AuthError(
+            409, "EMAIL_ALREADY_REGISTERED", "This email is already registered."
+        ) from None
+
+
 def verify_email(email: str, code: str) -> dict[str, Any]:
     email = normalize_email(email)
     user = users_repo.get_user_by_email(email)
@@ -209,7 +235,7 @@ def login(email: str, password: str) -> dict[str, Any]:
         raise AuthError(401, "INVALID_CREDENTIALS", "Invalid email or password.")
     if not security.verify_password(password, user["password_hash"]):
         raise AuthError(401, "INVALID_CREDENTIALS", "Invalid email or password.")
-    if user["email_verified_at"] is None:
+    if user["email_verified_at"] is None and settings.AUTH_REQUIRE_EMAIL_VERIFICATION:
         raise AuthError(
             403,
             "EMAIL_NOT_VERIFIED",

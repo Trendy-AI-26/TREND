@@ -49,6 +49,10 @@ class Settings(BaseSettings):
     AUTH_JWT_SECRET: str = ""
     AUTH_SESSION_TTL_SECONDS: int = 604800
     AUTH_COOKIE_SECURE: bool = False
+    # True: sign-up needs the emailed code and login refuses unverified accounts.
+    # False: sign-up logs the user straight in and login skips the check (use
+    # only until email delivery works). No code or email is sent in that mode.
+    AUTH_REQUIRE_EMAIL_VERIFICATION: bool = True
 
     # Fernet key (urlsafe base64, 32 bytes) used to encrypt provider API keys.
     APP_ENCRYPTION_KEY: str = ""

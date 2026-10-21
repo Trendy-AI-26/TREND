@@ -22,14 +22,23 @@ export default function SignUpPage() {
     e.preventDefault()
     setError(null)
     setLoading(true)
+    let result: Awaited<ReturnType<typeof authApi.signup>>
     try {
-      await authApi.signup({ email, password, full_name: name })
+      result = await authApi.signup({ email, password, full_name: name })
     } catch (err) {
       setLoading(false)
       setError(authErrorMessage(err, t))
       return
     }
     setLoading(false)
+
+    // Email verification is switched off on the server: it already set the
+    // session cookie, so go straight in.
+    if (result.verification_required === false) {
+      router.push('/dashboard')
+      router.refresh()
+      return
+    }
 
     // The backend e-mails a 6-digit code; the user confirms it on /verify-code.
     router.push(`/verify-code?email=${encodeURIComponent(email)}&purpose=verify_email`)

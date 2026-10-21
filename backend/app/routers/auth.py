@@ -98,13 +98,33 @@ def _set_session_cookie(response: Response, user_id: str, email: str) -> None:
 
 
 @router.post("/signup", status_code=status.HTTP_201_CREATED)
-async def signup(body: SignupRequest):
+async def signup(body: SignupRequest, response: Response):
+    email = auth_service.normalize_email(body.email)
+
+    if not settings.AUTH_REQUIRE_EMAIL_VERIFICATION:
+        # Happy path without email: create the account and start a session.
+        try:
+            user = await _run(
+                auth_service.signup_without_verification,
+                body.email,
+                body.password,
+                body.full_name,
+            )
+        except AuthError as exc:
+            raise _to_http_error(exc) from exc
+        _set_session_cookie(response, str(user["id"]), user["email"])
+        return {
+            "email": email,
+            "verification_required": False,
+            "user": auth_service.public_user(user),
+        }
+
     try:
         pending = await _run(auth_service.signup, body.email, body.password, body.full_name)
     except AuthError as exc:
         raise _to_http_error(exc) from exc
     await _send(pending)
-    return {"email": auth_service.normalize_email(body.email), "verification_required": True}
+    return {"email": email, "verification_required": True}
 
 
 @router.post("/verify-email")

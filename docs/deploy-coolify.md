@@ -50,6 +50,7 @@ Every editable variable in the production manifest is listed below. Variables wi
 | `PRODUCT_ASSET_MAX_BYTES` | `10485760` |
 | `AUTH_JWT_SECRET` | Required random secret; same environment reaches backend and Next middleware; never use a NEXT_PUBLIC prefix |
 | `AUTH_SESSION_TTL_SECONDS` | `604800` (seven days) |
+| `AUTH_REQUIRE_EMAIL_VERIFICATION` | `true` (default) requires the emailed code at sign-up and login; `false` = instant sign-up/login without email (use until SMTP works). Switching back to `true` asks unverified users to verify on their next login |
 | `APP_ENCRYPTION_KEY` | Required generated Fernet key, not an arbitrary password |
 | `ADMIN_EMAILS` | Comma-separated admin addresses, compared case-insensitively |
 | `CORS_ORIGINS` | Required exact app origin, e.g. `https://app.example.com` (no :3000); comma-separated if several |

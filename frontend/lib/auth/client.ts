@@ -24,7 +24,7 @@ function post<T>(path: string, body?: unknown): Promise<T> {
 
 export const authApi = {
   signup: (input: { email: string; password: string; full_name?: string }) =>
-    post<{ email: string; verification_required: boolean }>('/signup', input),
+    post<{ email: string; verification_required: boolean; user?: AuthUser }>('/signup', input),
   verifyEmail: (input: { email: string; code: string }) =>
     post<{ user: AuthUser }>('/verify-email', input),
   resendCode: (input: { email: string; purpose: CodePurpose }) =>
