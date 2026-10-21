@@ -33,9 +33,6 @@ const geistMono = localFont({
 export const metadata: Metadata = {
   title: "TRENDY AI",
   description: "Arabic-first brand studio for platform-ready visual content",
-  icons: {
-    icon: '/trendy_logo.png',
-  },
 };
 
 export default async function RootLayout({
