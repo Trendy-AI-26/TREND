@@ -2,18 +2,21 @@
 import createNextIntlPlugin from 'next-intl/plugin';
 
 const withNextIntl = createNextIntlPlugin('./i18n/request.ts');
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+// Public base URL of the MinIO/S3 bucket host (e.g. https://s3.example.com).
+// The backend returns image URLs like `{base}/{bucket}/{path}`.
+const storageUrl = process.env.NEXT_PUBLIC_STORAGE_PUBLIC_URL;
 const backendUrl = process.env.NEXT_SERVER_API_URL || 'http://127.0.0.1:8000';
 const remotePatterns = [];
 
-if (supabaseUrl) {
-  const { protocol, hostname, port } = new URL(supabaseUrl);
+if (storageUrl) {
+  const { protocol, hostname, port, pathname } = new URL(storageUrl);
+  const basePath = pathname.replace(/\/+$/, '');
 
   remotePatterns.push({
     protocol: protocol.replace(':', ''),
     hostname,
     port,
-    pathname: '/storage/v1/object/public/**',
+    pathname: `${basePath}/**`,
   });
 }
 

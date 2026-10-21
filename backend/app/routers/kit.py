@@ -4,8 +4,8 @@ from uuid import UUID, uuid4
 from fastapi import APIRouter, Depends, HTTPException
 
 from app.core.auth import User, get_current_user
-from app.core.supabase import get_service_client
 from app.models.kit import KitAnswers, UpsertKitRequest, KitResponse, KitStatusEnum
+from app.repositories import brands as brand_repo
 from app.services.kit_summary import derive_status, derive_summary
 
 router = APIRouter(prefix="/brands/{brand_id}/kit", tags=["brand-kit"])
@@ -19,18 +19,10 @@ def _error_response(status_code: int, code: str, message: str) -> HTTPException:
 
 
 def _get_brand_or_404(brand_id: UUID, user_id: str) -> dict:
-    client = get_service_client()
-    result = (
-        client.table("brands")
-        .select("*")
-        .eq("id", str(brand_id))
-        .eq("owner_user_id", user_id)
-        .maybe_single()
-        .execute()
-    )
-    if result is None or result.data is None:
+    brand = brand_repo.get_owned_brand(brand_id, user_id)
+    if brand is None:
         raise _error_response(404, "BRAND_NOT_FOUND", "Brand not found")
-    return result.data
+    return brand
 
 
 def _empty_answers() -> KitAnswers:
@@ -71,15 +63,7 @@ def _row_to_response(brand: dict, row: dict | None) -> KitResponse:
 @router.get("", response_model=KitResponse)
 def get_kit(brand_id: UUID, current_user: User = Depends(get_current_user)):
     brand = _get_brand_or_404(brand_id, current_user.id)
-    client = get_service_client()
-    result = (
-        client.table("brand_kits")
-        .select("*")
-        .eq("brand_id", str(brand_id))
-        .maybe_single()
-        .execute()
-    )
-    row = result.data if result is not None else None
+    row = brand_repo.get_kit(brand_id)
     return _row_to_response(brand, row)
 
 
@@ -90,29 +74,13 @@ async def upsert_kit(
     current_user: User = Depends(get_current_user),
 ):
     brand = _get_brand_or_404(brand_id, current_user.id)
-    client = get_service_client()
-
-    existing_result = (
-        client.table("brand_kits")
-        .select("status, completed_at")
-        .eq("brand_id", str(brand_id))
-        .maybe_single()
-        .execute()
-    )
-    existing = existing_result.data if existing_result is not None else None
+    existing = brand_repo.get_kit_state(brand_id)
 
     a = body.answers
     if a.product_asset_id is not None:
-        asset_result = (
-            client.table("product_assets")
-            .select("id")
-            .eq("id", str(a.product_asset_id))
-            .eq("brand_id", str(brand_id))
-            .eq("owner_user_id", brand["owner_user_id"])
-            .maybe_single()
-            .execute()
-        )
-        if asset_result is None or asset_result.data is None:
+        if not brand_repo.product_asset_exists(
+            a.product_asset_id, brand_id, brand["owner_user_id"]
+        ):
             raise _error_response(404, "PRODUCT_ASSET_NOT_FOUND", "Product image not found")
 
     new_status = derive_status(
@@ -156,10 +124,5 @@ async def upsert_kit(
         "status": new_status.value,
         "completed_at": completed_at,
     }
-    result = (
-        client.table("brand_kits")
-        .upsert(payload, on_conflict="brand_id")
-        .execute()
-    )
-    row = result.data[0] if result.data else None
+    row = brand_repo.upsert_kit(payload)
     return _row_to_response(brand, row)

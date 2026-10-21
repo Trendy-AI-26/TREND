@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 from uuid import UUID
-from app.core.supabase import get_service_client
+from app import db
 
 FREE_TRIAL_DAYS = 14
 DAILY_GENERATION_LIMIT = 3
@@ -30,8 +30,10 @@ class QuotaSummary:
     trial_ends_at: datetime | None = None
     trial_active: bool = True
 
-def _rpc_data(response: Any) -> Any:
-    data = getattr(response, "data", None)
+def _call(sql: str, params: dict[str, Any]) -> Any:
+    """Run ``SELECT <plpgsql function>(...) AS result`` and return the value."""
+    row = db.fetch_one(sql, params)
+    data = None if row is None else row.get("result")
     if data is None:
         raise QuotaError("QUOTA_RPC_EMPTY_RESPONSE", "Quota operation returned no data.")
     return data[0] if isinstance(data, list) and data else data
@@ -52,10 +54,18 @@ def _map_error(exc: Exception) -> QuotaError:
         return QuotaError("GENERATION_QUOTA_RESERVATION_EXISTS", "This generation quota was already reserved.")
     return QuotaError("QUOTA_OPERATION_FAILED", "The quota operation failed.")
 
+def _slot_call(function: str, user_id: str, generation_id: UUID) -> None:
+    db.fetch_one(
+        f"SELECT {function}(CAST(:p_user_id AS uuid), CAST(:p_generation_id AS uuid)) AS result",
+        {"p_user_id": user_id, "p_generation_id": str(generation_id)},
+    )
+
 def create_brand_if_allowed(*, user_id: str, name: str) -> dict:
     try:
-        response = get_service_client().rpc("create_brand_if_allowed", {"p_user_id": user_id, "p_name": name}).execute()
-        return _rpc_data(response)
+        return _call(
+            "SELECT create_brand_if_allowed(CAST(:p_user_id AS uuid), CAST(:p_name AS text)) AS result",
+            {"p_user_id": user_id, "p_name": name},
+        )
     except QuotaError:
         raise
     except Exception as exc:
@@ -63,26 +73,28 @@ def create_brand_if_allowed(*, user_id: str, name: str) -> dict:
 
 def reserve_generation_slot(*, user_id: str, generation_id: UUID) -> None:
     try:
-        get_service_client().rpc("reserve_generation_slot", {"p_user_id": user_id, "p_generation_id": str(generation_id)}).execute()
+        _slot_call("reserve_generation_slot", user_id, generation_id)
     except Exception as exc:
         raise _map_error(exc) from exc
 
 def commit_generation_slot(*, user_id: str, generation_id: UUID) -> None:
     try:
-        get_service_client().rpc("commit_generation_slot", {"p_user_id": user_id, "p_generation_id": str(generation_id)}).execute()
+        _slot_call("commit_generation_slot", user_id, generation_id)
     except Exception as exc:
         raise _map_error(exc) from exc
 
 def release_generation_slot(*, user_id: str, generation_id: UUID) -> None:
     try:
-        get_service_client().rpc("release_generation_slot", {"p_user_id": user_id, "p_generation_id": str(generation_id)}).execute()
+        _slot_call("release_generation_slot", user_id, generation_id)
     except Exception as exc:
         raise _map_error(exc) from exc
 
 def get_quota_summary(*, user_id: str) -> QuotaSummary:
     try:
-        response = get_service_client().rpc("get_generation_quota_summary", {"p_user_id": user_id}).execute()
-        data = _rpc_data(response)
+        data = _call(
+            "SELECT get_generation_quota_summary(CAST(:p_user_id AS uuid)) AS result",
+            {"p_user_id": user_id},
+        )
         trial_ends_at = data.get("trial_ends_at")
         if isinstance(trial_ends_at, str):
             trial_ends_at = datetime.fromisoformat(trial_ends_at.replace("Z", "+00:00"))

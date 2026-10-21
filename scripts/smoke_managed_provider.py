@@ -1,8 +1,8 @@
 """Manual Sprint 4 provider smoke test.
 
 Run from backend/:
-    python scripts/smoke_managed_provider.py --skip-storage
-    python scripts/smoke_managed_provider.py
+    python ../scripts/smoke_managed_provider.py --skip-storage
+    python ../scripts/smoke_managed_provider.py
 
 This script is intentionally not part of the normal pytest suite. It calls
 external providers and may consume API credits. It never prints API keys.
@@ -17,16 +17,15 @@ import sys
 import uuid
 from pathlib import Path
 from typing import Any
-from urllib.parse import urljoin
 
 import httpx
 from dotenv import load_dotenv
 from PIL import Image
-from supabase import ClientOptions, create_client
 
 
-BACKEND_DIR = Path(__file__).resolve().parents[1]
-PROJECT_DIR = BACKEND_DIR.parent
+PROJECT_DIR = Path(__file__).resolve().parents[1]
+BACKEND_DIR = PROJECT_DIR / "backend"
+sys.path.insert(0, str(BACKEND_DIR))
 OUTPUT_DIR = BACKEND_DIR / "smoke-test-output"
 IMAGE_OUTPUT = OUTPUT_DIR / "managed-image.png"
 REPORT_OUTPUT = OUTPUT_DIR / "managed-provider-report.txt"
@@ -206,29 +205,14 @@ def generate_caption(config: dict[str, Any]) -> tuple[str, str | None]:
 
 def storage_check(image_bytes: bytes) -> tuple[str, str]:
     """Upload an isolated temporary object, verify signed URL, then remove it."""
-    supabase_url = required("SUPABASE_URL")
-    supabase_secret = required("SUPABASE_SECRET_KEY")
+    from app.core import storage
+
     bucket = optional("STORAGE_BUCKET", "brand-assets")
     path = f"smoke-tests/{uuid.uuid4()}/managed-image.png"
 
-    client = create_client(
-        supabase_url,
-        supabase_secret,
-        options=ClientOptions(postgrest_client_timeout=30, storage_client_timeout=60),
-    )
-    storage = client.storage.from_(bucket)
-
     try:
-        storage.upload(
-            path,
-            image_bytes,
-            {"content-type": "image/png", "upsert": "false"},
-        )
-
-        signed = storage.create_signed_url(path, 300)
-        signed_url = signed.get("signedURL") or signed.get("signedUrl") or signed.get("signed_url")
-        if not signed_url:
-            raise RuntimeError(f"Storage returned no signed URL: {signed}")
+        storage.upload(bucket, path, image_bytes, "image/png", upsert=False)
+        signed_url = storage.signed_url(bucket, path, 300)
 
         with httpx.Client(timeout=30.0) as http:
             downloaded = http.get(signed_url)
@@ -240,7 +224,7 @@ def storage_check(image_bytes: bytes) -> tuple[str, str]:
         return bucket, path
     finally:
         try:
-            storage.remove([path])
+            storage.remove(bucket, [path])
         except Exception as cleanup_error:
             print(f"WARNING: cleanup failed for {bucket}/{path}: {cleanup_error}")
 
@@ -255,7 +239,7 @@ def main() -> int:
     parser.add_argument(
         "--skip-storage",
         action="store_true",
-        help="Do not upload to Supabase Storage; image and caption checks still run.",
+        help="Do not upload to S3 storage; image and caption checks still run.",
     )
     args = parser.parse_args()
 

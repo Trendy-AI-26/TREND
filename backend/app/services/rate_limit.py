@@ -1,6 +1,6 @@
 from __future__ import annotations
 from datetime import datetime, timedelta, timezone
-from app.core.supabase import get_service_client
+from app import db
 
 class RateLimitExceeded(RuntimeError):
     pass
@@ -13,15 +13,17 @@ def check_generation_rate_limit(*, user_id: str, limit: int = 5, window_seconds:
     elapsed_seconds = int((now - epoch).total_seconds())
     window_start = epoch + timedelta(seconds=elapsed_seconds - elapsed_seconds % window_seconds)
     try:
-        get_service_client().rpc(
-            "check_generation_rate_limit",
+        db.fetch_one(
+            "SELECT check_generation_rate_limit("
+            "CAST(:p_user_id AS uuid), CAST(:p_bucket AS text), "
+            "CAST(:p_limit AS integer), CAST(:p_window_started_at AS timestamptz)) AS result",
             {
                 "p_user_id": user_id,
                 "p_bucket": "image_generation",
                 "p_limit": limit,
-                "p_window_started_at": window_start.isoformat(),
+                "p_window_started_at": window_start,
             },
-        ).execute()
+        )
     except Exception as exc:
         if "RATE_LIMIT_EXCEEDED" in str(exc).upper():
             raise RateLimitExceeded("Generation rate limit exceeded.") from exc

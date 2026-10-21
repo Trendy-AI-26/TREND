@@ -5,9 +5,11 @@ from fastapi import APIRouter, Depends, HTTPException, status
 
 
 from app.config import settings
+from app.core import storage
 from app.core.auth import User, get_current_user
-from app.core.supabase import get_service_client
 from app.models.generation import PreviewBriefRequest
+from app.repositories import brands as brand_repo
+from app.repositories import generations as gen_repo
 from app.services.brief_preview import build_creative_direction
 
 logger = logging.getLogger(__name__)
@@ -28,43 +30,24 @@ def _build_logo_url(logo_path: str | None) -> str | None:
     if not logo_path:
         return None
 
-    return (
-        f"{settings.SUPABASE_URL}/storage/v1/object/public/"
-        f"{settings.STORAGE_BUCKET}/{logo_path}"
-    )
+    return storage.public_url(settings.STORAGE_BUCKET, logo_path)
 
 
 def _get_brand_or_404(brand_id: UUID, user_id: str) -> dict:
-    client = get_service_client()
-    result = (
-        client.table("brands")
-        .select("*")
-        .eq("id", str(brand_id))
-        .eq("owner_user_id", user_id)
-        .maybe_single()
-        .execute()
-    )
+    brand = brand_repo.get_owned_brand(brand_id, user_id)
 
-    if result is None or result.data is None:
+    if brand is None:
         raise _error_response(404, "BRAND_NOT_FOUND", "Brand not found")
 
-    return result.data
+    return brand
 
 
 def _get_brand_kit_context(brand_id: UUID, brand_name: str) -> dict | None:
-    client = get_service_client()
-    result = (
-        client.table("brand_kits")
-        .select("tagline, tone, audience, colors, avoid_words, status")
-        .eq("brand_id", str(brand_id))
-        .maybe_single()
-        .execute()
-    )
+    row = brand_repo.get_kit(brand_id)
 
-    if result is None or result.data is None:
+    if row is None:
         return None
 
-    row = result.data
     if row.get("status") != "complete":
         return None
 
@@ -79,19 +62,7 @@ def _get_brand_kit_context(brand_id: UUID, brand_name: str) -> dict | None:
 
 
 def _get_kit_status(brand_id: str) -> str:
-    client = get_service_client()
-    result = (
-        client.table("brand_kits")
-        .select("status")
-        .eq("brand_id", brand_id)
-        .maybe_single()
-        .execute()
-    )
-
-    if result is None or result.data is None:
-        return "not_started"
-
-    return result.data.get("status", "not_started")
+    return brand_repo.get_kit_status(brand_id) or "not_started"
 
 
 @router.post("/brands/{brand_id}/preview-brief")
@@ -134,22 +105,11 @@ async def get_brand_preview(
 ):
     brand = _get_brand_or_404(brand_id, current_user.id)
 
-    client = get_service_client()
-    latest_generation = (
-        client.table("generations")
-        .select("id, image_path, status, created_at")
-        .eq("brand_id", str(brand_id))
-        .order("created_at", desc=True)
-        .limit(1)
-        .execute()
-    )
-
-    generation = (latest_generation.data or [{}])[0]
+    generation = gen_repo.latest_for_brand(brand_id) or {}
     latest_image_url = None
     if generation.get("image_path"):
-        latest_image_url = (
-            f"{settings.SUPABASE_URL}/storage/v1/object/public/"
-            f"{settings.STORAGE_BUCKET}/{generation['image_path']}"
+        latest_image_url = storage.public_url(
+            settings.STORAGE_BUCKET, generation["image_path"]
         )
 
     return {
@@ -173,30 +133,18 @@ async def get_latest_generation_preview(
 ):
     _get_brand_or_404(brand_id, current_user.id)
 
-    client = get_service_client()
-    result = (
-        client.table("generations")
-        .select("id, image_path, status, created_at, prompt")
-        .eq("brand_id", str(brand_id))
-        .order("created_at", desc=True)
-        .limit(1)
-        .execute()
-    )
+    row = gen_repo.latest_for_brand(brand_id)
 
-    if not result.data:
+    if not row:
         raise _error_response(
             status.HTTP_404_NOT_FOUND,
             "GENERATION_NOT_FOUND",
             "No generation found for this brand",
         )
 
-    row = result.data[0]
     image_url = None
     if row.get("image_path"):
-        image_url = (
-            f"{settings.SUPABASE_URL}/storage/v1/object/public/"
-            f"{settings.STORAGE_BUCKET}/{row['image_path']}"
-        )
+        image_url = storage.public_url(settings.STORAGE_BUCKET, row["image_path"])
 
     return {
         "id": row["id"],

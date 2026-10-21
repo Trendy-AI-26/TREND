@@ -3,7 +3,7 @@ from uuid import uuid4
 from fastapi import APIRouter, Depends, HTTPException
 
 from app.core.auth import get_current_admin_user
-from app.core.supabase import get_service_client
+from app.repositories import admin as admin_repo
 from app.models.admin import (
     AdminBrandListItem,
     AdminBrandsPage,
@@ -69,26 +69,17 @@ def _to_stats_response(row: dict) -> AdminStatsResponse:
 
 @router.get("/stats", response_model=AdminStatsResponse)
 async def get_admin_stats() -> AdminStatsResponse:
-    result = get_service_client().table("admin_stats").select("*").single().execute()
-    return _to_stats_response(result.data)
+    return _to_stats_response(admin_repo.get_stats())
 
 
 @router.get("/brands", response_model=AdminBrandsPage)
 async def list_admin_brands(page: int = 1, per_page: int = 24) -> AdminBrandsPage:
     start, end = _brands_range(page, per_page)
-    result = (
-        get_service_client()
-        .table("admin_brand_overview")
-        .select("*", count="exact")
-        .order("created_at", desc=True)
-        .order("id", desc=True)
-        .range(start, end)
-        .execute()
-    )
+    rows, total = admin_repo.list_brands(start, end - start + 1)
 
     return AdminBrandsPage(
-        items=[AdminBrandListItem(**row) for row in (result.data or [])],
+        items=[AdminBrandListItem(**row) for row in rows],
         page=page,
         per_page=per_page,
-        total=result.count or 0,
+        total=total,
     )

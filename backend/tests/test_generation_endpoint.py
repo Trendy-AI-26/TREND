@@ -1,10 +1,8 @@
-from urllib import response
-
 from app.services.providers.base import ReferenceImage
 import pytest
 from collections import defaultdict
-from uuid import UUID, uuid4
-from unittest.mock import AsyncMock, MagicMock
+from uuid import uuid4
+from unittest.mock import AsyncMock
 from fastapi.testclient import TestClient
 
 from app.main import app
@@ -13,8 +11,6 @@ from app.routers import generations
 from app.models.generation import (
     GenerateRequest,
     ProviderEnum,
-    PlatformPresetEnum,
-    LogoModeEnum,
 )
 
 from pydantic import ValidationError
@@ -37,80 +33,88 @@ VALID_BRIEF = {
 }
 
 
-# Fake objects for Supabase mocking
-class FakeStorageBucket:
+class FakeBackend:
+    """Stands in for the generation repository and the object storage helpers."""
+
     def __init__(self):
+        self.inserted_rows = defaultdict(list)
         self.uploaded_files = {}
+        self.finished_idempotency = []
+        self.failed = []
+        self.last_row = None
 
-    def upload(self, path, data, options=None):
-        self.uploaded_files[path] = data
-        return {"path": path}
+    # --- repository (app.repositories.generations) -------------------------
+    def get_idempotency(self, user_id, scope, idempotency_key):
+        return None
 
-    def download(self, path):
+    def create_idempotency(self, user_id, scope, idempotency_key, request_hash):
+        self.inserted_rows["idempotency_records"].append(
+            {"user_id": user_id, "idempotency_key": idempotency_key}
+        )
+        return {"id": "idem-1", "request_hash": request_hash}
+
+    def link_idempotency(self, record_id, generation_id):
+        self.inserted_rows["idempotency_links"].append((record_id, str(generation_id)))
+
+    def finish_idempotency(self, record_id, status, response_status, completed_at=None):
+        self.finished_idempotency.append((status, response_status))
+
+    def insert_generation(self, values):
+        from datetime import datetime, timezone
+
+        row = {**values, "status": "pending"}
+        row.setdefault("created_at", datetime.now(timezone.utc).isoformat())
+        self.inserted_rows["generations"].append(values)
+        self.last_row = row
+        return row
+
+    def mark_processing(self, generation_id):
+        if self.last_row:
+            self.last_row["status"] = "processing"
+
+    def mark_succeeded(self, generation_id, image_path, provider_request_id, completed_at):
+        row = {
+            **(self.last_row or {}),
+            "id": str(generation_id),
+            "status": "succeeded",
+            "image_path": image_path,
+            "provider_request_id": provider_request_id,
+            "completed_at": completed_at,
+        }
+        self.last_row = row
+        return row
+
+    def mark_failed(self, generation_id, code, message, completed_at):
+        self.failed.append((str(generation_id), code))
+
+    def get_generation(self, generation_id):
+        return self.last_row
+
+    # --- storage (app.core.storage) ----------------------------------------
+    def upload(self, bucket, path, data, content_type="application/octet-stream", *, upsert=True):
+        self.uploaded_files[(bucket, path)] = data
+
+    def download(self, bucket, path):
         return b"fake-logo-bytes"
 
 
-class FakeStorage:
-    def __init__(self):
-        self.bucket = FakeStorageBucket()
-
-    def from_(self, bucket_name):
-        return self.bucket
-
-
-class FakeQuery:
-    def __init__(self, table_name, client):
-        self.table_name = table_name
-        self.client = client
-        self._eq_filters = {}
-
-    def insert(self, data):
-        data = data.copy()
-        if "created_at" not in data:
-            from datetime import datetime, timezone
-
-            data["created_at"] = datetime.now(timezone.utc).isoformat()
-        self.client.inserted_rows[self.table_name].append(data)
-        self.client.last_row = data
-        return self
-
-    def update(self, data):
-        self.client.updated_rows[self.table_name].append(data)
-        if self.client.last_row:
-            self.client.last_row.update(data)
-        return self
-
-    def eq(self, field, value):
-        self._eq_filters[field] = value
-        return self
-
-    def execute(self):
-        # Return a response containing the mock row
-        row = self.client.last_row or {}
-        # Callers read row["id"] (e.g. the idempotency record) after an insert.
-        if "id" not in row:
-            row = {**row, "id": f"row-{self.table_name}"}
-        return MagicMock(data=[row])
-
-
-class FakeSupabaseClient:
-    def __init__(self):
-        # Any table the router touches must be writable: idempotency_records,
-        # generation_locks, usage_events, etc. A KeyError here used to surface
-        # as a misleading 409 GENERATION_IN_PROGRESS.
-        self.inserted_rows = defaultdict(list)
-        self.updated_rows = defaultdict(list)
-        self.storage = FakeStorage()
-        self.last_row = None
-
-    def table(self, table_name):
-        return FakeQuery(table_name, self)
-
-
 @pytest.fixture
-def mock_supabase(monkeypatch):
-    fake_client = FakeSupabaseClient()
-    monkeypatch.setattr(generations, "get_service_client", lambda: fake_client)
+def mock_backend(monkeypatch):
+    backend = FakeBackend()
+    for name in (
+        "get_idempotency",
+        "create_idempotency",
+        "link_idempotency",
+        "finish_idempotency",
+        "insert_generation",
+        "mark_processing",
+        "mark_succeeded",
+        "mark_failed",
+        "get_generation",
+    ):
+        monkeypatch.setattr(generations.gen_repo, name, getattr(backend, name))
+    monkeypatch.setattr(generations.storage, "upload", backend.upload)
+    monkeypatch.setattr(generations.storage, "download", backend.download)
     monkeypatch.setattr(
         generations,
         "enforce_generation_rate_limit",
@@ -131,7 +135,7 @@ def mock_supabase(monkeypatch):
         "release_generation_slot",
         lambda **_: None,
     )
-    return fake_client
+    return backend
 
 
 @pytest.fixture
@@ -160,36 +164,6 @@ def no_generation_guards(monkeypatch):
     monkeypatch.setattr(
         generations, "get_available_credits", lambda *_: 999, raising=False
     )
-
-    # The idempotency guard inserts into idempotency_records; the shared fake
-    # client has no such table, and the router turns any failure there into a
-    # 409 GENERATION_IN_PROGRESS. Give it a table and a permissive response.
-    fake = generations.get_service_client()
-
-    class _IdempotencyQuery:
-        def insert(self, _data):
-            return self
-
-        def select(self, *_a):
-            return self
-
-        def eq(self, *_a):
-            return self
-
-        def maybe_single(self):
-            return self
-
-        def execute(self):
-            return MagicMock(data=[{"id": "idem-1", "request_hash": None}])
-
-    real_table = fake.table
-
-    def _table(name):
-        if name == "idempotency_records":
-            return _IdempotencyQuery()
-        return real_table(name)
-
-    monkeypatch.setattr(fake, "table", _table)
 
 
 @pytest.fixture
@@ -234,7 +208,7 @@ async def test_generate_endpoint_success_openai(
     no_generation_guards,
     mock_credits_and_usage,
     override_auth,
-    mock_supabase,
+    mock_backend,
     mock_helpers,
     monkeypatch,
 ):
@@ -296,7 +270,7 @@ async def test_generate_endpoint_validation_error(override_auth, mock_helpers):
 
 @pytest.mark.asyncio
 async def test_generate_endpoint_logo_required_check(
-    no_generation_guards, override_auth, mock_supabase, monkeypatch
+    no_generation_guards, override_auth, mock_backend, monkeypatch
 ):
     # Mock brand has no logo
     monkeypatch.setattr(
@@ -330,7 +304,7 @@ async def test_generate_endpoint_accepts_language_param(
     no_generation_guards,
     mock_credits_and_usage,
     override_auth,
-    mock_supabase,
+    mock_backend,
     mock_helpers,
     monkeypatch,
 ):
@@ -385,7 +359,7 @@ async def test_generate_endpoint_persists_language(
     no_generation_guards,
     mock_credits_and_usage,
     override_auth,
-    mock_supabase,
+    mock_backend,
     mock_helpers,
     monkeypatch,
 ):
@@ -422,9 +396,17 @@ async def test_generate_endpoint_persists_language(
     # asserted 500 because client errors were being relabelled as faults.
     assert response.status_code == 200
 
-    inserted = mock_supabase.inserted_rows["generations"][0]
+    inserted = mock_backend.inserted_rows["generations"][0]
 
     assert inserted["language"] == "en"
+    # The idempotency record is linked only after the generation row exists
+    # (it references it), and it is closed as succeeded.
+    assert mock_backend.inserted_rows["idempotency_links"][0][1] == inserted["id"]
+    assert mock_backend.finished_idempotency == [("succeeded", 200)]
+    assert (
+        "brand-assets",
+        f"brands/{inserted['brand_id']}/generations/{inserted['id']}.png",
+    ) in mock_backend.uploaded_files
 
 
 def test_generate_request_accepts_three_audience_segments():
@@ -497,7 +479,7 @@ async def test_generate_passes_product_reference_to_provider(
     no_generation_guards,
     mock_credits_and_usage,
     override_auth,
-    mock_supabase,
+    mock_backend,
     mock_helpers,
     monkeypatch,
 ):
@@ -616,14 +598,14 @@ def mock_credits_and_usage(monkeypatch):
 def test_generation_returns_402_when_credits_are_missing(
     mock_credits_and_usage,
     override_auth,
-    mock_supabase,
+    mock_backend,
     mock_helpers,
     monkeypatch,
 ):
     from app.services.credits import CreditsError
 
     # The lock is acquired before credits are reserved; stub it so the test
-    # exercises the credit path instead of hitting the real Supabase RPC.
+    # exercises the credit path instead of hitting the real database.
     monkeypatch.setattr(
         generations, "acquire_generation_lock", lambda **_: None, raising=False
     )
@@ -669,7 +651,7 @@ def test_generation_returns_402_when_credits_are_missing(
 async def test_provider_failure_releases_credits(
     no_generation_guards,
     override_auth,
-    mock_supabase,
+    mock_backend,
     mock_helpers,
     monkeypatch,
 ):
@@ -770,7 +752,7 @@ def test_same_idempotency_key_is_not_processed_twice(
 def test_second_generation_is_rejected_when_lock_exists(
     mock_credits_and_usage,
     override_auth,
-    mock_supabase,
+    mock_backend,
     mock_helpers,
     monkeypatch,
 ):

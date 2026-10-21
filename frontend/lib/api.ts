@@ -1,5 +1,3 @@
-import { createClient } from './supabase/client'
-
 export class ApiError extends Error {
   code: string
   requestId?: string
@@ -55,33 +53,53 @@ function parseErrorPayload(
   return null
 }
 
+function getApiBase(): string {
+  return process.env.NEXT_PUBLIC_API_URL || '/api'
+}
+
+/**
+ * Asks the backend to clear the httpOnly session cookie. Failures are ignored:
+ * the caller is leaving the authenticated area either way.
+ */
+export async function logout(): Promise<void> {
+  try {
+    await fetch(`${getApiBase()}/auth/logout`, {
+      method: 'POST',
+      credentials: 'include',
+    })
+  } catch {
+    // ignore
+  }
+}
+
+export interface ApiRequestOptions extends RequestInit {
+  /**
+   * On HTTP 401, log out and go to /login (default). Auth endpoints such as
+   * `/auth/login` set this to false: their 401 is a normal error to display.
+   */
+  redirectOn401?: boolean
+}
+
 export async function apiRequest<T = unknown>(
   endpoint: string,
-  options: RequestInit = {}
+  { redirectOn401 = true, ...options }: ApiRequestOptions = {}
 ): Promise<T> {
-  const supabase = createClient()
-  const { data: { session } } = await supabase.auth.getSession()
-
   const headers = new Headers(options.headers)
 
   if (!headers.has('Content-Type') && !(options.body instanceof FormData)) {
     headers.set('Content-Type', 'application/json')
   }
 
-  if (session?.access_token) {
-    headers.set('Authorization', `Bearer ${session.access_token}`)
-  }
-
-  const apiBase = process.env.NEXT_PUBLIC_API_URL || '/api'
-
-  const response = await fetch(`${apiBase}${endpoint}`, {
+  // The session is an httpOnly cookie set by the backend; no token handling here.
+  const response = await fetch(`${getApiBase()}${endpoint}`, {
     ...options,
     headers,
+    credentials: 'include',
   })
 
-  if (response.status === 401) {
+  if (response.status === 401 && redirectOn401) {
     if (typeof window !== 'undefined') {
-      await supabase.auth.signOut()
+      await logout()
       window.location.href = '/login'
     }
     throw new ApiError('Unauthorized', 'UNAUTHORIZED')

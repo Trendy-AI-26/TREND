@@ -1,6 +1,6 @@
 # TRENDY AI
 
-Multi-brand social image generator. Built with Next.js 14, FastAPI, and Supabase.
+Multi-brand social image generator. Built with Next.js 14, FastAPI, PostgreSQL, and S3-compatible storage.
 
 ## Project overview
 
@@ -33,7 +33,7 @@ Many small businesses know what they want to communicate but do not have a desig
 | AI provider keys | Support provider credentials securely on the server side, with provider validation and key management. |
 | Generation history | Keep generated assets associated with the correct brand for review and reuse. |
 | Arabic-first experience | Prioritize Arabic content and RTL-friendly product behavior, with foundations for Arabic and English support. |
-| Extensible architecture | Use a Next.js frontend, FastAPI backend, Supabase database/storage, and provider adapters that can grow over time. |
+| Extensible architecture | Use a Next.js frontend, FastAPI backend, PostgreSQL database/S3 storage, and provider adapters that can grow over time. |
 
 ## Business model and API-key options
 
@@ -49,7 +49,7 @@ Possible commercial tiers include a free trial with limited generations, a month
 
 Customers can connect their own supported provider API key from the Keys section. In this mode, the customer pays the AI provider directly, while TRENDY AI charges only for the product experience if the selected plan requires it. This option gives advanced users more control over provider billing, quotas, models, and usage limits.
 
-API keys must never be exposed to the browser or stored as plain text. They should be validated server-side, encrypted or stored through Supabase Vault, and used only for authorized generations belonging to the customer's brand. The interface should clearly show which provider is connected, whether the key is valid, and that provider charges are paid by the key owner.
+API keys must never be exposed to the browser or stored as plain text. They should be validated server-side, encrypted with the application Fernet key, and used only for authorized generations belonging to the customer's brand. The interface should clearly show which provider is connected, whether the key is valid, and that provider charges are paid by the key owner.
 
 | Mode | Who pays the AI provider? | Best for | TRENDY AI revenue |
 |---|---|---|---|
@@ -68,112 +68,46 @@ The current project focuses on the brand workspace, Brand Kit, structured genera
 
 ## Quick Start (Docker)
 
-Get the app running in 5 steps. You need **Docker**, **Node.js/npm** (for the Supabase CLI in step 4), and a **Supabase project**.
-
-### 1. Clone and enter the repo
+Install Docker with Compose, then run from the repository root:
 
 ```bash
-git clone <repo-url> && cd TREND
+docker compose up -d --build
 ```
 
-### 2. Get your Supabase credentials
+Open http://127.0.0.1:3000. Compose starts PostgreSQL, MinIO, an idempotent bucket initializer, and the app. Database migrations run before the API starts. Local-only credentials are defaults; never expose this configuration publicly. Ports are bound to localhost (3000 app, 8000 API, 5432 database, 9000 S3, 9001 console). Set `APP_PORT` to change the app port and update `CORS_ORIGINS` accordingly. If changing `S3_PORT`, also set `S3_PUBLIC_BASE_URL` to that browser-facing URL before building.
 
-From the [Supabase Dashboard](https://supabase.com/dashboard) → your project → **Settings → API**, grab:
+With `SMTP_HOST` empty, read signup/reset codes in `docker compose logs app`. Set `ADMIN_EMAILS` before starting to grant the matching verified account admin access. Set `GENERATION_API_KEY` for real image generation. Use `docker compose logs -f` for logs and `docker compose down` to stop (without deleting data volumes).
 
-| Value | Where to find it |
-|-------|-----------------|
-| **Project URL** | Settings → API (e.g. `https://xxxxx.supabase.co`) |
-| **Publishable key** | Settings → API → Project API keys |
-| **Secret key** | Settings → API → Project API keys (reveal) |
+For HTTPS production deployment, secrets, SMTP, DNS, backups, and all environment variables, see [Deploy on Coolify](docs/deploy-coolify.md).
 
-### 3. Create your env files
+## Local Development (without Docker for the app)
+
+Use Node.js 20+, Python 3.13+, PostgreSQL, and an S3-compatible server. You can run only the infrastructure with:
 
 ```bash
-# Backend
-cp backend/.env.example backend/.env
-
-# Frontend
-cp frontend/.env.local.example frontend/.env.local
+docker compose up -d postgres minio minio-init
 ```
 
-Edit **`backend/.env`** — fill in Supabase values:
+Copy `backend/.env.example` to `backend/.env` and `frontend/.env.local.example` to `frontend/.env.local`. Set DATABASE_URL to the local PostgreSQL credentials (Compose defaults: user/database `trendy`, password `trendy-local-password`). Set S3_ENDPOINT_URL and S3_PUBLIC_BASE_URL to `http://127.0.0.1:9000`, S3_ACCESS_KEY_ID to `trendy-local`, S3_SECRET_ACCESS_KEY to `trendy-local-storage-password`. Use the same explicit AUTH_JWT_SECRET in both env files; set AUTH_COOKIE_SECURE=false locally. Generate APP_ENCRYPTION_KEY using the Fernet command in the deployment guide. Set frontend NEXT_PUBLIC_STORAGE_PUBLIC_URL to the S3 public URL and NEXT_SERVER_API_URL to `http://127.0.0.1:8000` before building.
 
-```bash
-SUPABASE_URL=https://xxxxx.supabase.co
-SUPABASE_SECRET_KEY=sb_secret_...
-```
+From backend/ (Windows PowerShell):
 
-Edit **`frontend/.env.local`** — fill in URL and publishable key:
-
-```bash
-NEXT_PUBLIC_SUPABASE_URL=https://xxxxx.supabase.co
-NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=sb_publishable_...
-```
-
-### 4. Set up the database
-
-Install the [Supabase CLI](https://supabase.com/docs/guides/cli/getting-started), then log in and push migrations:
-
-```bash
-supabase login
-supabase link --project-ref <your-project-ref>
-supabase db push
-```
-
-> **Where is my project ref?** It's in your Supabase Dashboard URL: `supabase.com/dashboard/project/<project-ref>`
-
-Then create the **`brand-assets`** storage bucket in the Dashboard → **Storage → New bucket**:
-- **Public bucket**: Yes
-- **File size limit**: 5 MB
-- **Allowed MIME types**: `image/png, image/jpeg, image/webp`
-
-Finally, configure auth redirects in the Dashboard → **Authentication → URL Configuration**:
-- **Site URL**: `http://localhost:3000`
-- **Redirect URLs**: add `http://localhost:3000/auth/confirm`
-
-### 5. Build and run
-
-```bash
-make up
-```
-
-The app is now running at **http://localhost:3001**.
-
-Check health: `make health` | View logs: `make logs`
-
-> **Port**: The app is mapped to host port `3001` by default. Override with `make up APP_PORT=<port>`. If you change the port, also update `CORS_ORIGINS` in `backend/.env` to match.
-
----
-
-## Local Development (without Docker)
-
-For active development with hot-reload, run the backend and frontend directly.
-
-### Prerequisites
-
-- Node.js 18+
-- Python 3.13+
-- [Supabase CLI](https://supabase.com/docs/guides/cli/getting-started)
-
-### Backend
-
-```bash
-cd backend
-Copy-Item .env.example .env
-python -m venv venv
-.\venv\Scripts\Activate.ps1
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
+python -m app.db.migrate
 uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
-### Frontend
+From frontend/ in a second terminal:
 
 ```bash
-cd frontend
-cp .env.local.example .env.local   # fill in Supabase credentials (see step 2 above)
-npm install
+npm ci
 npm run dev
 ```
+
+Use the frontend URL printed by Next.js. Browser API calls use the same-origin `/api` proxy, so no separate browser API origin is needed. If using independent PostgreSQL/S3 installations, create the database and all three buckets first; only brand-assets allows anonymous download. See the deployment guide for the equivalent MinIO setup and settings.
 
 ## Makefile Commands
 
@@ -193,4 +127,4 @@ npm run dev
 | `make lint` | Lint backend + frontend |
 | `make test` | Run backend tests |
 
-See [docs/docker.md](docs/docker.md) for full Docker/deployment details.
+See [Deploy on Coolify](docs/deploy-coolify.md) for current production deployment details.

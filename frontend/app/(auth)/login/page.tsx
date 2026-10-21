@@ -5,7 +5,8 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { useTranslations } from 'next-intl'
 import { ArrowUpRight, Eye, EyeOff, Mail } from 'lucide-react'
-import { createClient } from '@/lib/supabase/client'
+import { ApiError } from '@/lib/api'
+import { authApi, authErrorMessage } from '@/lib/auth/client'
 import { AuthShell } from '@/components/auth/auth-shell'
 
 export default function LoginPage() {
@@ -21,13 +22,19 @@ export default function LoginPage() {
     event.preventDefault()
     setError(null)
     setLoading(true)
-    const { error: signInError } = await createClient().auth.signInWithPassword({ email, password })
-    setLoading(false)
-
-    if (signInError) {
-      setError(signInError.message)
+    try {
+      await authApi.login({ email, password })
+    } catch (err) {
+      setLoading(false)
+      if (err instanceof ApiError && err.code === 'EMAIL_NOT_VERIFIED') {
+        // The backend has just re-sent a verification code.
+        router.push(`/verify-code?email=${encodeURIComponent(email)}&purpose=verify_email`)
+        return
+      }
+      setError(authErrorMessage(err, t))
       return
     }
+    setLoading(false)
 
     router.push('/dashboard')
     router.refresh()

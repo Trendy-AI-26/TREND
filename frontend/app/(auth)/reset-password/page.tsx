@@ -7,7 +7,7 @@ import { useState } from 'react'
 import { ArrowRight, Eye, EyeOff, LockKeyhole, RotateCcw } from 'lucide-react'
 import { useLocale, useTranslations } from 'next-intl'
 import LanguageSwitcher from '@/components/language-switcher'
-import { createClient } from '@/lib/supabase/client'
+import { RESET_TOKEN_KEY, authApi, authErrorMessage } from '@/lib/auth/client'
 
 export default function ResetPasswordPage() {
   const router = useRouter()
@@ -42,13 +42,21 @@ export default function ResetPasswordPage() {
       setError(t('passwordMatchError'))
       return
     }
-    setLoading(true)
-    const { error: updateError } = await createClient().auth.updateUser({ password })
-    setLoading(false)
-    if (updateError) {
-      setError(updateError.message)
+    const resetToken = window.sessionStorage.getItem(RESET_TOKEN_KEY)
+    if (!resetToken) {
+      setError(t('errorResetSessionMissing'))
       return
     }
+    setLoading(true)
+    try {
+      await authApi.resetPassword({ reset_token: resetToken, password })
+    } catch (err) {
+      setLoading(false)
+      setError(authErrorMessage(err, t))
+      return
+    }
+    setLoading(false)
+    window.sessionStorage.removeItem(RESET_TOKEN_KEY)
     router.push('/reset-success')
   }
 

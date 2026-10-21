@@ -1,7 +1,4 @@
 # D:\Level4\Trend\backend\tests\test_generation.py
-from app.routers import generations
-from app.services.credits import CreditsError
-from tests.conftest import client
 import pytest
 from pydantic import ValidationError
 
@@ -13,7 +10,6 @@ from app.models.generation import (
     GenerationBrief,
     GenerateRequest,
     PlatformPresetEnum,
-    ProviderEnum,
     TargetAudience,
     TextLanguageEnum,
     VoiceToneEnum,

@@ -1,6 +1,6 @@
 import { headers } from 'next/headers'
 import { notFound, redirect } from 'next/navigation'
-import { createClient } from '@/lib/supabase/server'
+import { getServerSession } from '@/lib/auth/server'
 import { Brand } from '@/types'
 
 async function getServerApiUrl(path: string) {
@@ -34,15 +34,9 @@ async function getServerApiUrl(path: string) {
 }
 
 async function ensureBrandAccess(brandId: string) {
-  const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  const {
-    data: { session },
-  } = await supabase.auth.getSession()
+  const session = await getServerSession()
 
-  if (!user || !session?.access_token) {
+  if (!session) {
     redirect('/login')
   }
 
@@ -50,7 +44,7 @@ async function ensureBrandAccess(brandId: string) {
 
   const response = await fetch(apiUrl, {
     headers: {
-      Authorization: `Bearer ${session.access_token}`,
+      Authorization: `Bearer ${session.token}`,
     },
     cache: 'no-store',
   })

@@ -3,33 +3,35 @@
 import Image from 'next/image'
 import Link from 'next/link'
 import { useState } from 'react'
-import { ArrowRight, CheckCircle2, Mail } from 'lucide-react'
+import { useRouter } from 'next/navigation'
+import { ArrowRight, Mail } from 'lucide-react'
 import { useLocale, useTranslations } from 'next-intl'
 import LanguageSwitcher from '@/components/language-switcher'
-import { createClient } from '@/lib/supabase/client'
+import { authApi, authErrorMessage } from '@/lib/auth/client'
 
 export default function ForgotPasswordPage() {
+  const router = useRouter()
   const t = useTranslations('auth')
   const shell = useTranslations('components.auth.auth-shell')
   const locale = useLocale()
   const isArabic = locale === 'ar'
   const [email, setEmail] = useState('')
   const [error, setError] = useState<string | null>(null)
-  const [sent, setSent] = useState(false)
   const [loading, setLoading] = useState(false)
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setError(null)
     setLoading(true)
-    const redirectTo = `${window.location.origin}/auth/confirm?next=/reset-password`
-    const { error: resetError } = await createClient().auth.resetPasswordForEmail(email, { redirectTo })
-    setLoading(false)
-    if (resetError) {
-      setError(resetError.message)
+    try {
+      await authApi.forgotPassword({ email })
+    } catch (err) {
+      setLoading(false)
+      setError(authErrorMessage(err, t))
       return
     }
-    setSent(true)
+    setLoading(false)
+    router.push(`/verify-code?email=${encodeURIComponent(email)}&purpose=reset_password`)
   }
 
   return (
@@ -46,17 +48,6 @@ export default function ForgotPasswordPage() {
 
         <section className="flex flex-1 items-center justify-center py-6 sm:py-8">
           <div className="w-full max-w-[530px] rounded-[28px] bg-white px-6 py-7 shadow-[0_16px_36px_rgba(102,43,65,0.08)] sm:px-10 sm:py-8">
-            {sent ? (
-              <div className="text-center">
-                <CheckCircle2 className="mx-auto h-12 w-12 text-[#8b1d46]" strokeWidth={1.6} />
-                <p className="mt-6 text-[12px] font-bold uppercase tracking-[0.1em] text-[#8b1d46]">{t('resetEyebrow')}</p>
-                <h1 className="font-el-messiri mt-2 text-[29px] font-bold leading-tight tracking-[-0.045em] text-[#111827] sm:text-[32px]">{t('resetSentTitle')}</h1>
-                <p className="font-tajawal mx-auto mt-2 max-w-[390px] text-[14px] leading-5 text-[#777b82]">{t('resetSentDescription')} <strong className="font-semibold text-[#4d5158]">{email}</strong>.</p>
-                <Link href="/login" className="mt-6 inline-flex items-center gap-2 font-tajawal text-[13px] font-bold text-[#861b41] hover:underline">
-                  {t('backToLogin')} <ArrowRight className="h-4 w-4 rtl-flip-chevron" strokeWidth={2} />
-                </Link>
-              </div>
-            ) : (
               <>
                 <p className="text-[12px] font-bold uppercase tracking-[0.1em] text-[#8b1d46]">{t('resetEyebrow')}</p>
                 <h1 className="font-el-messiri mt-2 text-[29px] font-bold leading-tight tracking-[-0.045em] text-[#111827] sm:text-[32px]">{t('resetTitle')}</h1>
@@ -77,7 +68,6 @@ export default function ForgotPasswordPage() {
                   <p className="font-tajawal pt-1 text-center text-[12px] text-[#85878b]">{t('rememberPassword')}{' '}<Link href="/login" className="font-bold text-[#8b1d46] hover:underline">{t('signIn')}</Link></p>
                 </form>
               </>
-            )}
           </div>
         </section>
 

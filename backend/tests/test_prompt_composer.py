@@ -425,7 +425,9 @@ def test_language_instruction_is_in_output_rules():
     assert "Write newly generated campaign copy in Arabic." not in campaign_section
     assert "Write newly generated campaign copy in Arabic." in output_section
 
-def test_language_instruction_appears_once():
+def test_arabic_language_instruction_appears_once():
+    # Renamed: it was shadowed by the parametrized test of the same name below
+    # and therefore never ran.
     result = build(language="ar")
 
     assert result.count(

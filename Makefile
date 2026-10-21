@@ -2,29 +2,24 @@ SHELL := /bin/bash
 
 .PHONY: build up down logs restart shell health clean dev dev-backend dev-frontend lint test
 
-IMAGE_NAME ?= TRENDY AI
-CONTAINER_NAME ?= TRENDY AI-app
-APP_PORT ?= 3001
+IMAGE_NAME ?= trendy-ai
+CONTAINER_NAME ?= trendy-ai-app
+APP_PORT ?= 3000
+export IMAGE_NAME CONTAINER_NAME APP_PORT
 
 # Docker
 build:
 	@source frontend/.env.local 2>/dev/null || true; \
-	[ -n "$${NEXT_PUBLIC_SUPABASE_URL}" ] || { echo "ERROR: NEXT_PUBLIC_SUPABASE_URL not set (check frontend/.env.local or shell env)"; exit 1; }; \
-	[ -n "$${NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY}" ] || { echo "ERROR: NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY not set (check frontend/.env.local or shell env)"; exit 1; }; \
 	docker build \
-		--build-arg NEXT_PUBLIC_SUPABASE_URL=$${NEXT_PUBLIC_SUPABASE_URL} \
-		--build-arg NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=$${NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY} \
+		--build-arg NEXT_PUBLIC_STORAGE_PUBLIC_URL="$${NEXT_PUBLIC_STORAGE_PUBLIC_URL:-http://127.0.0.1:9000}" \
+		--build-arg NEXT_SERVER_API_URL="$${NEXT_SERVER_API_URL:-http://127.0.0.1:8000}" \
 		-t $(IMAGE_NAME):latest .
 
-up: build
-	docker run -d \
-		--name $(CONTAINER_NAME) \
-		-p $(APP_PORT):3000 \
-		--env-file backend/.env \
-		$(IMAGE_NAME):latest
+up:
+	docker compose up -d --build
 
 down:
-	-docker rm -f $(CONTAINER_NAME) 2>/dev/null || true
+	docker compose down
 
 logs:
 	docker logs -f $(CONTAINER_NAME)
@@ -38,12 +33,12 @@ health:
 	@docker inspect --format='{{.State.Health.Status}}' $(CONTAINER_NAME) 2>/dev/null || echo "Container not running"
 
 clean:
-	-docker rm -f $(CONTAINER_NAME) 2>/dev/null || true
+	docker compose down
 	-docker rmi $(IMAGE_NAME):latest 2>/dev/null
 
 # Local development (no Docker)
 dev-backend:
-	cd backend && source venv/bin/activate && uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
+	cd backend && source .venv/bin/activate && uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 
 dev-frontend:
 	cd frontend && npm run dev

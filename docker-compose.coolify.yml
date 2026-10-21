@@ -1,0 +1,131 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-trendy}
+      POSTGRES_USER: ${POSTGRES_USER:-trendy}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: [CMD-SHELL, 'pg_isready -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+  minio:
+    image: pgsty/silo:RELEASE.2026-10-18T00-00-00Z
+    command: server /data --console-address :9001
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?Set MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?Set MINIO_ROOT_PASSWORD}
+      MINIO_BROWSER_REDIRECT_URL: ${MINIO_BROWSER_REDIRECT_URL:-}
+    expose:
+      - "9000"
+      - "9001"
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 20s
+      retries: 20
+    restart: unless-stopped
+
+  minio-init:
+    image: pgsty/mc:RELEASE.2026-10-18T00-00-00Z
+    depends_on:
+      minio:
+        condition: service_healthy
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?Set MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?Set MINIO_ROOT_PASSWORD}
+      STORAGE_BUCKET: ${STORAGE_BUCKET:-brand-assets}
+      AVATARS_BUCKET: ${AVATARS_BUCKET:-avatars}
+      PRODUCT_ASSETS_BUCKET: ${PRODUCT_ASSETS_BUCKET:-product-assets}
+    entrypoint: ["/bin/sh", "-ec"]
+    command:
+      - |
+        attempts=0
+        until mc alias set local http://minio:9000 "$$MINIO_ROOT_USER" "$$MINIO_ROOT_PASSWORD"; do
+          attempts=$$((attempts + 1))
+          [ "$$attempts" -lt 30 ] || exit 1
+          sleep 2
+        done
+        mc mb --ignore-existing "local/$$STORAGE_BUCKET" "local/$$AVATARS_BUCKET" "local/$$PRODUCT_ASSETS_BUCKET"
+        mc anonymous set download "local/$$STORAGE_BUCKET"
+        mc anonymous set none "local/$$AVATARS_BUCKET"
+        mc anonymous set none "local/$$PRODUCT_ASSETS_BUCKET"
+    restart: "no"
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_STORAGE_PUBLIC_URL: ${S3_PUBLIC_BASE_URL:?Set S3_PUBLIC_BASE_URL}
+        NEXT_SERVER_API_URL: ${NEXT_SERVER_API_URL:-http://127.0.0.1:8000}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+    expose:
+      - "3000"
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-trendy}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-trendy}
+      APP_ENV: production
+      AUTH_COOKIE_SECURE: "true"
+      AUTH_JWT_SECRET: ${AUTH_JWT_SECRET:?Set AUTH_JWT_SECRET}
+      AUTH_SESSION_TTL_SECONDS: ${AUTH_SESSION_TTL_SECONDS:-604800}
+      APP_ENCRYPTION_KEY: ${APP_ENCRYPTION_KEY:?Set APP_ENCRYPTION_KEY}
+      RUN_MIGRATIONS_ON_STARTUP: "false"
+      S3_ENDPOINT_URL: http://minio:9000
+      S3_PUBLIC_BASE_URL: ${S3_PUBLIC_BASE_URL:?Set S3_PUBLIC_BASE_URL}
+      S3_REGION: ${S3_REGION:-us-east-1}
+      S3_ACCESS_KEY_ID: ${MINIO_ROOT_USER:?Set MINIO_ROOT_USER}
+      S3_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:?Set MINIO_ROOT_PASSWORD}
+      STORAGE_BUCKET: ${STORAGE_BUCKET:-brand-assets}
+      AVATARS_BUCKET: ${AVATARS_BUCKET:-avatars}
+      PRODUCT_ASSETS_BUCKET: ${PRODUCT_ASSETS_BUCKET:-product-assets}
+      AVATAR_MAX_BYTES: ${AVATAR_MAX_BYTES:-2097152}
+      PRODUCT_ASSET_MAX_BYTES: ${PRODUCT_ASSET_MAX_BYTES:-10485760}
+      ADMIN_EMAILS: ${ADMIN_EMAILS:-}
+      CORS_ORIGINS: ${CORS_ORIGINS:?Set CORS_ORIGINS}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USERNAME: ${SMTP_USERNAME:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_FROM: ${SMTP_FROM:-}
+      SMTP_STARTTLS: ${SMTP_STARTTLS:-true}
+      GENERATION_PROVIDER: ${GENERATION_PROVIDER:-openai}
+      GENERATION_MODEL: ${GENERATION_MODEL:-gpt-image-2}
+      GENERATION_API_KEY: ${GENERATION_API_KEY:-}
+      IMAGE_PROVIDER: ${IMAGE_PROVIDER:-openai}
+      TEXT_PROVIDER: ${TEXT_PROVIDER:-openai}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_IMAGE_MODEL: ${OPENAI_IMAGE_MODEL:-gpt-image-2}
+      OPENAI_TEXT_MODEL: ${OPENAI_TEXT_MODEL:-gpt-4o-mini}
+      MANAGED_PROVIDER: ${MANAGED_PROVIDER:-}
+      MANAGED_API_KEY: ${MANAGED_API_KEY:-}
+      MANAGED_MODEL: ${MANAGED_MODEL:-${OPENAI_TEXT_MODEL:-gpt-4o-mini}}
+      GENERATION_CREDIT_COST: ${GENERATION_CREDIT_COST:-1}
+      FREE_TRIAL_DAYS: ${FREE_TRIAL_DAYS:-14}
+      DAILY_GENERATION_LIMIT: ${DAILY_GENERATION_LIMIT:-3}
+      CAPTION_CREDIT_COST: ${CAPTION_CREDIT_COST:-0}
+      GENERATION_RATE_LIMIT: ${GENERATION_RATE_LIMIT:-5}
+      GENERATION_RATE_WINDOW_SECONDS: ${GENERATION_RATE_WINDOW_SECONDS:-60}
+      GENERATION_LOCK_TTL_SECONDS: ${GENERATION_LOCK_TTL_SECONDS:-180}
+      ALLOWED_IMAGE_TYPES: ${ALLOWED_IMAGE_TYPES:-image/png,image/jpeg,image/webp}
+      NEXT_SERVER_API_URL: ${NEXT_SERVER_API_URL:-http://127.0.0.1:8000}
+      BACKEND_HOST: 127.0.0.1
+      BACKEND_PORT: "8000"
+      FRONTEND_PORT: "3000"
+    restart: unless-stopped
+
+volumes:
+  postgres-data:
+  minio-data:

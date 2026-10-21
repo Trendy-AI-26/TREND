@@ -1,3 +1,4 @@
+import asyncio
 from contextlib import asynccontextmanager
 from uuid import uuid4
 
@@ -7,12 +8,19 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from app.config import settings
-from app.routers import admin, brands, generations, health, keys, kit, me, preview, product_assets, trends
+from app.config import settings, validate_startup_settings
+from app.routers import admin, auth, brands, generations, health, keys, kit, me, preview, product_assets, trends
 
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
+    # Refuse to start production without AUTH_JWT_SECRET.
+    validate_startup_settings()
+    if settings.RUN_MIGRATIONS_ON_STARTUP:
+        # Imported lazily; the advisory lock makes concurrent starts safe.
+        from app.db.migrate import run_migrations
+
+        await asyncio.to_thread(run_migrations)
     yield
 
 
@@ -38,6 +46,7 @@ app.add_middleware(
 
 
 app.include_router(health.router, tags=["health"])
+app.include_router(auth.router)
 app.include_router(me.router, tags=["account"])
 app.include_router(admin.router)
 app.include_router(brands.router)

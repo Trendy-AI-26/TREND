@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 
 from app.core.auth import User, get_current_user
 from app.models.trend import (
@@ -8,7 +8,6 @@ from app.models.trend import (
     TrendRecommendationRequest,
     TrendRecommendationResponse,
 )
-from app.services.brief_preview import build_creative_direction
 from app.services.trend_ranker import rank_trends_with_openai
 from app.services.trend_service import find_candidate_trends
 from app.routers.brands import _get_brand_or_404

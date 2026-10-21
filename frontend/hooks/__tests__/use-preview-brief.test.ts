@@ -3,7 +3,7 @@ import { renderHook, waitFor, act } from '@testing-library/react'
 import { usePreviewBrief } from '@/hooks/use-preview-brief'
 import type { GenerationBrief } from '@/types/generation'
 
-// We mock the API layer (which itself talks to Supabase) so this test only
+// We mock the API layer (which itself talks to the backend) so this test only
 // exercises usePreviewBrief's own logic: dedupe, retry, loading/error state.
 const apiRequestMock = vi.fn()
 vi.mock('@/lib/api', () => ({
