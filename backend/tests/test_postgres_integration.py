@@ -8,7 +8,9 @@ throwaway database.
 
 import os
 import uuid
-from datetime import datetime, timedelta, timezone
+from concurrent.futures import ThreadPoolExecutor
+from datetime import UTC, datetime, timedelta, timezone
+from threading import Barrier
 
 import pytest
 
@@ -26,16 +28,19 @@ def pg():
     from app import db
     from app.config import settings
     from app.db import migrate
+    from postgres_test_safety import prepare_disposable_test_schema
 
     original = settings.DATABASE_URL
+    dsn = prepare_disposable_test_schema(
+        TEST_DATABASE_URL,
+        confirmation=os.environ.get("ALLOW_DESTRUCTIVE_TEST_DB"),
+        normal_database_url=original,
+        database_dsn=migrate.database_dsn,
+        connect=psycopg.connect,
+    )
+
     settings.DATABASE_URL = TEST_DATABASE_URL
     db.reset_engine()
-
-    dsn = migrate.database_dsn(TEST_DATABASE_URL)
-    with psycopg.connect(dsn, autocommit=True) as conn:
-        conn.execute("DROP SCHEMA public CASCADE")
-        conn.execute("CREATE SCHEMA public")
-
     first = migrate.run_migrations(dsn)
     second = migrate.run_migrations(dsn)
     yield {"first": first, "second": second, "dsn": dsn}
@@ -85,7 +90,10 @@ def _new_generation(brand_id, user_id, **overrides):
 
 
 def test_baseline_applies_once_then_is_a_noop(pg):
-    assert pg["first"] == ["0001_baseline.sql"]
+    assert pg["first"] == [
+        "0001_baseline.sql",
+        "0002_kit_complete_without_tone.sql",
+    ]
     assert pg["second"] == []
 
 
@@ -116,9 +124,23 @@ def test_auth_code_lifecycle(pg):
 
     user_id = _new_user()
     now = datetime.now(timezone.utc)
-    users.replace_code(user_id, "verify_email", "hash-1", now + timedelta(minutes=15), now)
+    assert users.issue_code_if_allowed(
+        user_id,
+        "verify_email",
+        "hash-1",
+        now + timedelta(minutes=15),
+        now,
+        60,
+    ) == "issued"
     first = users.latest_code(user_id, "verify_email")
-    users.replace_code(user_id, "verify_email", "hash-2", now + timedelta(minutes=15), now + timedelta(seconds=61))
+    assert users.issue_code_if_allowed(
+        user_id,
+        "verify_email",
+        "hash-2",
+        now + timedelta(minutes=16, seconds=1),
+        now + timedelta(seconds=61),
+        60,
+    ) == "issued"
     latest = users.latest_code(user_id, "verify_email")
 
     assert latest["code_hash"] == "hash-2"
@@ -128,6 +150,155 @@ def test_auth_code_lifecycle(pg):
     assert users.consume_code(latest["id"], now) is True
     assert users.consume_code(latest["id"], now) is False
     assert users.latest_code(user_id, "reset_password") is None
+
+
+def test_verification_code_issuance_is_serialized_per_user(pg):
+    from app import db
+    from app.repositories import users
+
+    user_id = _new_user()
+    now = datetime.now(UTC)
+    barrier = Barrier(2)
+
+    def issue(code_hash):
+        barrier.wait()
+        return users.issue_code_if_allowed(
+            user_id,
+            "verify_email",
+            code_hash,
+            now + timedelta(minutes=15),
+            now,
+            60,
+        )
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        results = list(pool.map(issue, ("hash-a", "hash-b")))
+
+    assert sorted(results) == ["cooldown", "issued"]
+    rows = db.fetch_all(
+        """
+        SELECT code_hash FROM auth_codes
+        WHERE user_id = CAST(:user_id AS uuid) AND purpose = 'verify_email'
+          AND consumed_at IS NULL
+        """,
+        {"user_id": user_id},
+    )
+    assert len(rows) == 1
+    assert rows[0]["code_hash"] in {"hash-a", "hash-b"}
+
+
+def test_verification_and_reissue_race_has_one_safe_outcome(pg):
+    from app.repositories import users
+
+    user_id = _new_user()
+    issued_at = datetime.now(UTC)
+    assert users.issue_code_if_allowed(
+        user_id,
+        "verify_email",
+        "old-hash",
+        issued_at + timedelta(minutes=15),
+        issued_at,
+        60,
+    ) == "issued"
+    old = users.latest_code(user_id, "verify_email")
+    race_time = issued_at + timedelta(seconds=61)
+    barrier = Barrier(2)
+
+    def verify():
+        barrier.wait()
+        return users.consume_verification_code_and_mark_verified(
+            user_id, old["id"], race_time
+        )
+
+    def reissue():
+        barrier.wait()
+        return users.issue_code_if_allowed(
+            user_id,
+            "verify_email",
+            "new-hash",
+            race_time + timedelta(minutes=15),
+            race_time,
+            60,
+        )
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        verify_result = pool.submit(verify)
+        issue_result = pool.submit(reissue)
+        verified, issuance = verify_result.result(), issue_result.result()
+
+    user = users.get_user_by_id(user_id)
+    latest = users.latest_code(user_id, "verify_email")
+    if verified:
+        assert issuance == "ineligible"
+        assert user["email_verified_at"] is not None
+        assert latest["code_hash"] == "old-hash"
+        assert latest["consumed_at"] is not None
+    else:
+        assert issuance == "issued"
+        assert user["email_verified_at"] is None
+        assert latest["code_hash"] == "new-hash"
+        assert latest["consumed_at"] is None
+
+
+def test_repeated_signup_keeps_original_credentials_in_postgres(pg):
+    from app.core.security import verify_password
+    from app.repositories import users
+    from app.services import auth_service
+
+    email = f"repeat-{uuid.uuid4().hex[:10]}@example.com"
+    auth_service.signup(email, "original password", "Original Name")
+    auth_service.signup(email, "attacker password", "Attacker Name")
+
+    user = users.get_user_by_email(email)
+    assert verify_password("original password", user["password_hash"])
+    assert not verify_password("attacker password", user["password_hash"])
+    assert user["full_name"] == "Original Name"
+
+
+def test_concurrent_first_signups_keep_one_winners_credentials(pg):
+    from app.core.security import verify_password
+    from app.repositories import users
+    from app.services import auth_service
+
+    email = f"concurrent-{uuid.uuid4().hex[:10]}@example.com"
+    barrier = Barrier(2)
+
+    def signup(password, name):
+        barrier.wait()
+        return auth_service.signup(email, password, name)
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        first = pool.submit(signup, "first password", "First Name")
+        second = pool.submit(signup, "second password", "Second Name")
+        results = (first.result(), second.result())
+
+    user = users.get_user_by_email(email)
+    first_won = verify_password("first password", user["password_hash"])
+    second_won = verify_password("second password", user["password_hash"])
+    assert first_won != second_won
+    assert user["full_name"] == ("First Name" if first_won else "Second Name")
+    assert sum(result is not None for result in results) == 1
+
+
+def test_signup_without_verification_still_rejects_existing_user_in_postgres(pg):
+    from app.core.security import verify_password
+    from app.repositories import users
+    from app.services import auth_service
+
+    email = f"no-verify-{uuid.uuid4().hex[:10]}@example.com"
+    auth_service.signup_without_verification(email, "original password", "Original Name")
+
+    with pytest.raises(auth_service.AuthError) as error:
+        auth_service.signup_without_verification(
+            email, "attacker password", "Attacker Name"
+        )
+
+    assert error.value.status_code == 409
+    assert error.value.code == "EMAIL_ALREADY_REGISTERED"
+    user = users.get_user_by_email(email)
+    assert verify_password("original password", user["password_hash"])
+    assert not verify_password("attacker password", user["password_hash"])
+    assert user["full_name"] == "Original Name"
 
 
 def test_brand_limit_duplicates_and_ownership(pg):

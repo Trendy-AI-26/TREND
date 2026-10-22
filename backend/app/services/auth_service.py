@@ -97,24 +97,23 @@ def issue_code(user: dict[str, Any], purpose: str) -> PendingEmail | None:
     """
     now = _now()
     user_id = str(user["id"])
-    latest = users_repo.latest_code(user_id, purpose)
-    if latest is not None:
-        age = (now - latest["created_at"]).total_seconds()
-        if age < security.CODE_RESEND_COOLDOWN_SECONDS:
-            return None
-
     code = security.generate_code()
-    users_repo.replace_code(
+    result = users_repo.issue_code_if_allowed(
         user_id,
         purpose,
         security.hash_code(user_id, purpose, code),
         now + timedelta(seconds=security.CODE_TTL_SECONDS),
         now,
+        security.CODE_RESEND_COOLDOWN_SECONDS,
     )
+    if result != "issued":
+        return None
     return PendingEmail(to=user["email"], code=code, purpose=purpose)
 
 
-def check_code(user: dict[str, Any], purpose: str, code: str) -> None:
+def check_code(
+    user: dict[str, Any], purpose: str, code: str, *, consume: bool = True
+) -> dict[str, Any]:
     """Validate and consume a code, or raise 400 INVALID_CODE / CODE_EXPIRED /
     TOO_MANY_ATTEMPTS. Wrong guesses are counted atomically (max 5)."""
     now = _now()
@@ -141,8 +140,9 @@ def check_code(user: dict[str, Any], purpose: str, code: str) -> None:
 
     if not security.code_matches(user_id, purpose, submitted, row["code_hash"]):
         raise AuthError(400, "INVALID_CODE", "The code is invalid.")
-    if not users_repo.consume_code(row["id"], now):
+    if consume and not users_repo.consume_code(row["id"], now):
         raise AuthError(400, "INVALID_CODE", "The code is invalid.")
+    return row
 
 
 # --------------------------------------------------------------- accounts
@@ -157,12 +157,14 @@ def signup(email: str, password: str, full_name: str | None) -> PendingEmail | N
     if existing is not None and existing["email_verified_at"] is not None:
         raise AuthError(409, "EMAIL_ALREADY_REGISTERED", "This email is already registered.")
 
-    password_hash = security.hash_password(password)
     if existing is None:
+        password_hash = security.hash_password(password)
         try:
             user = users_repo.create_user(email, password_hash, name)
-        except db.IntegrityError:
+        except db.IntegrityError as exc:
             # Lost a race with a concurrent sign-up for the same address.
+            if not db.is_unique_violation(exc, "uq_users_email_ci"):
+                raise
             user = users_repo.get_user_by_email(email)
             if user is None:
                 raise
@@ -171,7 +173,8 @@ def signup(email: str, password: str, full_name: str | None) -> PendingEmail | N
                     409, "EMAIL_ALREADY_REGISTERED", "This email is already registered."
                 )
     else:
-        users_repo.update_unverified_user(existing["id"], password_hash, name)
+        # A repeated sign-up proves no control over the mailbox. Keep the
+        # original password and profile, and treat it only as a resend request.
         user = existing
 
     return issue_code(user, security.PURPOSE_VERIFY_EMAIL)
@@ -195,8 +198,10 @@ def signup_without_verification(
 
     try:
         return users_repo.create_user(email, security.hash_password(password), name)
-    except db.IntegrityError:
+    except db.IntegrityError as exc:
         # Lost a race with a concurrent sign-up for the same address.
+        if not db.is_unique_violation(exc, "uq_users_email_ci"):
+            raise
         raise AuthError(
             409, "EMAIL_ALREADY_REGISTERED", "This email is already registered."
         ) from None
@@ -208,9 +213,12 @@ def verify_email(email: str, code: str) -> dict[str, Any]:
     if user is None:
         raise AuthError(400, "INVALID_CODE", "The code is invalid.")
 
-    check_code(user, security.PURPOSE_VERIFY_EMAIL, code)
+    row = check_code(user, security.PURPOSE_VERIFY_EMAIL, code, consume=False)
     verified_at = _now()
-    users_repo.mark_email_verified(user["id"], verified_at)
+    if not users_repo.consume_verification_code_and_mark_verified(
+        user["id"], row["id"], verified_at
+    ):
+        raise AuthError(400, "INVALID_CODE", "The code is invalid.")
     if user["email_verified_at"] is None:
         user = {**user, "email_verified_at": verified_at}
     return user

@@ -47,16 +47,6 @@ class FakeUsersRepo:
         self.users[str(user_id)] = user
         return user
 
-    def update_unverified_user(self, user_id, password_hash, full_name):
-        user = self.users[str(user_id)]
-        user["password_hash"] = password_hash
-        if full_name is not None:
-            user["full_name"] = full_name
-
-    def mark_email_verified(self, user_id, when):
-        user = self.users[str(user_id)]
-        user["email_verified_at"] = user["email_verified_at"] or when
-
     def set_password(self, user_id, password_hash, verified_at):
         user = self.users[str(user_id)]
         user["password_hash"] = password_hash
@@ -89,6 +79,43 @@ class FakeUsersRepo:
                 "created_at": now,
             }
         )
+
+    def issue_code_if_allowed(
+        self, user_id, purpose, code_hash, expires_at, now, cooldown_seconds
+    ):
+        user = self.users.get(str(user_id))
+        if user is None:
+            return "missing"
+        verified = user["email_verified_at"] is not None
+        if purpose == "verify_email" and verified:
+            return "ineligible"
+        if purpose == "reset_password" and not verified:
+            return "ineligible"
+
+        latest = self.latest_code(user_id, purpose)
+        if latest is not None:
+            age = (now - latest["created_at"]).total_seconds()
+            if age < cooldown_seconds:
+                return "cooldown"
+
+        self.replace_code(user_id, purpose, code_hash, expires_at, now)
+        return "issued"
+
+    def consume_verification_code_and_mark_verified(self, user_id, code_id, now):
+        user = self.users.get(str(user_id))
+        if user is None or user["email_verified_at"] is not None:
+            return False
+        for code in self.codes:
+            if (
+                code["id"] == code_id
+                and code["user_id"] == str(user_id)
+                and code["purpose"] == "verify_email"
+                and code["consumed_at"] is None
+            ):
+                code["consumed_at"] = now
+                user["email_verified_at"] = now
+                return True
+        return False
 
     def increment_attempts(self, code_id):
         for c in self.codes:
@@ -193,32 +220,124 @@ def test_signup_rejects_existing_verified_email(api, outbox):
 
 
 def test_signup_for_unverified_email_resends_code_after_cooldown(api, repo, outbox, clock):
-    _signup(api, password="first password")
+    _signup(api, password="first password", full_name="Original Name")
     clock.advance(61)
 
-    response = _signup(api, password="second password")
+    response = _signup(api, password="second password", full_name="Attacker Name")
 
     assert response.status_code == 201
     assert response.json()["verification_required"] is True
     assert len(outbox) == 2
     assert len(repo.users) == 1
-    # The latest sign-up wins, and the first code stops working.
+    # A repeated sign-up is only a resend request. It must never replace
+    # credentials or profile data for an account the caller does not control.
     assert auth_service.security.verify_password(
+        "first password", repo.get_user_by_email("person@example.com")["password_hash"]
+    )
+    assert not auth_service.security.verify_password(
         "second password", repo.get_user_by_email("person@example.com")["password_hash"]
     )
+    assert repo.get_user_by_email("person@example.com")["full_name"] == "Original Name"
+
+    # Once the cooldown has elapsed, the newly emailed code replaces the old
+    # one, but the account credentials remain unchanged.
     old = api.post(
         "/auth/verify-email", json={"email": EMAIL, "code": outbox[0]["code"]}
     )
     assert old.status_code == 400
+    current = api.post(
+        "/auth/verify-email", json={"email": EMAIL, "code": outbox[1]["code"]}
+    )
+    assert current.status_code == 200
 
 
-def test_signup_for_unverified_email_within_cooldown_still_returns_201(api, outbox):
-    _signup(api)
+def test_signup_for_unverified_email_within_cooldown_keeps_credentials_and_code(
+    api, repo, outbox
+):
+    _signup(api, password="first password", full_name="Original Name")
+    first_code = outbox[0]["code"]
 
-    response = _signup(api)
+    response = _signup(api, password="second password", full_name="Attacker Name")
 
     assert response.status_code == 201
     assert len(outbox) == 1
+    user = repo.get_user_by_email("person@example.com")
+    assert auth_service.security.verify_password("first password", user["password_hash"])
+    assert not auth_service.security.verify_password("second password", user["password_hash"])
+    assert user["full_name"] == "Original Name"
+
+    # No replacement email is sent during cooldown, so the existing code must
+    # remain usable by the mailbox owner.
+    verified = api.post(
+        "/auth/verify-email", json={"email": EMAIL, "code": first_code}
+    )
+    assert verified.status_code == 200
+
+
+def test_concurrent_first_signup_loser_keeps_winning_credentials(
+    api, repo, outbox, monkeypatch
+):
+    winner = repo.create_user(
+        "person@example.com",
+        auth_service.security.hash_password("winner password"),
+        "Winner Name",
+    )
+    calls = 0
+
+    def initially_missing(email):
+        nonlocal calls
+        calls += 1
+        return None if calls == 1 else winner
+
+    def duplicate_create(email, password_hash, full_name):
+        raise db.IntegrityError("insert", {}, Exception("duplicate email"))
+
+    monkeypatch.setattr(repo, "get_user_by_email", initially_missing)
+    monkeypatch.setattr(repo, "create_user", duplicate_create)
+    monkeypatch.setattr(db, "is_unique_violation", lambda exc, constraint: True)
+
+    response = _signup(api, password="loser password", full_name="Loser Name")
+
+    assert response.status_code == 201
+    assert auth_service.security.verify_password(
+        "winner password", winner["password_hash"]
+    )
+    assert not auth_service.security.verify_password(
+        "loser password", winner["password_hash"]
+    )
+    assert winner["full_name"] == "Winner Name"
+    assert len(outbox) == 1
+
+
+def test_code_issuance_rechecks_verification_status_in_repository(
+    api, repo, outbox, clock
+):
+    _signup(api)
+    stale_user = dict(repo.get_user_by_email("person@example.com"))
+    code = outbox[0]["code"]
+    assert api.post(
+        "/auth/verify-email", json={"email": EMAIL, "code": code}
+    ).status_code == 200
+    clock.advance(61)
+
+    pending = auth_service.issue_code(
+        stale_user, auth_service.security.PURPOSE_VERIFY_EMAIL
+    )
+
+    assert pending is None
+    assert len(repo.codes) == 1
+
+
+def test_signup_reraises_unrelated_integrity_error(repo, monkeypatch):
+    failure = db.IntegrityError("insert", {}, Exception("unrelated constraint"))
+
+    monkeypatch.setattr(repo, "get_user_by_email", lambda email: None)
+    monkeypatch.setattr(repo, "create_user", lambda *args: (_ for _ in ()).throw(failure))
+    monkeypatch.setattr(db, "is_unique_violation", lambda exc, constraint: False)
+
+    with pytest.raises(db.IntegrityError) as raised:
+        auth_service.signup(EMAIL, PASSWORD, None)
+    assert raised.value is failure
 
 
 @pytest.mark.parametrize("password", ["short", "x" * 73])
@@ -607,11 +726,28 @@ def test_signup_without_verification_race_is_a_409(api, repo, no_verification, m
         raise db.IntegrityError("insert", {}, Exception("duplicate"))
 
     monkeypatch.setattr(repo, "create_user", lose_race)
+    monkeypatch.setattr(db, "is_unique_violation", lambda exc, constraint: True)
 
     response = _signup(api)
 
     assert response.status_code == 409
     assert response.json()["error"]["code"] == "EMAIL_ALREADY_REGISTERED"
+
+
+def test_signup_without_verification_reraises_unrelated_integrity_error(
+    repo, no_verification, monkeypatch
+):
+    failure = db.IntegrityError("insert", {}, Exception("not a duplicate email"))
+
+    def fail_create(email, password_hash, full_name):
+        raise failure
+
+    monkeypatch.setattr(repo, "create_user", fail_create)
+    monkeypatch.setattr(db, "is_unique_violation", lambda exc, constraint: False)
+
+    with pytest.raises(db.IntegrityError) as raised:
+        auth_service.signup_without_verification(EMAIL, PASSWORD, None)
+    assert raised.value is failure
 
 
 def test_login_unverified_user_without_verification_gets_cookie_and_no_code(

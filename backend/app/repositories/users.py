@@ -72,33 +72,6 @@ def create_user(email: str, password_hash: str, full_name: str | None) -> dict[s
     return row
 
 
-def update_unverified_user(
-    user_id: str | UUID, password_hash: str, full_name: str | None
-) -> None:
-    """A repeated sign-up for an unverified address replaces password and name."""
-    with db.transaction() as tx:
-        tx.execute(
-            "UPDATE users SET password_hash = :hash WHERE id = CAST(:user_id AS uuid)",
-            {"hash": password_hash, "user_id": str(user_id)},
-        )
-        if full_name is not None:
-            tx.execute(
-                "UPDATE profiles SET full_name = :full_name WHERE user_id = CAST(:user_id AS uuid)",
-                {"full_name": full_name, "user_id": str(user_id)},
-            )
-
-
-def mark_email_verified(user_id: str | UUID, when: datetime) -> None:
-    db.execute(
-        """
-        UPDATE users
-        SET email_verified_at = COALESCE(email_verified_at, :when)
-        WHERE id = CAST(:user_id AS uuid)
-        """,
-        {"when": when, "user_id": str(user_id)},
-    )
-
-
 def set_password(user_id: str | UUID, password_hash: str, verified_at: datetime) -> None:
     """Set a new password; completing a reset also proves control of the mailbox."""
     db.execute(
@@ -130,15 +103,55 @@ def latest_code(user_id: str | UUID, purpose: str) -> dict[str, Any] | None:
     )
 
 
-def replace_code(
+def issue_code_if_allowed(
     user_id: str | UUID,
     purpose: str,
     code_hash: str,
     expires_at: datetime,
     now: datetime,
-) -> None:
-    """Invalidate older unconsumed codes and store the new one atomically."""
+    cooldown_seconds: int,
+) -> str:
+    """Atomically issue a code after eligibility and cooldown checks.
+
+    Locking the user row serializes sign-up, resend, and email verification for
+    one account. The transaction is committed before the caller sends email.
+    """
     with db.transaction() as tx:
+        user = tx.fetch_one(
+            """
+            SELECT email_verified_at
+            FROM users
+            WHERE id = CAST(:user_id AS uuid)
+            FOR UPDATE
+            """,
+            {"user_id": str(user_id)},
+            raw=True,
+        )
+        if user is None:
+            return "missing"
+
+        is_verified = user["email_verified_at"] is not None
+        if purpose == "verify_email" and is_verified:
+            return "ineligible"
+        if purpose == "reset_password" and not is_verified:
+            return "ineligible"
+
+        latest = tx.fetch_one(
+            """
+            SELECT created_at
+            FROM auth_codes
+            WHERE user_id = CAST(:user_id AS uuid) AND purpose = :purpose
+            ORDER BY created_at DESC, id DESC
+            LIMIT 1
+            """,
+            {"user_id": str(user_id), "purpose": purpose},
+            raw=True,
+        )
+        if latest is not None:
+            age = (now - latest["created_at"]).total_seconds()
+            if age < cooldown_seconds:
+                return "cooldown"
+
         tx.execute(
             """
             UPDATE auth_codes
@@ -161,6 +174,52 @@ def replace_code(
                 "now": now,
             },
         )
+        return "issued"
+
+
+def consume_verification_code_and_mark_verified(
+    user_id: str | UUID,
+    code_id: str | UUID,
+    now: datetime,
+) -> bool:
+    """Consume a verification code and verify its user in one locked transaction."""
+    with db.transaction() as tx:
+        user = tx.fetch_one(
+            """
+            SELECT email_verified_at
+            FROM users
+            WHERE id = CAST(:user_id AS uuid)
+            FOR UPDATE
+            """,
+            {"user_id": str(user_id)},
+            raw=True,
+        )
+        if user is None or user["email_verified_at"] is not None:
+            return False
+
+        consumed = tx.execute(
+            """
+            UPDATE auth_codes
+            SET consumed_at = :now
+            WHERE id = CAST(:code_id AS uuid)
+              AND user_id = CAST(:user_id AS uuid)
+              AND purpose = 'verify_email'
+              AND consumed_at IS NULL
+            """,
+            {"code_id": str(code_id), "user_id": str(user_id), "now": now},
+        )
+        if consumed != 1:
+            return False
+
+        tx.execute(
+            """
+            UPDATE users
+            SET email_verified_at = :now
+            WHERE id = CAST(:user_id AS uuid) AND email_verified_at IS NULL
+            """,
+            {"user_id": str(user_id), "now": now},
+        )
+        return True
 
 
 def increment_attempts(code_id: str | UUID) -> int | None:
