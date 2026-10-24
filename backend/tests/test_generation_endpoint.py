@@ -1,19 +1,20 @@
-from app.services.providers.base import ReferenceImage
-import pytest
 from collections import defaultdict
-from uuid import uuid4
+from datetime import UTC
 from unittest.mock import AsyncMock
-from fastapi.testclient import TestClient
+from uuid import uuid4
 
-from app.main import app
+import pytest
+from fastapi.testclient import TestClient
+from pydantic import ValidationError
+
 from app.core.auth import User, get_current_user
-from app.routers import generations
+from app.main import app
 from app.models.generation import (
     GenerateRequest,
     ProviderEnum,
 )
-
-from pydantic import ValidationError
+from app.routers import generations
+from app.services.providers.base import ReferenceImage
 
 # Sample valid brief for the payload
 VALID_BRIEF = {
@@ -60,10 +61,10 @@ class FakeBackend:
         self.finished_idempotency.append((status, response_status))
 
     def insert_generation(self, values):
-        from datetime import datetime, timezone
+        from datetime import datetime
 
         row = {**values, "status": "pending"}
-        row.setdefault("created_at", datetime.now(timezone.utc).isoformat())
+        row.setdefault("created_at", datetime.now(UTC).isoformat())
         self.inserted_rows["generations"].append(values)
         self.last_row = row
         return row
@@ -331,7 +332,7 @@ async def test_generate_endpoint_accepts_language_param(
     res_data = response.json()
     assert res_data["status"] == "succeeded"
     sent_prompt = provider_mock.call_args.kwargs["prompt"]
-    assert "Write newly generated campaign copy in English." in sent_prompt
+    assert "Use English for any permitted generated copy." in sent_prompt
     assert "إطلاق قهوة باردة لصباح صيفي مزدحم." in sent_prompt
     assert "خصم 20%" in sent_prompt
 

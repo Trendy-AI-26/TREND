@@ -82,7 +82,7 @@ export function StepStyle({ value, onChange, errors, brandId, brandHasLogo }: St
   return (
     <div className="space-y-[30px]">
       {/* 1. شكل المحتوى */}
-      <WizardField label={t('style_label')} required error={err('visualStyle')}>
+      <WizardField label={t('style_label')} required hint={t('style_hint')} error={err('visualStyle')}>
         <ChipGroup
           ariaLabel={t('style_label')}
           options={styleOptions}
@@ -93,7 +93,7 @@ export function StepStyle({ value, onChange, errors, brandId, brandHasLogo }: St
       </WizardField>
 
       {/* 2. الإحساس */}
-      <WizardField label={t('feeling_label')} required error={err('feeling')}>
+      <WizardField label={t('feeling_label')} required hint={t('feeling_hint')} error={err('feeling')}>
         <ChipGroup
           ariaLabel={t('feeling_label')}
           options={feelingOptions}
@@ -146,8 +146,9 @@ export function StepStyle({ value, onChange, errors, brandId, brandHasLogo }: St
           <div className="mt-4">
             <WizardField
               label={t('product_image_label')}
-              optionalLabel={t('optional')}
+              required
               hint={t('product_image_hint')}
+              error={err('productImage')}
             >
               <ProductImageUpload
                 file={value.productImage}

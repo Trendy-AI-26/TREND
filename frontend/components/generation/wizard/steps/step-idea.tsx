@@ -129,6 +129,7 @@ export function StepIdea({ value, onChange, errors }: StepIdeaProps) {
         label={t('text_in_image_label')}
         htmlFor="wizard-text-in-image"
         optionalLabel={t('optional')}
+        hint={t('text_in_image_hint')}
         counter={t('char_counter', { count: value.textInImage.length, max: LIMITS.textInImage })}
       >
         <Input
@@ -142,7 +143,7 @@ export function StepIdea({ value, onChange, errors }: StepIdeaProps) {
       </WizardField>
 
       {/* 5. الدعوة لاتخاذ إجراء */}
-      <WizardField label={t('cta_label')} required error={err('cta') ?? err('ctaCustom')}>
+      <WizardField label={t('cta_label')} optionalLabel={t('optional')} error={err('ctaCustom')}>
         <ChipGroup
           ariaLabel={t('cta_label')}
           options={ctaOptions}
