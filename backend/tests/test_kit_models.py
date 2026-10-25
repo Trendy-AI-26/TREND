@@ -38,9 +38,15 @@ def test_audience_too_long():
         KitAnswers(audience="x" * 501)
 
 
+@pytest.mark.parametrize("count", [1, 3, 4])
+def test_supported_palette_sizes(count):
+    colors = [f"#{index:06X}" for index in range(count)]
+    assert KitAnswers(colors=colors).colors == colors
+
+
 def test_too_many_colors():
-    with pytest.raises(ValueError):
-        KitAnswers(colors=["#FF0000", "#00FF00", "#0000FF", "#FFFFFF"])
+    with pytest.raises(ValueError, match="At most 4 colors"):
+        KitAnswers(colors=[f"#{index:06X}" for index in range(5)])
 
 
 def test_invalid_hex_color():

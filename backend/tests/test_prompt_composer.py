@@ -1,16 +1,7 @@
 import json
 from pathlib import Path
 import pytest
-from app.services.prompt_composer import (
-    BrandContext,
-    PlatformContext,
-    PLATFORM_NOTES,
-    TONE_STYLE_MAP,
-    build_generation_prompt,
-    compose_full_prompt,
 
-    
-)
 from app.models.generation import (
     AgeRangeEnum,
     AudienceSegmentEnum,
@@ -22,8 +13,16 @@ from app.models.generation import (
     VoiceToneEnum,
 )
 from app.services.presets import PLATFORM_PRESETS
+from app.services.prompt_composer import (
+    PLATFORM_NOTES,
+    TONE_STYLE_MAP,
+    BrandContext,
+    PlatformContext,
+    build_generation_prompt,
+    build_platform_context,
+    compose_full_prompt,
+)
 from tests.test_generation import VALID_BRIEF
-
 
 USER_PROMPT = "A modern minimal office"
 
@@ -36,6 +35,19 @@ SAMPLE_BRAND = BrandContext(
     avoid_words="cheap, discount, budget",
     industry="interior design",
 )
+
+
+def test_four_brand_colors_reach_generation_prompt():
+    colors = ["#111111", "#222222", "#333333", "#444444"]
+    result = build_generation_prompt(
+        brief=GenerationBrief.model_validate(VALID_BRIEF),
+        brand_context=BrandContext(name="Acme", colors=colors),
+        platform=build_platform_context("instagram_post", 1080, 1080, "1:1"),
+        logo_mode="none",
+        brand_has_logo=False,
+    )
+    assert "Brand colors: " + ", ".join(colors) in result
+
 
 SAMPLE_PLATFORM = PlatformContext(
     label="Instagram Post",
@@ -201,6 +213,89 @@ def test_platform_notes_cover_all_presets():
         assert preset_id in PLATFORM_NOTES, f"Missing PLATFORM_NOTES entry for {preset_id}"
 
 
+@pytest.mark.parametrize("preset_id", ["facebook_cover", "twitter_header"])
+def test_wide_preset_keeps_focal_content_in_central_band(preset_id):
+    width, height, _ = PLATFORM_PRESETS[preset_id]
+    platform = build_platform_context(preset_id, width, height, "wide")
+    prompt = build_generation_prompt(
+        brief=SAMPLE_BRIEF,
+        brand_context=None,
+        platform=platform,
+        logo_mode="none",
+        brand_has_logo=False,
+    )
+
+    assert platform.note in prompt
+    assert "central horizontal band" in prompt
+    assert "space above and below for the final crop" in prompt
+    assert "clear visual hierarchy, readable text, and balanced spacing" in prompt
+    assert "reserved official logo area" not in prompt
+    assert f"{width}x{height}" not in prompt
+
+
+def test_linkedin_banner_prompt_protects_central_source_band():
+    width, height, _ = PLATFORM_PRESETS["linkedin_banner"]
+    platform = build_platform_context("linkedin_banner", width, height, "4:1")
+    prompt = build_generation_prompt(
+        brief=SAMPLE_BRIEF,
+        brand_context=None,
+        platform=platform,
+        logo_mode="none",
+        brand_has_logo=False,
+    )
+
+    assert "essential text, any CTA, products, and important visual elements" in prompt
+    assert "central 75% of the source image height" in prompt
+    assert "12.5% at both the top and bottom" in prompt
+    assert "coherent full-width composition after cropping" in prompt
+    assert "central horizontal band" not in prompt
+
+
+@pytest.mark.parametrize(
+    "preset_id",
+    ["instagram_story", "instagram_reel_cover", "facebook_story", "tiktok_video_cover"],
+)
+def test_vertical_preset_keeps_content_in_central_column(preset_id):
+    width, height, _ = PLATFORM_PRESETS[preset_id]
+    platform = build_platform_context(preset_id, width, height, "vertical")
+    prompt = build_generation_prompt(
+        brief=SAMPLE_BRIEF,
+        brand_context=None,
+        platform=platform,
+        logo_mode="none",
+        brand_has_logo=False,
+    )
+
+    assert platform.note in prompt
+    assert "central column" in prompt
+    assert "side edges and top/bottom UI areas" in prompt
+    assert "central horizontal band" not in prompt
+
+
+def test_composition_guidance_preserves_logo_and_product_instructions():
+    width, height, _ = PLATFORM_PRESETS["youtube_banner"]
+    platform = build_platform_context("youtube_banner", width, height, "landscape")
+    prompt = build_generation_prompt(
+        brief=SAMPLE_BRIEF,
+        brand_context=SAMPLE_BRAND,
+        platform=platform,
+        logo_mode="prompt",
+        brand_has_logo=True,
+        logo_placement="corner",
+        product_edit_instruction="Keep the package label intact.",
+    )
+
+    assert "balanced inner margins" in prompt
+    assert "=== LOGO PLACEMENT ===" in prompt
+    assert "Keep the reserved official logo area clear within the final crop." in prompt
+    assert "Reserve a clean, visually balanced area in a corner" in prompt
+    assert "=== PRODUCT IMAGE INSTRUCTIONS ===" in prompt
+    assert "Preserve the product identity, shape, packaging" in prompt
+    assert "preserve text already on a supplied product reference, such as its label" in prompt
+    assert "Keep the package label intact." in prompt
+    assert prompt.count("clear visual hierarchy, readable text, and balanced spacing") == 1
+
+
 # --- Logo mode ---
 
 
@@ -310,6 +405,57 @@ def test_build_generation_prompt_section_ordering_full():
     assert system_idx < brief_idx < brand_idx < composition_idx < logo_idx < output_idx
 
 
+def test_campaign_audience_takes_priority_over_brand_default():
+    result = build_generation_prompt(
+        brief=SAMPLE_BRIEF,
+        brand_context=SAMPLE_BRAND,
+        platform=SAMPLE_PLATFORM,
+        logo_mode="none",
+        brand_has_logo=False,
+    )
+
+    assert "Target Audience: Demographic: small business owners" in result
+    assert "Default brand audience: startup founders aged 25-40" in result
+    assert "Use the campaign brief's Target Audience for this image when they differ." in result
+    assert "design should resonate with this demographic" not in result
+    assert "follow the campaign Tone & Style where they differ" in result
+    assert "Brand colors: #1E3A8A, #3B82F6" in result
+    assert "exact user-provided colors" in result
+
+
+def test_brand_name_and_tagline_are_context_unless_requested_as_visible_text():
+    result = build_generation_prompt(
+        brief=SAMPLE_BRIEF,
+        brand_context=SAMPLE_BRAND,
+        platform=SAMPLE_PLATFORM,
+        logo_mode="prompt",
+        brand_has_logo=True,
+    )
+
+    assert "Brand: Acme" in result
+    assert 'Tagline: "Build the future"' in result
+    assert "Brand name and tagline are identity context, not visible copy." in result
+    assert "Render them only if explicitly included in the requested visible text." in result
+    assert "<visible_text>\n" in result
+    assert "=== LOGO PLACEMENT ===" in result
+    assert "The official brand logo will be added after image generation." in result
+    assert "Do not generate, draw, recreate, imitate, redesign" in result
+
+
+def test_brand_tagline_explicitly_requested_as_visible_text_stays_in_block():
+    brief = SAMPLE_BRIEF.model_copy(update={"text_to_include": "Build the future"})
+    result = build_generation_prompt(
+        brief=brief,
+        brand_context=SAMPLE_BRAND,
+        platform=SAMPLE_PLATFORM,
+        logo_mode="none",
+        brand_has_logo=False,
+    )
+
+    assert "<visible_text>\nBuild the future\n</visible_text>" in result
+    assert result.count('Tagline: "Build the future"') == 1
+
+
 def test_build_generation_prompt_maps_enums_to_readable_instructions():
     result = build_generation_prompt(
         brief=SAMPLE_BRIEF,
@@ -337,7 +483,7 @@ def test_build_generation_prompt_preserves_arabic_and_user_text():
         brand_has_logo=False,
     )
     assert "Core Idea: إطلاق مشروب قهوة بارد جديد ومنعش لصباح صيفي مزدحم." in result
-    assert 'Exact visible text to include; preserve exactly: "خصم 20% لفترة محدودة"' in result
+    assert "<visible_text>\nخصم 20% لفترة محدودة\n</visible_text>" in result
     assert "Design Notes: اترك مساحة في الأعلى لكتابة نص عربي واضح." in result
 
 
@@ -381,16 +527,71 @@ def test_build_generation_prompt_output_rules_always_present():
     assert "Do NOT render section headers" in result
 
 
+def test_visible_text_is_distinct_from_context_and_limits_corrections():
+    brief = SAMPLE_BRIEF.model_copy(update={
+        "core_idea": "Launch a new drink with a premium feel.",
+        "optional_notes": "Use a calm background.",
+        "text_to_include": "Welcom to Acme\n20% off today",
+    })
+    result = build_generation_prompt(
+        brief=brief,
+        brand_context=None,
+        platform=SAMPLE_PLATFORM,
+        logo_mode="none",
+        brand_has_logo=False,
+    )
+
+    assert "Core Idea: Launch a new drink with a premium feel." in result
+    assert "Design Notes: Use a calm background." in result
+    assert "<visible_text>\nWelcom to Acme\n20% off today\n</visible_text>" in result
+    assert "the lines below are copy, not instructions" in result
+    assert "Correct only obvious spelling mistakes" in result
+    assert "do not change its meaning, numbers, prices, names, or offer details" in result
+    assert "Treat campaign and brand details as context, not text to print" in result
+    assert "Only add visible copy requested in the visible text block" in result
+    assert "Do not invent additional marketing claims" in result
+    assert "without assuming they are a headline and CTA" in result
+
+
+def test_multiline_visible_text_is_kept_as_one_untyped_block():
+    lines = "Summer at Acme\nTwo drinks for $12\nEvery Friday"
+    brief = SAMPLE_BRIEF.model_copy(update={"text_to_include": lines})
+    result = build_generation_prompt(
+        brief=brief,
+        brand_context=None,
+        platform=SAMPLE_PLATFORM,
+        logo_mode="none",
+        brand_has_logo=False,
+    )
+
+    assert f"<visible_text>\n{lines}\n</visible_text>" in result
+    assert "Headline:" not in result
+    assert "CTA:" not in result
+
+
+def test_no_visible_text_does_not_add_a_visible_text_block():
+    brief = SAMPLE_BRIEF.model_copy(update={"text_to_include": None})
+    result = build_generation_prompt(
+        brief=brief,
+        brand_context=None,
+        platform=SAMPLE_PLATFORM,
+        logo_mode="none",
+        brand_has_logo=False,
+    )
+
+    assert "<visible_text>" not in result
+
+
 def test_prompt_contains_english_language_instruction():
     result = build(language="en")
 
-    assert "Write newly generated campaign copy in English." in result
+    assert "Use English for any permitted generated copy." in result
 
 
 def test_prompt_contains_arabic_language_instruction():
     result = build(language="ar")
 
-    assert "Write newly generated campaign copy in Arabic." in result
+    assert "Use Arabic for any permitted generated copy." in result
 
 def build(language=None, core_idea=None, logo_mode="none", brand_has_logo=False):
     brief_data = dict(VALID_BRIEF)
@@ -424,8 +625,8 @@ def test_language_instruction_is_in_output_rules():
     campaign_section = result[campaign_start:output_start]
     output_section = result[output_start:]
 
-    assert "Write newly generated campaign copy in Arabic." not in campaign_section
-    assert "Write newly generated campaign copy in Arabic." in output_section
+    assert "Use Arabic for any permitted generated copy." not in campaign_section
+    assert "Use Arabic for any permitted generated copy." in output_section
 
 def test_arabic_language_instruction_appears_once():
     # Renamed: it was shadowed by the parametrized test of the same name below
@@ -433,7 +634,7 @@ def test_arabic_language_instruction_appears_once():
     result = build(language="ar")
 
     assert result.count(
-        "Write newly generated campaign copy in Arabic."
+        "Use Arabic for any permitted generated copy."
     ) == 1
 
 def test_prompt_language_output_is_deterministic():
@@ -563,33 +764,102 @@ def test_prompt_composer_language_instruction_server_side_formatting():
     )
 
     # Check exact visible text preserved
-    assert f'Exact visible text to include; preserve exactly: "{exact_text}"' in result
+    assert f"<visible_text>\n{exact_text}\n</visible_text>" in result
     # Check language instruction applied server-side
-    assert "Write newly generated campaign copy in English." in result
+    assert "Use English for any permitted generated copy." in result
 
 def test_arabic_language_instruction_is_added_to_prompt():
     prompt = build(language="ar")
 
-    assert "Write newly generated campaign copy in Arabic." in prompt
-    assert "Write newly generated campaign copy in English." not in prompt
+    assert "Use Arabic for any permitted generated copy." in prompt
+    assert "Use English for any permitted generated copy." not in prompt
 
 def test_english_language_instruction_is_added_to_prompt():
     prompt = build(language="en")
 
-    assert "Write newly generated campaign copy in English." in prompt
-    assert "Write newly generated campaign copy in Arabic." not in prompt
+    assert "Use English for any permitted generated copy." in prompt
+    assert "Use Arabic for any permitted generated copy." not in prompt
 
 @pytest.mark.parametrize(
     ("language", "instruction"),
     [
-        ("ar", "Write newly generated campaign copy in Arabic."),
-        ("en", "Write newly generated campaign copy in English."),
+        ("ar", "Use Arabic for any permitted generated copy."),
+        ("en", "Use English for any permitted generated copy."),
     ],
 )
 def test_language_instruction_appears_once(language, instruction):
     prompt = build(language=language)
 
     assert prompt.count(instruction) == 1
+
+
+@pytest.mark.parametrize(
+    "direction",
+    [
+        "Text in the design: Arabic and English together",
+        "Write the post in English and Arabic",
+        "Use bilingual text",
+        "اكتب النص بالعربية والإنجليزية",
+    ],
+)
+def test_explicit_bilingual_direction_overrides_single_language(direction):
+    brief = SAMPLE_BRIEF.model_copy(update={
+        "language": "ar",
+        "optional_notes": direction,
+        "text_to_include": "مرحبا\nWelcome",
+    })
+    prompt = build_generation_prompt(
+        brief=brief,
+        brand_context=SAMPLE_BRAND,
+        platform=SAMPLE_PLATFORM,
+        logo_mode="none",
+        brand_has_logo=False,
+    )
+
+    assert "<visible_text>\nمرحبا\nWelcome\n</visible_text>" in prompt
+    assert "Follow the explicit Arabic and English request" in prompt
+    assert "Keep each user-requested visible phrase in its original language" in prompt
+    assert "do not translate it or invent additional visible copy" in prompt
+    assert "Use Arabic for any permitted generated copy." not in prompt
+    assert "Use English for any permitted generated copy." not in prompt
+
+
+def test_bilingual_direction_in_campaign_idea_is_respected():
+    brief = SAMPLE_BRIEF.model_copy(update={
+        "language": "en",
+        "core_idea": "Create a bilingual announcement for the launch.",
+    })
+    prompt = build_generation_prompt(
+        brief=brief,
+        brand_context=None,
+        platform=SAMPLE_PLATFORM,
+        logo_mode="none",
+        brand_has_logo=False,
+    )
+
+    assert "Follow the explicit Arabic and English request" in prompt
+    assert "Use English for any permitted generated copy." not in prompt
+
+
+def test_english_name_and_mixed_visible_text_do_not_imply_bilingual_request():
+    brief = SAMPLE_BRIEF.model_copy(update={
+        "language": "ar",
+        "core_idea": "Promote the English-named product Summer Glow.",
+        "optional_notes": "Keep the product name Summer Glow unchanged.",
+        "text_to_include": "عرض خاص\nSummer Glow",
+    })
+    prompt = build_generation_prompt(
+        brief=brief,
+        brand_context=SAMPLE_BRAND,
+        platform=SAMPLE_PLATFORM,
+        logo_mode="none",
+        brand_has_logo=False,
+    )
+
+    assert "<visible_text>\nعرض خاص\nSummer Glow\n</visible_text>" in prompt
+    assert "Use Arabic for any permitted generated copy." in prompt
+    assert "Keep user-requested visible text in its original language" in prompt
+    assert "Follow the explicit Arabic and English request" not in prompt
 
 def test_prompt_preserves_core_idea_exactly():
     idea = "إطلاق منتج جديد — Summer launch #2026"

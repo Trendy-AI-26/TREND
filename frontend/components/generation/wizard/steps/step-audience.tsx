@@ -111,7 +111,7 @@ export function StepAudience({ value, onChange, errors }: StepAudienceProps) {
       {/* 2. نوع العميل */}
       <WizardField
         label={t('client_type_label')}
-        required
+        optionalLabel={t('optional')}
         hint={t('client_type_hint')}
         error={err('clientType')}
       >
@@ -126,7 +126,7 @@ export function StepAudience({ value, onChange, errors }: StepAudienceProps) {
 
       {/* 3 + 4. العمر والجنس جنب بعض على الشاشات الكبيرة */}
       <div className="grid gap-[30px] sm:grid-cols-2 sm:gap-6">
-        <WizardField label={t('age_label')} required error={err('ageRange')}>
+        <WizardField label={t('age_label')} optionalLabel={t('optional')} error={err('ageRange')}>
           <ChipGroup
             ariaLabel={t('age_label')}
             options={ageOptions}
@@ -136,7 +136,7 @@ export function StepAudience({ value, onChange, errors }: StepAudienceProps) {
           />
         </WizardField>
 
-        <WizardField label={t('gender_label')} required error={err('gender')}>
+        <WizardField label={t('gender_label')} optionalLabel={t('optional')} error={err('gender')}>
           <ChipGroup
             ariaLabel={t('gender_label')}
             options={genderOptions}
@@ -148,7 +148,7 @@ export function StepAudience({ value, onChange, errors }: StepAudienceProps) {
       </div>
 
       {/* 5. الموقع الجغرافي */}
-      <WizardField label={t('location_label')} required error={err('location') ?? err('country')}>
+      <WizardField label={t('location_label')} optionalLabel={t('optional')} error={err('country')}>
         <ChipGroup
           ariaLabel={t('location_label')}
           options={locationOptions}

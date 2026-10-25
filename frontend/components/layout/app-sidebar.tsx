@@ -90,7 +90,9 @@ export function AppSidebar({
           <div className="flex flex-wrap items-center justify-center gap-2" aria-label={t('dashboard.currentBrand')}>
             {activeBrand && (() => {
               const hex = normalizeHex(accents[activeBrand.id] ?? '')
-              return <span className="block h-8 w-8 rounded-lg ring-1 ring-inset ring-black/10" style={{ background: hex ? `#${hex}` : TRENDY_AI_ACCENT }} title={activeBrand.name} />
+              return <span className="flex h-8 w-8 items-center justify-center overflow-hidden rounded-lg ring-1 ring-inset ring-black/10" style={{ background: hex ? `#${hex}` : TRENDY_AI_ACCENT }} title={activeBrand.name}>
+                {activeBrand.logo_url && <Image src={activeBrand.logo_url} alt="" width={32} height={32} unoptimized className="h-full w-full object-contain" />}
+              </span>
             })()}
             <button type="button" onClick={onCreateBrand} title={t('dashboard.createBrand')} aria-label={t('dashboard.createBrand')} className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-brand-accent/40 bg-brand-bg/60 text-brand-headline/60 transition-colors hover:border-brand-primary hover:text-brand-primary">
               <Plus className="h-[14px] w-[14px]" />
@@ -122,11 +124,13 @@ export function AppSidebar({
                   >
                     <span
                       className={cn(
-                        'block h-[26px] w-[26px] rounded-[6px] ring-1 ring-inset ring-black/10',
+                        'flex h-[26px] w-[26px] items-center justify-center overflow-hidden rounded-[6px] ring-1 ring-inset ring-black/10',
                         selected && 'shadow-[0_1px_4px_rgba(26,26,26,0.3)]',
                       )}
                       style={{ background: hex ? `#${hex}` : TRENDY_AI_ACCENT }}
-                    />
+                    >
+                      {brand.logo_url && <Image src={brand.logo_url} alt="" width={26} height={26} unoptimized className="h-full w-full object-contain" />}
+                    </span>
                     <span
                       className={cn(
                         'h-[2px] w-[26px] rounded-full',

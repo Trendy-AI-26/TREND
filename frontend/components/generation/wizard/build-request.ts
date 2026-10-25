@@ -31,7 +31,7 @@ export interface WizardGenerateRequest {
 
 const SEGMENT_TO_API: Record<Exclude<AudienceSegment, 'other'>, string> = {
   individuals: 'general_consumers',
-  companies: 'professionals',
+  companies: 'custom',
   students: 'students',
   business_owners: 'small_business_owners',
 }
@@ -50,13 +50,13 @@ const FEELING_TO_TONE: Record<Feeling, GenerationBrief['voice_tone']> = {
   curiosity: 'playful',
 }
 
-const AGE_TO_API: Record<WizardAgeRange, AudienceAgeRange> = {
+const AGE_TO_API: Record<WizardAgeRange, AudienceAgeRange | null> = {
   under_18: 'under_18',
   '18_24': '18_24',
   '25_34': '25_34',
   '35_44': '35_44',
-  // الباك إند ما عنده "45 فما فوق"، فبنبعت 45-54 وبنوضح الباقي بالتفاصيل
-  '45_plus': '45_54',
+  // The backend has no 45+ band; keep the full range in audience details.
+  '45_plus': null,
 }
 
 const CTA_TEXT: Record<Exclude<CallToAction, 'none' | 'other'>, Record<TextLanguage, string>> = {
@@ -163,11 +163,12 @@ export function buildGenerateRequest({
   const textToInclude = [clean(idea.textInImage), ctaText].filter(Boolean).join('\n')
 
   // ----- الجمهور -----
-  const segments = audience.segments.map((segment) =>
+  const segments = Array.from(new Set(audience.segments.map((segment) =>
     segment === 'other' ? 'custom' : SEGMENT_TO_API[segment],
-  )
+  )))
 
   const audienceDetails = [
+    audience.segments.includes('companies') ? 'Audience segment: businesses and organizations' : null,
     audience.segments.includes('other') ? clean(audience.segmentOther) : null,
     audience.clientType ? `Client type: ${CLIENT_TYPE_TEXT[audience.clientType]}` : null,
     audience.ageRange === '45_plus' ? 'Age: 45 and above' : null,
@@ -194,7 +195,7 @@ export function buildGenerateRequest({
       : style.occasion && style.occasion !== 'none'
         ? `Occasion: ${OCCASION_TEXT[style.occasion]}`
         : null,
-    platform.hasNotes === 'yes' && clean(platform.notes)
+    clean(platform.notes)
       ? `Additional notes from the user: ${clean(platform.notes)}`
       : null,
   ].filter(Boolean)

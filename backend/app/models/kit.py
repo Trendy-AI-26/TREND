@@ -66,8 +66,8 @@ class KitAnswers(BaseModel):
     @field_validator("colors")
     @classmethod
     def validate_colors(cls, v: list[str]) -> list[str]:
-        if len(v) > 3:
-            raise ValueError("At most 3 colors are allowed")
+        if len(v) > 4:
+            raise ValueError("At most 4 colors are allowed")
         result = []
         for item in v:
             if not re.match(r"^#[0-9A-Fa-f]{6}$", item):

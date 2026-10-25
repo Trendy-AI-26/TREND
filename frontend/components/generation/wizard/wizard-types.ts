@@ -71,7 +71,7 @@ export const EMPTY_WIZARD_ANSWERS: WizardAnswers = {
     goal: '',
     goalCustom: '',
     textInImage: '',
-    cta: '',
+    cta: 'none',
     ctaCustom: '',
     textLanguage: '',
   },
@@ -96,7 +96,6 @@ export const EMPTY_WIZARD_ANSWERS: WizardAnswers = {
   platform: {
     preset: 'instagram_post',
     withCaption: true,
-    hasNotes: 'no',
     notes: '',
   },
 }
@@ -129,8 +128,7 @@ export function validateIdeaStep(answers: IdeaStepAnswers): IdeaErrors {
     errors.goalCustom = 'error_custom_required'
   }
 
-  if (!answers.cta) errors.cta = 'error_required_choice'
-  else if (answers.cta === 'other' && !answers.ctaCustom.trim()) {
+  if (answers.cta === 'other' && !answers.ctaCustom.trim()) {
     errors.ctaCustom = 'error_custom_required'
   }
 
@@ -147,12 +145,7 @@ export function validateAudienceStep(answers: AudienceStepAnswers): AudienceErro
     errors.segmentOther = 'error_custom_required'
   }
 
-  if (!answers.clientType) errors.clientType = 'error_required_choice'
-  if (!answers.ageRange) errors.ageRange = 'error_required_choice'
-  if (!answers.gender) errors.gender = 'error_required_choice'
-
-  if (!answers.location) errors.location = 'error_required_choice'
-  else if (answers.location === 'country' && !answers.country.trim()) {
+  if (answers.location === 'country' && !answers.country.trim()) {
     errors.country = 'error_country_required'
   }
 
@@ -203,6 +196,9 @@ export function validateStyleStep(answers: StyleStepAnswers, brandHasLogo: boole
   if (brandHasLogo && !answers.logoPlacement) errors.logoPlacement = 'error_required_choice'
 
   if (!answers.hasProductPhotos) errors.hasProductPhotos = 'error_required_choice'
+  else if (answers.hasProductPhotos !== 'no' && !answers.productImage) {
+    errors.productImage = 'error_product_image_required'
+  }
 
   // المناسبة اختيارية، بس إذا اختار "مناسبة أخرى" لازم يكتبها
   if (answers.occasion === 'other' && !answers.occasionCustom.trim()) {
@@ -213,12 +209,9 @@ export function validateStyleStep(answers: StyleStepAnswers, brandHasLogo: boole
 } 
 // ===== خيارات الخطوة الرابعة: المنصة والنتيجة =====
 
-export type YesNo = 'yes' | 'no'
-
 export interface PlatformStepAnswers {
   preset: PlatformPreset | ''
   withCaption: boolean
-  hasNotes: YesNo
   notes: string
 }
 
@@ -230,11 +223,6 @@ export function validatePlatformStep(answers: PlatformStepAnswers): PlatformErro
   const errors: PlatformErrors = {}
 
   if (!answers.preset) errors.preset = 'error_required_choice'
-
-  // إذا قال "نعم" عندي ملاحظات، لازم يكتبها
-  if (answers.hasNotes === 'yes' && !answers.notes.trim()) {
-    errors.notes = 'error_notes_required'
-  }
 
   return errors
 }

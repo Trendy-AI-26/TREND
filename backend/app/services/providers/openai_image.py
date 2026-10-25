@@ -21,6 +21,20 @@ OPENAI_IMAGES_EDITS_URL = (
 
 
 def _openai_size(width: int, height: int) -> str:
+    if (width, height) == (1080, 1920):
+        return "864x1536"
+    if (width, height) in ((1200, 630), (1200, 627)):
+        return "1280x672"
+    if (width, height) in ((1200, 675), (2560, 1440)):
+        return "1536x864"
+    if (width, height) == (1280, 720):
+        return "1280x720"
+    if (width, height) == (1500, 500):
+        return "1536x512"
+    if (width, height) == (1584, 396):
+        return "1536x512"
+    if (width, height) == (820, 312):
+        return "1680x640"
     if width == height:
         return "1024x1024"
 

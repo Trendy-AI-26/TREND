@@ -17,6 +17,7 @@ interface StepReviewProps {
   brandName: string
   savedStatus: KitStatus
   isDirty: boolean
+  logoUrl: string | null
 }
 
 export function StepReview({
@@ -25,6 +26,7 @@ export function StepReview({
   brandName,
   savedStatus,
   isDirty,
+  logoUrl,
 }: StepReviewProps) {
   const t = useTranslations('components.kit.steps.step-review');
   const tIndustry = useTranslations('components.kit.steps.step-industry');
@@ -85,6 +87,15 @@ export function StepReview({
           </div>
           <ReviewRow label={t('avoid')} value={answers.avoid_words || none} />
         </div>
+      </div>
+
+      <div className="rounded-lg border border-brand-accent/20 bg-white p-4">
+        <p className="mb-3 font-tajawal text-[13px] font-semibold text-brand-headline">{t('brand_logo')}</p>
+        {logoUrl ? (
+          <Image src={logoUrl} alt={t('brand_logo_alt', { brandName })} width={160} height={120} unoptimized className="h-[120px] w-[160px] rounded-md border border-brand-accent/15 object-contain" />
+        ) : (
+          <p className="font-tajawal text-[12px] text-muted-foreground">{none}</p>
+        )}
       </div>
 
       {answers.product_asset_id && (

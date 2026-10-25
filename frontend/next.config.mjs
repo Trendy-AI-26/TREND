@@ -20,6 +20,15 @@ if (storageUrl) {
   });
 }
 
+if (process.env.NODE_ENV === 'development') {
+  remotePatterns.push({
+    protocol: 'http',
+    hostname: '127.0.0.1',
+    port: '9000',
+    pathname: '/brand-assets/**',
+  });
+}
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   output: 'standalone',

@@ -1,4 +1,7 @@
+import re
 from datetime import datetime, timezone
+from fractions import Fraction
+from pathlib import Path
 
 from app.services.presets import (
     MODEL_FOR_PROVIDER,
@@ -23,10 +26,32 @@ def test_every_preset_has_an_aspect_ratio():
     assert set(PLATFORM_PRESETS.keys()) == set(PRESET_TO_ASPECT_RATIO.keys())
 
 
-def test_aspect_ratios_are_from_supported_set():
-    supported = {"1:1", "9:16", "16:9"}
-    for ratio in PRESET_TO_ASPECT_RATIO.values():
-        assert ratio in supported
+def test_aspect_ratios_match_actual_dimensions():
+    for key, (width, height, _label) in PLATFORM_PRESETS.items():
+        ratio = Fraction(width, height)
+        assert PRESET_TO_ASPECT_RATIO[key] == f"{ratio.numerator}:{ratio.denominator}"
+
+
+def test_frontend_and_backend_preset_dimensions_match():
+    source = (
+        Path(__file__).resolve().parents[2] / "frontend" / "lib" / "presets.ts"
+    ).read_text(encoding="utf-8")
+    declarations = source.split("export const PLATFORM_PRESETS:", 1)[1].split(
+        "export function gcd", 1
+    )[0]
+    frontend = {
+        key: (int(width), int(height))
+        for key, width, height in re.findall(
+            r"^\s*(\w+):\s*\{\s*width:\s*(\d+),\s*height:\s*(\d+),",
+            declarations,
+            flags=re.MULTILINE,
+        )
+    }
+    assert len(frontend) == 13
+    assert frontend == {
+        key: (width, height)
+        for key, (width, height, _label) in PLATFORM_PRESETS.items()
+    }
 
 
 def test_model_for_provider():
@@ -66,7 +91,8 @@ def test_build_download_filename_example_from_spec():
 
 
 def test_build_download_filename_converts_to_utc():
-    from datetime import timedelta, timezone as tz
+    from datetime import timedelta
+    from datetime import timezone as tz
     eastern = tz(timedelta(hours=-4))
     dt = datetime(2026, 4, 11, 10, 30, 52, tzinfo=eastern)
     result = build_download_filename("My Brand!", "instagram_post", dt)

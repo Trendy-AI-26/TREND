@@ -7,7 +7,8 @@ import type { CSSProperties } from 'react'
 import { ArrowLeft, Check } from 'lucide-react'
 import { saveKit } from '@/hooks/use-kit'
 import { useBrands } from '@/hooks/use-brands'
-import { KitAnswers, BrandKit, KitStatus } from '@/types'
+import { useBrand } from '@/hooks/use-brand'
+import { KitAnswers, BrandKit, KitStatus, type Brand } from '@/types'
 import { StepName } from './steps/step-name'
 import { StepLogo } from './steps/step-logo'
 import { StepTagline } from './steps/step-tagline'
@@ -52,8 +53,26 @@ export function KitWizard({ brandId, brandName, initialKit }: KitWizardProps) {
   const [savedStatus, setSavedStatus] = useState<KitStatus>(initialKit.status)
   const [isDirty, setIsDirty] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [savedBrandName, setSavedBrandName] = useState(brandName)
   const router = useRouter()
-  const { setAccent, updateBrand } = useBrands()
+  const { setAccent, updateBrand, refetch: refetchBrands } = useBrands()
+  const { brand } = useBrand(brandId)
+  const [uploadedLogoUrl, setUploadedLogoUrl] = useState<string | null>(null)
+  const logoUrl = uploadedLogoUrl ?? brand?.logo_url ?? null
+
+  const handleLogoChange = (nextLogoUrl: string) => {
+    setUploadedLogoUrl(nextLogoUrl)
+    updateBrand({ id: brandId, logo_url: nextLogoUrl })
+    void refetchBrands()
+    router.refresh()
+  }
+
+  const handleNameSaved = (updated: Brand) => {
+    setSavedBrandName(updated.name)
+    updateBrand(updated)
+    void refetchBrands()
+    router.refresh()
+  }
   const persistedColor = useRef(initialKit.answers.colors[0] ?? null)
 
   const handleChange = useCallback((partial: Partial<KitAnswers>) => {
@@ -166,7 +185,7 @@ export function KitWizard({ brandId, brandName, initialKit }: KitWizardProps) {
       <header className="flex flex-wrap items-start justify-between gap-4">
         <div dir="auto" className="min-w-0">
           <h1 className="font-el-messiri text-[26px] font-semibold leading-tight text-brand-headline sm:text-[30px]">{t('brand_kit')}</h1>
-          <p className="mt-1 font-tajawal text-[13px] text-muted-foreground">{t('interview_subtitle', { brandName })}</p>
+          <p className="mt-1 font-tajawal text-[13px] text-muted-foreground">{t('interview_subtitle', { brandName: savedBrandName })}</p>
         </div>
         <div className="w-full max-w-[420px] rounded-2xl border border-brand-accent/20 bg-white px-4 py-3 shadow-xs sm:px-4 sm:py-3.5">
           <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
@@ -223,21 +242,22 @@ export function KitWizard({ brandId, brandName, initialKit }: KitWizardProps) {
 
       <section key={step} className="flex flex-1 justify-center py-4 animate-[TRENDY AI-reveal_250ms_ease-out]">
         <div className="w-full max-w-[1120px]">
-          {step === 0 && <StepLogo brandId={brandId} brandName={brandName} productAssetId={answers.product_asset_id} onAssetChange={(id) => handleChange({ product_asset_id: id })} />}
-          {step === 1 && <StepName answers={answers} onChange={handleChange} brandName={brandName} />}
-          {step === 2 && <StepTagline answers={answers} onChange={handleChange} brandName={brandName} />}
+          {step === 0 && <StepLogo brandId={brandId} brandName={savedBrandName} productAssetId={answers.product_asset_id} onAssetChange={(id) => handleChange({ product_asset_id: id })} logoUrl={logoUrl} onLogoChange={handleLogoChange} />}
+          {step === 1 && <StepName brandId={brandId} brandName={savedBrandName} logoUrl={logoUrl} onNameSaved={handleNameSaved} />}
+          {step === 2 && <StepTagline answers={answers} onChange={handleChange} brandName={savedBrandName} />}
           {step === 3 && <StepIndustry answers={answers} onChange={handleChange} />}
-          {step === 4 && <StepAudience answers={answers} onChange={handleChange} brandName={brandName} />}
+          {step === 4 && <StepAudience answers={answers} onChange={handleChange} brandName={savedBrandName} />}
           {step === 5 && <StepColors answers={answers} onChange={handleChange} />}
-          {step === 6 && <StepAvoidWords answers={answers} onChange={handleChange} brandName={brandName} />}
+          {step === 6 && <StepAvoidWords answers={answers} onChange={handleChange} brandName={savedBrandName} />}
           {step === 7 && (
             <StepReview
               brandId={brandId}
               answers={answers}
               onChange={handleChange}
-              brandName={brandName}
+              brandName={savedBrandName}
               savedStatus={savedStatus}
               isDirty={isDirty}
+              logoUrl={logoUrl}
             />
           )}
         </div>

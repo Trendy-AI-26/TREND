@@ -7,13 +7,14 @@ from app.models.generation import (
     AudienceSegmentEnum,
     CampaignGoalEnum,
     ContentTypeEnum,
-    GenerationBrief,
     GenerateRequest,
+    GenerationBrief,
     PlatformPresetEnum,
     TargetAudience,
     TextLanguageEnum,
     VoiceToneEnum,
 )
+from app.services.prompt_composer import PlatformContext, build_generation_prompt
 
 VALID_BRIEF = {
     "campaign_goal": "product_launch",
@@ -178,6 +179,95 @@ def test_generation_brief_requires_details_for_custom_audience():
 
     with pytest.raises(ValidationError):
         GenerationBrief.model_validate(payload)
+
+
+@pytest.mark.parametrize(
+    ("segments", "details", "age_range"),
+    [
+        (["custom"], "Audience segment: businesses and organizations", "25_34"),
+        (["general_consumers"], "Age: 45 and above", None),
+        (
+            ["custom", "students"],
+            "Audience segment: businesses and organizations. Healthcare teams. Age: 45 and above",
+            None,
+        ),
+    ],
+)
+def test_wizard_audience_details_validate_and_reach_prompt(segments, details, age_range):
+    request = GenerateRequest.model_validate({
+        "brief": {
+            **VALID_BRIEF,
+            "target_audience": {
+                "segments": segments,
+                "location": None,
+                "age_range": age_range,
+                "gender_focus": "all",
+                "details": details,
+            },
+        },
+        "platform_preset": "instagram_post",
+    })
+
+    prompt = build_generation_prompt(
+        brief=request.brief,
+        brand_context=None,
+        platform=PlatformContext(
+            label="Instagram Post",
+            width=1080,
+            height=1080,
+            aspect_ratio="1:1",
+            note="Keep key content centered.",
+        ),
+        logo_mode="none",
+        brand_has_logo=False,
+    )
+
+    assert (
+        request.brief.target_audience.age_range.value
+        if request.brief.target_audience.age_range else None
+    ) == age_range
+    assert f"Details: {details}" in prompt
+    assert "Age group: 45" not in prompt
+    if age_range is None:
+        assert "Age group:" not in prompt
+    if "custom" in segments:
+        assert "Demographic: custom audience" in prompt
+
+
+def test_wizard_request_accepts_omitted_optional_audience_and_no_reference():
+    request = GenerateRequest.model_validate({
+        "brief": {
+            "language": "ar",
+            "campaign_goal": "sales_conversion",
+            "campaign_goal_custom": None,
+            "content_type": "product_showcase",
+            "content_type_custom": None,
+            "target_audience": {
+                "segments": ["custom"],
+                "location": None,
+                "age_range": None,
+                "gender_focus": None,
+                "details": "Audience segment: businesses and organizations",
+            },
+            "core_idea": "Confirmed spring offer",
+            "voice_tone": "trustworthy",
+            "voice_tone_custom": None,
+            "optional_notes": "Text in the design: Arabic and English together",
+            "text_to_include": "Shop now",
+        },
+        "platform_preset": "instagram_post",
+        "logo_mode": "prompt",
+        "logo_placement": "auto",
+        "product_asset_id": None,
+        "product_edit_instruction": None,
+    })
+
+    assert request.brief.target_audience.location is None
+    assert request.brief.target_audience.age_range is None
+    assert request.brief.target_audience.gender_focus is None
+    assert request.brief.target_audience.details == "Audience segment: businesses and organizations"
+    assert request.logo_mode.value == "prompt"
+    assert request.product_asset_id is None
 
 
 def test_generation_brief_strips_text_and_converts_empty_optional_to_none():

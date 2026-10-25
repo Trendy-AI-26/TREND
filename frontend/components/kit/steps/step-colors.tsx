@@ -47,7 +47,7 @@ export function StepColors({ answers, onChange }: StepProps) {
   }
 
   const handleAddColor = (hex = '#334155') => {
-    if (colors.length >= 3) return
+    if (colors.length >= 4) return
     if (colors.some((c) => normalizeHex(c) === normalizeHex(hex))) return
     onChange({ colors: [...colors, hex] })
   }
@@ -89,7 +89,7 @@ export function StepColors({ answers, onChange }: StepProps) {
             <button
               type="button"
               onClick={() => handleAddColor()}
-              disabled={colors.length >= 3}
+              disabled={colors.length >= 4}
               className="flex h-9 w-full items-center justify-center gap-2 border-y border-dashed border-brand-accent/20 font-tajawal text-[11px] text-muted-foreground transition-colors hover:text-brand-primary disabled:opacity-50"
             >
               <Plus className="h-3.5 w-3.5" />{t('add_color')}
