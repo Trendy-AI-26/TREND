@@ -1,3 +1,4 @@
+from unittest.mock import create_autospec
 from uuid import uuid4
 
 import pytest
@@ -7,8 +8,8 @@ from app.core.auth import User
 from app.models.caption import CaptionRequest, CaptionResponse
 from app.routers import generations
 from app.services.caption_generator import CaptionOutputError
+from app.services.caption_generator import generate_caption as real_generate_caption
 from app.services.generation_resolver import ManagedGenerationConfig
-
 
 USER = User(id="user-123", email="user@example.com", access_token="test-token")
 
@@ -50,6 +51,40 @@ def valid_result() -> CaptionResponse:
             "language": "ar",
         }
     )
+
+
+@pytest.mark.asyncio
+async def test_caption_endpoint_calls_generator_with_supported_arguments(monkeypatch):
+    brand_id = uuid4()
+    generation_id = uuid4()
+    row = valid_row(brand_id=str(brand_id))
+
+    monkeypatch.setattr(generations, "_get_brand_or_404", lambda *_: {"name": "Acme"})
+    monkeypatch.setattr(generations, "_find_generation_or_404", lambda *_: row)
+    use_server_config(monkeypatch)
+    monkeypatch.setattr(generations, "_get_brand_kit_context", lambda *_: None)
+    caption_mock = create_autospec(real_generate_caption, return_value=valid_result())
+    monkeypatch.setattr(generations, "generate_caption", caption_mock)
+
+    result = await generations.create_caption(
+        brand_id=brand_id,
+        generation_id=generation_id,
+        body=None,
+        current_user=USER,
+    )
+
+    assert result == valid_result()
+    caption_mock.assert_awaited_once()
+    assert set(caption_mock.await_args.kwargs) == {
+        "provider",
+        "api_key",
+        "language",
+        "platform",
+        "generation_prompt",
+        "brief",
+        "brand_context",
+        "preferences",
+    }
 
 
 @pytest.mark.asyncio

@@ -404,7 +404,6 @@ async def create_caption(
             generate_caption(
                 provider="openai",
                 api_key=api_key,
-                model=getattr(settings, "OPENAI_TEXT_MODEL", "gpt-4o-mini"),
                 language=language,
                 platform=platform,
                 generation_prompt=generation.get("prompt", ""),
