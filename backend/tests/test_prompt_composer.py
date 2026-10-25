@@ -34,6 +34,19 @@ SAMPLE_BRAND = BrandContext(
     industry="interior design",
 )
 
+
+def test_four_brand_colors_reach_generation_prompt():
+    colors = ["#111111", "#222222", "#333333", "#444444"]
+    result = build_generation_prompt(
+        brief=GenerationBrief.model_validate(VALID_BRIEF),
+        brand_context=BrandContext(name="Acme", colors=colors),
+        platform=build_platform_context("instagram_post", 1080, 1080, "1:1"),
+        logo_mode="none",
+        brand_has_logo=False,
+    )
+    assert "Brand colors: " + ", ".join(colors) in result
+
+
 SAMPLE_PLATFORM = PlatformContext(
     label="Instagram Post",
     width=1080,

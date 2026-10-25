@@ -93,6 +93,7 @@ def test_baseline_applies_once_then_is_a_noop(pg):
     assert pg["first"] == [
         "0001_baseline.sql",
         "0002_kit_complete_without_tone.sql",
+        "0003_brand_kit_four_colors.sql",
     ]
     assert pg["second"] == []
 
@@ -355,6 +356,30 @@ def test_kit_upsert_and_list_summaries(pg):
     summaries = brand_repo.kit_summaries([brand["id"], str(uuid.uuid4())])
     assert [s["brand_id"] for s in summaries] == [brand["id"]]
     assert brand_repo.get_kit_status(brand["id"]) == "in_progress"
+
+
+@pytest.mark.parametrize("count", [1, 3, 4])
+def test_kit_palette_round_trips(pg, count):
+    from app.repositories import brands as brand_repo
+
+    brand = _new_brand(_new_user())
+    colors = [f"#{index:06X}" for index in range(count)]
+    payload = {
+        "brand_id": brand["id"],
+        "product_asset_id": None,
+        "tagline": None,
+        "tone": None,
+        "industry": "Retail",
+        "audience": "Local customers",
+        "colors": colors,
+        "avoid_words": None,
+        "summary": "Palette test",
+        "status": "complete",
+        "completed_at": datetime.now(timezone.utc).isoformat(),
+    }
+    assert brand_repo.upsert_kit(payload)["colors"] == colors
+    assert brand_repo.get_kit(brand["id"])["colors"] == colors
+    assert brand_repo.kit_summaries([brand["id"]])[0]["colors"] == colors
 
 
 def test_history_cursor_pagination_has_no_gaps_or_duplicates(pg):
