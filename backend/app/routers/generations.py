@@ -10,6 +10,7 @@ from uuid import UUID, uuid4
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from pydantic import ValidationError
 
+from app import db
 from app.config import settings
 from app.core import storage
 from app.core.auth import User, get_current_user
@@ -33,6 +34,7 @@ from app.repositories import generations as gen_repo
 from app.repositories import product_assets as product_asset_repo
 from app.services.caption_generator import CaptionOutputError, generate_caption
 from app.services.credits import (
+    CreditReservation,
     CreditsError,
     commit_credits,
     release_credits,
@@ -99,9 +101,116 @@ def _error_response(status_code: int, code: str, message: str) -> HTTPException:
     )
 
 
-def _hash_generation_request(body: GenerateRequest) -> str:
-    payload = body.model_dump_json()
+def _hash_generation_request(body: GenerateRequest, *, user_id: str, brand_id: UUID) -> str:
+    """Bind an idempotency key to the user, brand and validated payload.
+
+    The body is the validated model (defaults included), so equivalent payloads
+    hash identically regardless of key order. Reusing a key for another user,
+    brand or payload produces a different hash and is rejected.
+    """
+    payload = json.dumps(
+        {
+            "version": 1,
+            "user_id": str(user_id),
+            "brand_id": str(brand_id),
+            "body": body.model_dump(mode="json"),
+        },
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+    )
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def _save_checkpoint(record_id: str, checkpoint: dict) -> None:
+    if not gen_repo.save_checkpoint(record_id, checkpoint):
+        raise RuntimeError("Settlement checkpoint was not saved")
+
+
+def _resume_settlement(record: dict, checkpoint: dict) -> dict:
+    """One bounded settlement attempt; replays reuse the same idempotent receipts.
+
+    Never compensate a commit failure: its transaction may already have
+    committed. The checkpoint is immutable once published, including during
+    concurrent replays. Success is published (generation + idempotency record)
+    only after the credit and quota commits have returned.
+    """
+    user_id, generation_id = str(record["user_id"]), str(record["generation_id"])
+    reservation = (
+        CreditReservation(
+            user_id=user_id,
+            generation_id=generation_id,
+            reservation_id=checkpoint["credit_id"],
+            amount=checkpoint["credit_amount"],
+        )
+        if checkpoint.get("credit_id")
+        else None
+    )
+    try:
+        if checkpoint["phase"] == "output_ready":
+            if reservation:
+                commit_credits(reservation)
+            if checkpoint["quota_reserved"]:
+                commit_generation_slot(user_id=user_id, generation_id=UUID(generation_id))
+            row = gen_repo.mark_succeeded(
+                generation_id,
+                checkpoint["image_path"],
+                checkpoint.get("provider_request_id"),
+                checkpoint["completed_at"],
+            )
+            status, response_status = "succeeded", 200
+        else:
+            failures = []
+            # Neither cleanup attempt may prevent the other from running.
+            if checkpoint["quota_reserved"]:
+                try:
+                    release_generation_slot(
+                        user_id=user_id, generation_id=UUID(generation_id)
+                    )
+                except Exception:
+                    failures.append("quota")
+                    logger.exception("Quota cleanup pending for %s", generation_id)
+            if reservation:
+                try:
+                    release_credits(reservation)
+                except Exception:
+                    failures.append("credits")
+                    logger.exception("Credit cleanup pending for %s", generation_id)
+            if failures:
+                raise RuntimeError("Cleanup pending: " + ", ".join(failures))
+            _mark_failed(
+                UUID(generation_id), checkpoint["error_code"], checkpoint["error_message"]
+            )
+            row = gen_repo.get_generation(generation_id)
+            status, response_status = "failed", checkpoint["response_status"]
+        if not row:
+            raise RuntimeError("Generation finalization returned no row")
+        if not gen_repo.finish_idempotency(
+            record["id"], status, response_status, checkpoint["completed_at"]
+        ):
+            raise RuntimeError("Request finalization returned no row")
+        try:
+            release_generation_lock(user_id=user_id, generation_id=UUID(generation_id))
+        except Exception:
+            # The generation is already terminal; an expired lock is harmless.
+            logger.exception("Could not release owned terminal lock %s", generation_id)
+        return row
+    except Exception as exc:
+        logger.exception("Generation recovery pending for %s", generation_id)
+        raise _error_response(
+            503,
+            "GENERATION_SETTLEMENT_PENDING",
+            "Finalization is pending. Retry this request with the same key.",
+        ) from exc
+
+
+def _finish_usage(timer, **kwargs) -> None:
+    """Usage logging is best effort and never changes the generation outcome."""
+    if timer is not None and getattr(timer, "usage_id", "set") is not None:
+        try:
+            timer.finish(**kwargs)
+        except Exception:
+            logger.exception("Usage logging failed; generation outcome is unchanged")
 
 
 def _get_idempotent_generation(
@@ -111,6 +220,11 @@ def _get_idempotent_generation(
     idempotency_key: str,
     request_hash: str,
 ) -> dict | None:
+    """Return the saved successful generation for a replayed key, else None.
+
+    Saved failures and unfinished requests raise the stored/appropriate error;
+    the provider is never called again for a key that has an admitted record.
+    """
     record = gen_repo.get_idempotency(user_id, scope, idempotency_key)
 
     if record is None:
@@ -126,20 +240,59 @@ def _get_idempotent_generation(
     generation_id = record.get("generation_id")
 
     if not generation_id:
-        if record.get("status") == "processing":
-            raise _error_response(
-                409,
-                "GENERATION_IN_PROGRESS",
-                "This request is already being processed.",
-            )
-        return None
+        raise _error_response(
+            409,
+            "GENERATION_OUTCOME_UNKNOWN",
+            "This request cannot be safely restarted.",
+        )
 
-    generation = gen_repo.get_generation(generation_id)
+    row = gen_repo.get_generation(generation_id)
+    if row is None:
+        raise _error_response(
+            409,
+            "GENERATION_OUTCOME_UNKNOWN",
+            "This request cannot be safely restarted.",
+        )
 
-    if generation is not None:
-        return generation
-
-    return record
+    checkpoint = record.get("response_body") or {}
+    if record.get("status") == "processing" and checkpoint.get("phase") in (
+        "output_ready",
+        "cleanup_pending",
+    ):
+        row = _resume_settlement(record, checkpoint)
+        if row["status"] == "succeeded":
+            return row
+        raise _error_response(
+            checkpoint["response_status"],
+            checkpoint["error_code"],
+            checkpoint["error_message"],
+        )
+    if record.get("status") == "processing" and checkpoint.get("phase") == "outcome_unknown":
+        raise _error_response(
+            503,
+            "GENERATION_OUTCOME_UNKNOWN",
+            "The provider outcome needs review. This request will not be restarted.",
+        )
+    if record.get("status") == "processing" or row["status"] in ("pending", "processing"):
+        raise _error_response(
+            409,
+            "GENERATION_IN_PROGRESS",
+            "This request is still processing. Retry with the same key.",
+        )
+    if record.get("status") == "succeeded" and row["status"] == "succeeded":
+        return row
+    if record.get("status") == "failed" and row["status"] == "failed":
+        status = record.get("response_status") or 500
+        raise _error_response(
+            status if 400 <= status <= 599 else 500,
+            row.get("error_code") or "GENERATION_FAILED",
+            row.get("error_message") or "This generation failed.",
+        )
+    raise _error_response(
+        409,
+        "GENERATION_OUTCOME_UNKNOWN",
+        "This request needs recovery before it can be finalized.",
+    )
 
 
 _get_existing_idempotency = _get_idempotent_generation
@@ -458,10 +611,12 @@ async def generate_image(
         max_length=128,
     ),
 ) -> GenerationResponse:
-    if not idempotency_key:
-        idempotency_key = f"legacy-{current_user.id}-{uuid4()}"
     """
     Generate an image for a brand.
+
+    An ``Idempotency-Key`` header is required. The key is bound to the user,
+    brand and payload: a retry with the same key replays the saved outcome and
+    never calls the provider again.
 
     The provider, model, and API key are resolved from
     server-side configuration only.
@@ -472,6 +627,10 @@ async def generate_image(
     - The image is passed to the provider as a reference image.
     - The original product asset remains unchanged.
     """
+    if not idempotency_key:
+        raise _error_response(
+            400, "IDEMPOTENCY_KEY_REQUIRED", "An Idempotency-Key is required."
+        )
 
     # ---------------------------------------------------------
     # 1. Verify that the brand belongs to the current user
@@ -483,7 +642,9 @@ async def generate_image(
 
     brand_name = brand["name"]
     brand_has_logo = bool(brand.get("logo_path"))
-    request_hash = _hash_generation_request(body)
+    request_hash = _hash_generation_request(
+        body, user_id=current_user.id, brand_id=brand_id
+    )
 
     existing = _get_idempotent_generation(
         user_id=current_user.id,
@@ -513,11 +674,6 @@ async def generate_image(
     except RateLimitExceeded as exc:
         raise _error_response(429, "RATE_LIMITED", str(exc)) from exc
 
-    idempotency_record = _create_idempotency_record(
-        user_id=current_user.id,
-        idempotency_key=idempotency_key,
-        request_hash=request_hash,
-    )
     logo_placement = _resolve_logo_placement(body)
     # ---------------------------------------------------------
     # 2. Validate logo requirements
@@ -618,25 +774,11 @@ async def generate_image(
     )
 
     # ---------------------------------------------------------
-    # 11. Create a generation row before calling the provider
+    # 11. Admit the request: generation row first, then lock and
+    #     idempotency record (which reference it)
     # ---------------------------------------------------------
     generation_id = uuid4()
-    lock_acquired = False
     quota_reserved = False
-
-    try:
-        acquire_generation_lock(
-            user_id=current_user.id,
-            generation_id=generation_id,
-        )
-        lock_acquired = True
-
-    except GenerationLockError as exc:
-        raise _error_response(
-            409,
-            "GENERATION_IN_PROGRESS",
-            str(exc),
-        ) from exc
 
     if managed_config.provider != "openai":
         raise _error_response(
@@ -647,8 +789,12 @@ async def generate_image(
 
     resolved_model = managed_config.model
 
-    gen_repo.insert_generation(
-        {
+    idempotency_record = _admit_generation(
+        user_id=current_user.id,
+        generation_id=generation_id,
+        idempotency_key=idempotency_key,
+        request_hash=request_hash,
+        generation_row={
             "id": str(generation_id),
             "user_id": current_user.id,
             "brand_id": str(brand_id),
@@ -667,18 +813,12 @@ async def generate_image(
                 if body.product_asset_id is not None
                 else None
             ),
-            "trend_id": (
-                str(body.trend_id)
-                if body.trend_id is not None
-                else None
-            ),
+            "status": "pending",
+            "trend_id": (str(body.trend_id) if body.trend_id is not None else None),
             "trend_snapshot": selected_trend,
             "trend_applied": selected_trend is not None,
-        }
+        },
     )
-    # The idempotency record references the generation row, so link it only
-    # now that the row exists.
-    gen_repo.link_idempotency(idempotency_record["id"], generation_id)
 
     logger.info(
         (
@@ -695,10 +835,12 @@ async def generate_image(
     )
 
     # ---------------------------------------------------------
-    # 12. Reserve credits, start usage, then run the provider
+    # 12. Reserve quota and credits, start usage, then run the provider
     # ---------------------------------------------------------
     credit_reservation = None
     usage_timer = None
+    provider_started = False
+    recovery_checkpoint = None
 
     try:
         try:
@@ -708,22 +850,14 @@ async def generate_image(
             )
             quota_reserved = True
         except QuotaError as exc:
-            # The generation row and idempotency record are created before the
-            # atomic quota RPC. Mark rejected requests terminal so an expired
-            # trial or exhausted daily quota cannot leave pending records.
-            try:
-                _mark_failed(generation_id, exc.code, exc.message)
-                gen_repo.finish_idempotency(
-                    idempotency_record["id"],
-                    "failed",
-                    402 if exc.code != "TRIAL_EXPIRED" else 403,
-                )
-            except Exception:
-                logger.exception("Failed to finalize generation after quota rejection")
-            status_code = 402 if exc.code in {
+            if exc.code not in {
                 "GENERATION_LIMIT_REACHED",
                 "DAILY_GENERATION_LIMIT_REACHED",
-            } else 403 if exc.code == "TRIAL_EXPIRED" else 503
+                "TRIAL_EXPIRED",
+            }:
+                # The reserve may have committed: treated as an unknown outcome.
+                raise
+            status_code = 403 if exc.code == "TRIAL_EXPIRED" else 402
             raise _error_response(status_code, exc.code, exc.message) from exc
 
         try:
@@ -734,6 +868,8 @@ async def generate_image(
                 idempotency_key=f"generation:{generation_id}:reserve",
             )
         except CreditsError as exc:
+            if exc.code != "INSUFFICIENT_CREDITS":
+                raise
             # Out of credits is a client-visible condition, not a server fault.
             raise _error_response(
                 402,
@@ -749,12 +885,16 @@ async def generate_image(
             model=resolved_model,
             credits=settings.GENERATION_CREDIT_COST,
         )
-        usage_timer.start()
+        try:
+            usage_timer.start()
+        except Exception:
+            logger.exception("Usage start failed; continuing without usage logging")
 
         gen_repo.mark_processing(generation_id)
 
         api_key = managed_config.api_key
 
+        provider_started = True
         try:
             result: ProviderResult = await asyncio.wait_for(
                 openai_generate(
@@ -820,78 +960,23 @@ async def generate_image(
         )
 
         # -----------------------------------------------------
-        # 16. Mark generation as succeeded
+        # 16. Persist the output, then settle. Never refund an uncertain
+        #     commit: once the checkpoint exists, only a replay may settle.
         # -----------------------------------------------------
-        now_iso = datetime.now(timezone.utc).isoformat()
-
-        row = gen_repo.mark_succeeded(
-            generation_id,
-            image_path,
-            result.request_id,
-            now_iso,
+        recovery_checkpoint = {
+            "phase": "output_ready",
+            "image_path": image_path,
+            "provider_request_id": result.request_id,
+            "completed_at": datetime.now(timezone.utc).isoformat(),
+            "credit_id": credit_reservation.reservation_id,
+            "credit_amount": credit_reservation.amount,
+            "quota_reserved": quota_reserved,
+        }
+        _save_checkpoint(idempotency_record["id"], recovery_checkpoint)
+        row = _resume_settlement(idempotency_record, recovery_checkpoint)
+        _finish_usage(
+            usage_timer, status="succeeded", provider_request_id=result.request_id
         )
-
-        if credit_reservation is not None:
-            commit_credits(credit_reservation)
-
-        if quota_reserved:
-            commit_generation_slot(
-                user_id=current_user.id,
-                generation_id=generation_id,
-            )
-
-        if usage_timer is not None:
-            usage_timer.finish(
-                status="succeeded",
-                provider_request_id=result.request_id,
-            )
-
-        gen_repo.finish_idempotency(
-            idempotency_record["id"], "succeeded", 200, now_iso
-        )
-
-        # -----------------------------------------------------
-        # 17. Refetch the saved row if update returned no data
-        # -----------------------------------------------------
-        if row is None:
-            try:
-                row = gen_repo.get_generation(generation_id)
-            except Exception:
-                logger.warning(
-                    ("Failed to re-fetch generation %s after success update"),
-                    generation_id,
-                )
-
-        # -----------------------------------------------------
-        # 18. Fallback response row
-        # -----------------------------------------------------
-        if row is None:
-            logger.error(
-                (
-                    "No row data for succeeded generation "
-                    "%s brand_id=%s; constructing minimal row"
-                ),
-                generation_id,
-                brand_id,
-            )
-
-            row = {
-                "id": str(generation_id),
-                "prompt": body.brief.core_idea,
-                "language": body.brief.language.value,
-                "provider": "openai",
-                "model": resolved_model,
-                "platform_preset": body.platform_preset.value,
-                "width": preset_w,
-                "height": preset_h,
-                "logo_mode": body.logo_mode.value,
-                "status": "succeeded",
-                "image_path": image_path,
-                "error_code": None,
-                "error_message": None,
-                "created_at": now_iso,
-                "completed_at": now_iso,
-            }
 
         logger.info(
             "generate success generation_id=%s brand_id=%s",
@@ -899,130 +984,89 @@ async def generate_image(
             brand_id,
         )
 
-        return _build_response(
-            row,
-            brand_name,
-        )
+        return _build_response(row, brand_name)
 
-    # ---------------------------------------------------------
-    # 19. Known provider failure
-    # ---------------------------------------------------------
-    except ProviderError as exc:
-        if quota_reserved:
-            release_generation_slot(
-                user_id=current_user.id,
-                generation_id=generation_id,
-            )
-        if credit_reservation is not None:
-            release_credits(credit_reservation)
-        if usage_timer is not None:
-            usage_timer.finish(
+    except (Exception, asyncio.CancelledError) as exc:
+        if recovery_checkpoint is not None:
+            # Output is saved; settlement resumes from a replay of this key.
+            if isinstance(exc, HTTPException):
+                raise
+            raise _error_response(
+                503,
+                "GENERATION_SETTLEMENT_PENDING",
+                "Finalization needs recovery. Keep the same request key.",
+            ) from exc
+
+        definite_rejection = isinstance(exc, ProviderError) and exc.code in {
+            "INVALID_KEY",
+            "RATE_LIMITED",
+            "CONTENT_POLICY",
+            "PROVIDER_CLIENT_ERROR",
+            "REFERENCE_IMAGE_UNSUPPORTED",
+        }
+        if (provider_started and not definite_rejection) or isinstance(
+            exc, (CreditsError, QuotaError)
+        ):
+            # The provider (or a reservation) may have acted: keep quota,
+            # credits, lock and generation row for review; do not restart.
+            try:
+                _save_checkpoint(idempotency_record["id"], {"phase": "outcome_unknown"})
+            except Exception:
+                logger.exception("Failed to record unknown outcome for %s", generation_id)
+            _finish_usage(
+                usage_timer,
                 status="failed",
-                metadata={"error_code": exc.code},
+                metadata={"error_code": "GENERATION_OUTCOME_UNKNOWN"},
             )
-        gen_repo.finish_idempotency(idempotency_record["id"], "failed", 502)
-        _mark_failed(
-            generation_id,
-            exc.code,
-            exc.user_message,
-        )
+            if isinstance(exc, asyncio.CancelledError):
+                raise
+            raise _error_response(
+                503,
+                "GENERATION_OUTCOME_UNKNOWN",
+                "The outcome needs review. This request will not be restarted.",
+            ) from exc
 
-        logger.info(
-            ("generate failed code=%s generation_id=%s brand_id=%s"),
-            exc.code,
-            generation_id,
-            brand_id,
-        )
+        if isinstance(exc, ProviderError):
+            code, message, response_status = exc.code, exc.user_message, 502
+        elif isinstance(exc, HTTPException):
+            error = exc.detail.get("error", {}) if isinstance(exc.detail, dict) else {}
+            code = error.get("code", "HTTP_ERROR")
+            message = error.get("message", "Rejected")
+            response_status = exc.status_code
+        else:
+            logger.exception(
+                "generate pipeline unexpected error generation_id=%s brand_id=%s",
+                generation_id,
+                brand_id,
+            )
+            code, message, response_status = "INTERNAL_ERROR", "Internal error", 500
 
-        raise _error_response(
-            502,
-            exc.code,
-            exc.user_message,
-        ) from exc
-
-    # ---------------------------------------------------------
-    # 20. Unexpected failure
-    # ---------------------------------------------------------
-    except HTTPException as exc:
-        # Already-shaped client errors (402 credits, 400 validation, ...)
-        # must not be relabelled as an internal fault, but resources created
-        # before the error still need to be finalized.
-        if quota_reserved:
-            try:
-                release_generation_slot(
-                    user_id=current_user.id,
-                    generation_id=generation_id,
-                )
-            except Exception:
-                logger.exception("Failed to release image quota after HTTP failure")
-        if credit_reservation is not None:
-            try:
-                release_credits(credit_reservation)
-            except Exception:
-                logger.exception("Failed to release credits after HTTP failure")
-        if usage_timer is not None and usage_timer.usage_id is not None:
-            try:
-                usage_timer.finish(
-                    status="failed",
-                    metadata={"error_code": "HTTP_ERROR"},
-                )
-            except Exception:
-                logger.exception("Failed to finish usage after HTTP failure")
+        checkpoint = {
+            "phase": "cleanup_pending",
+            "error_code": code,
+            "error_message": message,
+            "response_status": response_status,
+            "completed_at": datetime.now(timezone.utc).isoformat(),
+            "quota_reserved": quota_reserved,
+            "credit_id": (
+                credit_reservation.reservation_id if credit_reservation else None
+            ),
+            "credit_amount": credit_reservation.amount if credit_reservation else 0,
+        }
         try:
-            gen_repo.finish_idempotency(
-                idempotency_record["id"], "failed", exc.status_code
-            )
-        except Exception:
-            logger.exception("Failed to update idempotency after HTTP failure")
-        raise
-
-    except Exception as exc:
-        logger.exception(
-            ("generate pipeline unexpected error generation_id=%s brand_id=%s"),
-            generation_id,
-            brand_id,
-        )
-
-        if quota_reserved:
-            try:
-                release_generation_slot(
-                    user_id=current_user.id,
-                    generation_id=generation_id,
-                )
-            except Exception:
-                logger.exception(
-                    "Failed to release image quota after unexpected failure"
-                )
-        if credit_reservation is not None:
-            try:
-                release_credits(credit_reservation)
-            except Exception:
-                logger.exception("Failed to release credits after unexpected failure")
-        if usage_timer is not None and usage_timer.usage_id is not None:
-            try:
-                usage_timer.finish(
-                    status="failed",
-                    metadata={"error_code": "INTERNAL_ERROR"},
-                )
-            except Exception:
-                logger.exception("Failed to finish usage after unexpected failure")
-        try:
-            gen_repo.finish_idempotency(idempotency_record["id"], "failed", 500)
-        except Exception:
-            logger.exception("Failed to update idempotency after unexpected failure")
-        _mark_failed(generation_id, "INTERNAL_ERROR", "Internal error")
-
-        raise _error_response(
-            500,
-            "INTERNAL_ERROR",
-            "Something went wrong. Please try again.",
-        ) from exc
-    finally:
-        if lock_acquired:
-            release_generation_lock(
-                user_id=current_user.id,
-                generation_id=generation_id,
-            )
+            _save_checkpoint(idempotency_record["id"], checkpoint)
+        except Exception as checkpoint_error:
+            logger.exception("Could not persist cleanup intent for %s", generation_id)
+            raise _error_response(
+                503,
+                "GENERATION_SETTLEMENT_PENDING",
+                "Cleanup needs review. Keep the same request key.",
+            ) from checkpoint_error
+        _resume_settlement(idempotency_record, checkpoint)
+        _finish_usage(usage_timer, status="failed", metadata={"error_code": code})
+        if isinstance(exc, asyncio.CancelledError):
+            raise
+        raise _error_response(response_status, code, message) from exc
 
 
 _VALID_HISTORY_STATUSES = {s.value for s in GenerationHistoryStatusEnum}
@@ -1208,17 +1252,115 @@ def _get_product_asset_or_400(
     return asset
 
 
+def _admit_generation(
+    *,
+    user_id: str,
+    generation_id: UUID,
+    idempotency_key: str,
+    request_hash: str,
+    generation_row: dict,
+) -> dict:
+    """Create the parent row before its dependants; compensate only this attempt.
+
+    The generation row is inserted first, then the per-user lock, then the
+    idempotency record that references the generation. Each step is its own
+    transaction, and a lost response may still have committed, so a failed
+    admission is cleaned up using the preallocated ``generation_id`` (never by
+    user or key alone: another request may own those rows). No quota, credit
+    or provider work happens before this helper returns.
+    """
+    try:
+        gen_repo.insert_generation(generation_row)
+        acquire_generation_lock(user_id=user_id, generation_id=generation_id)
+        return _create_idempotency_record(
+            user_id=user_id,
+            generation_id=generation_id,
+            idempotency_key=idempotency_key,
+            request_hash=request_hash,
+        )
+    except Exception as exc:
+        cleanup_errors: list[str] = []
+        # Children first (the idempotency record references the generation).
+        # A failure of one cleanup step must not prevent the others.
+        try:
+            gen_repo.delete_idempotency_for_generation(generation_id)
+        except Exception:
+            cleanup_errors.append("idempotency_records")
+            logger.exception(
+                "Admission cleanup failed table=idempotency_records generation_id=%s",
+                generation_id,
+            )
+        try:
+            release_generation_lock(user_id=user_id, generation_id=generation_id)
+        except Exception:
+            cleanup_errors.append("generation_locks")
+            logger.exception(
+                "Admission cleanup failed table=generation_locks generation_id=%s",
+                generation_id,
+            )
+        if "idempotency_records" in cleanup_errors:
+            # The child could not be removed (its delete is uncertain), so keep
+            # the generation as the parent: mark both terminal for diagnosis and
+            # replay rather than letting ON DELETE SET NULL drop the link.
+            try:
+                _mark_failed(generation_id, "ADMISSION_FAILED", "Admission failed")
+                gen_repo.fail_idempotency_for_generation(generation_id, 503)
+            except Exception:
+                logger.exception(
+                    "Admission failure marking failed generation_id=%s", generation_id
+                )
+        else:
+            try:
+                gen_repo.delete_owned_generation(user_id, generation_id)
+            except Exception:
+                cleanup_errors.append("generations")
+                logger.exception(
+                    "Admission cleanup failed table=generations generation_id=%s",
+                    generation_id,
+                )
+        if cleanup_errors:
+            raise _error_response(
+                503,
+                "GENERATION_ADMISSION_CLEANUP_FAILED",
+                "Generation admission could not be finalized.",
+            ) from exc
+        if isinstance(exc, GenerationLockError) or db.is_unique_violation(exc):
+            raise _error_response(
+                409,
+                "GENERATION_IN_PROGRESS",
+                str(exc)
+                if isinstance(exc, GenerationLockError)
+                else "This request is already being processed.",
+            ) from exc
+        if isinstance(exc, HTTPException):
+            raise
+        raise _error_response(
+            503,
+            "GENERATION_ADMISSION_FAILED",
+            "Generation admission is temporarily unavailable.",
+        ) from exc
+
+
 def _create_idempotency_record(
     *,
     user_id: str,
     idempotency_key: str,
     request_hash: str,
+    generation_id: UUID,
 ) -> dict:
     try:
         record = gen_repo.create_idempotency(
-            user_id, "image_generation", idempotency_key, request_hash
+            user_id,
+            "image_generation",
+            idempotency_key,
+            request_hash,
+            generation_id=generation_id,
         )
     except Exception as exc:
+        # Only a duplicate key means "already being processed"; any other
+        # failure is a real fault and must not be disguised as a duplicate.
+        if not db.is_unique_violation(exc):
+            raise
         raise _error_response(
             409,
             "GENERATION_IN_PROGRESS",

@@ -33,6 +33,11 @@ VALID_BRIEF = {
 }
 
 
+def _client():
+    # The backend requires an Idempotency-Key on every generate request.
+    return TestClient(app, headers={"Idempotency-Key": str(uuid4())})
+
+
 class FakeBackend:
     """Stands in for the generation repository and the object storage helpers."""
 
@@ -40,6 +45,7 @@ class FakeBackend:
         self.inserted_rows = defaultdict(list)
         self.uploaded_files = {}
         self.finished_idempotency = []
+        self.checkpoints = []
         self.failed = []
         self.last_row = None
 
@@ -47,17 +53,44 @@ class FakeBackend:
     def get_idempotency(self, user_id, scope, idempotency_key):
         return None
 
-    def create_idempotency(self, user_id, scope, idempotency_key, request_hash):
+    def create_idempotency(
+        self, user_id, scope, idempotency_key, request_hash, generation_id=None
+    ):
+        # The record references the generation, so the row must exist first.
+        assert generation_id is None or self.inserted_rows["generations"]
         self.inserted_rows["idempotency_records"].append(
-            {"user_id": user_id, "idempotency_key": idempotency_key}
+            {
+                "user_id": user_id,
+                "idempotency_key": idempotency_key,
+                "generation_id": None if generation_id is None else str(generation_id),
+            }
         )
-        return {"id": "idem-1", "request_hash": request_hash}
+        return {
+            "id": "idem-1",
+            "user_id": user_id,
+            "generation_id": None if generation_id is None else str(generation_id),
+            "request_hash": request_hash,
+        }
 
     def link_idempotency(self, record_id, generation_id):
         self.inserted_rows["idempotency_links"].append((record_id, str(generation_id)))
 
+    def save_checkpoint(self, record_id, checkpoint):
+        self.checkpoints.append(checkpoint)
+        return True
+
     def finish_idempotency(self, record_id, status, response_status, completed_at=None):
         self.finished_idempotency.append((status, response_status))
+        return True
+
+    def delete_idempotency_for_generation(self, generation_id):
+        return None
+
+    def fail_idempotency_for_generation(self, generation_id, response_status):
+        return None
+
+    def delete_owned_generation(self, user_id, generation_id):
+        return None
 
     def insert_generation(self, values):
         from datetime import datetime, timezone
@@ -105,7 +138,11 @@ def mock_backend(monkeypatch):
         "get_idempotency",
         "create_idempotency",
         "link_idempotency",
+        "save_checkpoint",
         "finish_idempotency",
+        "delete_idempotency_for_generation",
+        "fail_idempotency_for_generation",
+        "delete_owned_generation",
         "insert_generation",
         "mark_processing",
         "mark_succeeded",
@@ -233,7 +270,7 @@ async def test_generate_endpoint_success_openai(
         lambda image_bytes, preset_w, preset_h: image_bytes,
     )
 
-    client = TestClient(app)
+    client = _client()
     brand_id = uuid4()
 
     payload = {
@@ -254,7 +291,7 @@ async def test_generate_endpoint_success_openai(
 
 @pytest.mark.asyncio
 async def test_generate_endpoint_validation_error(override_auth, mock_helpers):
-    client = TestClient(app)
+    client = _client()
     brand_id = uuid4()
 
     # Payload is missing required field 'brief'
@@ -283,7 +320,7 @@ async def test_generate_endpoint_logo_required_check(
         },
     )
 
-    client = TestClient(app)
+    client = _client()
     brand_id = uuid4()
 
     # Requesting a watermark logo mode when brand has no logo
@@ -316,7 +353,7 @@ async def test_generate_endpoint_accepts_language_param(
     monkeypatch.setattr(generations, "openai_generate", provider_mock)
     monkeypatch.setattr(generations, "resize_to_preset", lambda img, w, h: img)
 
-    client = TestClient(app)
+    client = _client()
     brand_id = uuid4()
 
     # نمرر brief يحتوي على language="en"
@@ -339,7 +376,7 @@ async def test_generate_endpoint_accepts_language_param(
 @pytest.mark.asyncio
 async def test_generate_endpoint_rejects_invalid_language(override_auth, mock_helpers):
     """When the brief contains an invalid language, the endpoint should return a 400 validation error."""
-    client = TestClient(app)
+    client = _client()
     brand_id = uuid4()
 
     payload_bad_lang = {
@@ -375,7 +412,7 @@ async def test_generate_endpoint_persists_language(
     # The provider stub returns non-image bytes; skip real Pillow decoding.
     monkeypatch.setattr(generations, "resize_to_preset", lambda b, w, h: b)
 
-    client = TestClient(app)
+    client = _client()
     brand_id = uuid4()
 
     payload = {
@@ -399,9 +436,12 @@ async def test_generate_endpoint_persists_language(
     inserted = mock_backend.inserted_rows["generations"][0]
 
     assert inserted["language"] == "en"
-    # The idempotency record is linked only after the generation row exists
-    # (it references it), and it is closed as succeeded.
-    assert mock_backend.inserted_rows["idempotency_links"][0][1] == inserted["id"]
+    # The idempotency record references the generation, so it is created
+    # already linked to the row that exists by then, and it is closed as
+    # succeeded after the output checkpoint was saved.
+    record = mock_backend.inserted_rows["idempotency_records"][0]
+    assert record["generation_id"] == inserted["id"]
+    assert mock_backend.checkpoints[0]["phase"] == "output_ready"
     assert mock_backend.finished_idempotency == [("succeeded", 200)]
     assert (
         "brand-assets",
@@ -528,7 +568,7 @@ async def test_generate_passes_product_reference_to_provider(
         "product_edit_instruction": ("Place the product on a white background."),
     }
 
-    client = TestClient(app)
+    client = _client()
     brand_id = uuid4()
 
     response = client.post(
@@ -553,6 +593,7 @@ def mock_credits_and_usage(monkeypatch):
         (),
         {
             "amount": 1,
+            "reservation_id": "test-receipt",
             "user_id": "user-123",
             "generation_id": "generation-123",
         },
@@ -625,7 +666,7 @@ def test_generation_returns_402_when_credits_are_missing(
         reject_reservation,
     )
 
-    client = TestClient(app)
+    client = _client()
     brand_id = uuid4()
 
     payload = {
@@ -657,7 +698,9 @@ async def test_provider_failure_releases_credits(
 ):
     from app.services.providers.base import ProviderError
 
-    reservation = object()
+    from app.services.credits import CreditReservation
+
+    reservation = CreditReservation("test-receipt", "user-123", "unused", 1)
     release_calls = []
     quota_release_calls = []
 
@@ -695,8 +738,9 @@ async def test_provider_failure_releases_credits(
     )
 
     async def failing_provider(**kwargs):
+        # A definite provider rejection is refundable; ambiguous codes are not.
         raise ProviderError(
-            "PROVIDER_ERROR",
+            "INVALID_KEY",
             "Provider failed.",
         )
 
@@ -706,7 +750,7 @@ async def test_provider_failure_releases_credits(
         failing_provider,
     )
 
-    client = TestClient(app)
+    client = _client()
     brand_id = uuid4()
 
     response = client.post(
@@ -719,7 +763,8 @@ async def test_provider_failure_releases_credits(
     )
 
     assert response.status_code == 502
-    assert release_calls == [reservation]
+    assert len(release_calls) == 1
+    assert release_calls[0].reservation_id == reservation.reservation_id
     assert len(quota_release_calls) == 1
 
 
@@ -765,7 +810,7 @@ def test_second_generation_is_rejected_when_lock_exists(
     monkeypatch.setattr(generations, "acquire_generation_lock", locked)
     monkeypatch.setattr(generations, "release_generation_lock", lambda **_: None)
 
-    client = TestClient(app)
+    client = _client()
 
     response = client.post(
         f"/brands/{uuid4()}/generate",

@@ -95,12 +95,25 @@ export function GenerationWizard({ brandId, brandName, brandHasLogo }: Generatio
     setStep((current) => Math.max(0, current - 1))
   }
 
-  function handleGenerate() {
+  // newIntent=true only for an explicit "generate another one" after a success;
+  // retries of an unresolved request keep their idempotency key.
+  function submit(newIntent: boolean) {
     if (!allComplete) return
     window.scrollTo({ top: 0, behavior: 'smooth' })
-    void run(answers.style.productImage, (productAssetId) =>
-      buildGenerateRequest({ answers, brandHasLogo, locale, productAssetId }),
+    void run(
+      answers.style.productImage,
+      (productAssetId) =>
+        buildGenerateRequest({ answers, brandHasLogo, locale, productAssetId }),
+      newIntent,
     )
+  }
+
+  function handleGenerate() {
+    submit(false)
+  }
+
+  function handleRegenerate() {
+    submit(true)
   }
 
   function handleEditAnswers() {
@@ -173,7 +186,7 @@ export function GenerationWizard({ brandId, brandName, brandHasLogo }: Generatio
           withCaption={answers.platform.withCaption}
           captionPreferences={{ include_cta: answers.idea.cta !== 'none' }}
           basedOn={basedOn}
-          onRegenerate={handleGenerate}
+          onRegenerate={handleRegenerate}
           onEditAnswers={handleEditAnswers}
         />
       )}

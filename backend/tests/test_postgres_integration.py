@@ -93,6 +93,7 @@ def test_baseline_applies_once_then_is_a_noop(pg):
     assert pg["first"] == [
         "0001_baseline.sql",
         "0002_kit_complete_without_tone.sql",
+        "0003_serialize_credit_reservation_transitions.sql",
     ]
     assert pg["second"] == []
 
@@ -407,6 +408,33 @@ def test_idempotency_record_unique_per_user_scope_key(pg):
     assert (done["status"], done["generation_id"], done["response_status"]) == ("succeeded", generation["id"], 200)
 
 
+def test_idempotency_checkpoint_and_linked_creation(pg):
+    from app import db
+    from app.repositories import generations as gens
+
+    owner = _new_user()
+    brand = _new_brand(owner)
+    generation = _new_generation(brand["id"], owner)
+
+    # The record references the generation, so an unknown id is a FK violation.
+    with pytest.raises(db.IntegrityError) as missing:
+        gens.create_idempotency(owner, "image_generation", "m" * 16, "hash", generation_id=uuid.uuid4())
+    assert not db.is_unique_violation(missing.value)
+
+    record = gens.create_idempotency(
+        owner, "image_generation", "c" * 16, "hash", generation_id=generation["id"]
+    )
+    assert record["generation_id"] == generation["id"]
+    assert gens.save_checkpoint(record["id"], {"phase": "outcome_unknown"}) is True
+    assert gens.get_idempotency(owner, "image_generation", "c" * 16)["response_body"] == {
+        "phase": "outcome_unknown"
+    }
+    assert gens.finish_idempotency(record["id"], "failed", 503) is True
+    # A closed record no longer accepts checkpoints.
+    assert gens.save_checkpoint(record["id"], {"phase": "output_ready"}) is False
+    assert gens.finish_idempotency(str(uuid.uuid4()), "failed", 503) is False
+
+
 def test_quota_slots_daily_limit_and_summary(pg):
     from app.services import quota
 
@@ -466,9 +494,16 @@ def test_credits_reserve_commit_release(pg):
         user_id=owner, generation_id=first["id"], idempotency_key="generation:1:reserve"
     )
     assert credits.get_available_credits(owner) == 41
+    # Migration 0003: a matching retry replays the original receipt without
+    # reserving again; a retry for another generation is rejected.
+    replay = credits.reserve_credits(
+        user_id=owner, generation_id=first["id"], idempotency_key="generation:1:reserve"
+    )
+    assert replay.reservation_id == reservation.reservation_id
+    assert credits.get_available_credits(owner) == 41
     with pytest.raises(credits.CreditsError) as reused:
         credits.reserve_credits(
-            user_id=owner, generation_id=first["id"], idempotency_key="generation:1:reserve"
+            user_id=owner, generation_id=second["id"], idempotency_key="generation:1:reserve"
         )
     assert reused.value.code == "IDEMPOTENCY_KEY_REUSED"
 
