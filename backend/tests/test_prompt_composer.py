@@ -1,3 +1,5 @@
+import json
+from pathlib import Path
 import pytest
 from app.services.prompt_composer import (
     BrandContext,
@@ -674,3 +676,88 @@ def test_selected_trend_does_not_change_user_text():
     assert brief_data["core_idea"] in result
     assert brief_data["text_to_include"] in result
     assert brief_data["optional_notes"] in result
+
+
+FIXTURES_PATH = (
+    Path(__file__).parent / "fixtures" / "generation_briefs.json"
+)
+
+
+@pytest.fixture
+def generation_briefs():
+    with FIXTURES_PATH.open(encoding="utf-8") as file:
+        return json.load(file)
+
+def test_generation_brief_fixtures_have_required_fields(generation_briefs):
+    required_fields = {
+        "campaign_goal",
+        "content_type",
+        "target_audience",
+        "core_idea",
+        "voice_tone",
+    }
+
+    for fixture in generation_briefs:
+        brief_data = fixture["brief"]
+        assert required_fields.issubset(brief_data)
+        assert brief_data["core_idea"]
+        assert brief_data["target_audience"]["segments"]
+
+TEST_PLATFORM = PlatformContext(
+    label="Instagram Post",
+    width=1080,
+    height=1080,
+    aspect_ratio="1:1",
+    note=(
+        "Square 1:1 format. Design should work as a grid tile "
+        "— keep key content centered."
+    ),
+)
+def test_prompt_fixtures_match_expected_outputs(generation_briefs):
+    for fixture in generation_briefs:
+        brief = GenerationBrief.model_validate(fixture["brief"])
+        result = build_generation_prompt(
+            brief=brief,
+            brand_context=None,
+            platform=TEST_PLATFORM,
+            logo_mode="none",
+            brand_has_logo=False,
+        )
+        expected = fixture["expected"]
+
+        assert expected["campaign_goal"] in result
+        assert expected["content_type"] in result
+        assert expected["audience_segment"] in result
+        assert expected["core_idea"] in result
+
+        if "age_range" in expected:
+            assert expected["age_range"] in result
+        if "gender_focus" in expected:
+            assert expected["gender_focus"] in result
+        if "notes" in expected:
+            assert expected["notes"] in result
+        if "text_to_include" in expected:
+            assert expected["text_to_include"] in result
+        if "tone" in expected:
+            assert expected["tone"] in result
+
+def test_prompt_headers_are_instructions_not_requested_canvas_text(
+    generation_briefs,
+):
+    brief = GenerationBrief.model_validate(
+        generation_briefs[0]["brief"]
+    )
+
+    result = build_generation_prompt(
+        brief=brief,
+        brand_context=None,
+        platform=TEST_PLATFORM,
+        logo_mode="none",
+        brand_has_logo=False,
+    )
+
+    assert "=== SYSTEM ROLE ===" in result
+    assert "=== CAMPAIGN BRIEF ===" in result
+    assert "=== OUTPUT RULES ===" in result
+    assert "Do NOT render section headers" in result
+    assert "Avoid rendering metadata" in result

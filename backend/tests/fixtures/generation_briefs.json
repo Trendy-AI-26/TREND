@@ -1,0 +1,54 @@
+[
+  {
+    "name": "arabic_product_launch",
+    "brief": {
+      "campaign_goal": "product_launch",
+      "content_type": "product_showcase",
+      "target_audience": {
+        "segments": ["small_business_owners"],
+        "location": "Amman, Jordan",
+        "age_range": "25_34",
+        "gender_focus": "all",
+        "details": "Local cafe and bakery owners."
+      },
+      "core_idea": "إطلاق مشروب قهوة بارد جديد ومنعش لصباح صيفي مزدحم.",
+      "voice_tone": "friendly",
+      "optional_notes": "اترك مساحة في الأعلى لكتابة نص عربي واضح.",
+      "text_to_include": "خصم 20% لفترة محدودة"
+    },
+    "expected": {
+      "campaign_goal": "Communicate a product or service launch.",
+      "content_type": "Visual product showcase focusing on aesthetic product presentation.",
+      "audience_segment": "small business owners",
+      "age_range": "25–34 years old",
+      "gender_focus": "all genders",
+      "core_idea": "إطلاق مشروب قهوة بارد جديد ومنعش لصباح صيفي مزدحم.",
+      "notes": "اترك مساحة في الأعلى لكتابة نص عربي واضح.",
+      "text_to_include": "خصم 20% لفترة محدودة"
+    }
+  },
+  {
+    "name": "custom_campaign",
+    "brief": {
+      "campaign_goal": "custom",
+      "campaign_goal_custom": "احتفال بالذكرى السنوية الخامسة",
+      "content_type": "custom",
+      "content_type_custom": "بطاقة شكر مخصصة للعملاء",
+      "target_audience": {
+        "segments": ["custom"],
+        "details": "عملاء المتجر الأوفياء في كافة الفروع."
+      },
+      "core_idea": "التعبير عن الامتنان للعملاء مع تقديم مفاجأة خاصة.",
+      "voice_tone": "custom",
+      "voice_tone_custom": "دافئ جداً ومفعم بالتقدير"
+    },
+    "expected": {
+      "campaign_goal": "احتفال بالذكرى السنوية الخامسة",
+      "content_type": "بطاقة شكر مخصصة للعملاء",
+      "audience_segment": "custom audience",
+      "details": "عملاء المتجر الأوفياء في كافة الفروع.",
+      "core_idea": "التعبير عن الامتنان للعملاء مع تقديم مفاجأة خاصة.",
+      "tone": "دافئ جداً ومفعم بالتقدير"
+    }
+  }
+]
