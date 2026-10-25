@@ -1102,7 +1102,13 @@
         },
         "step-name": {
           "this_is_prefix": "This is ",
-          "registered_name_help": "The name you registered. Continue to tell TRENDY AI how it should look and sound."
+          "registered_name_help": "Edit the saved brand name here. Changes take effect when you save the name.",
+          "name_label": "Brand name",
+          "name_requirements": "Use 2 to 120 characters. Spaces at the beginning or end are removed.",
+          "name_invalid": "Enter a brand name with 2 to 120 characters.",
+          "save_name": "Save name",
+          "saving_name": "Saving name…",
+          "name_saved": "Brand name saved."
         },
         "step-logo": {
           "brand_logo_label": "Brand logo (optional)",
