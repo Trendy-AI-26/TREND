@@ -87,8 +87,8 @@ function LibraryRow({ item, brandId, onDelete }: { item: GenerationHistoryItem; 
     }
     return <>
         <article className="group flex min-h-[164px] items-center gap-5 border-b border-brand-accent/10 p-4 last:border-b-0 md:p-5">
-            <Link href={`/${brandId}/history/${item.id}`} className="relative h-[96px] w-[96px] shrink-0 overflow-hidden rounded-xl bg-brand-cream no-underline md:h-[108px] md:w-[108px]">
-                {item.image_url ? <img src={item.image_url} alt={item.prompt_excerpt} className="h-full w-full object-cover" /> : <div className="flex h-full w-full items-center justify-center text-brand-primary"><AlertCircle className="h-6 w-6" /></div>}
+            <Link href={`/${brandId}/history/${item.id}`} className="relative h-[96px] w-[96px] shrink-0 overflow-hidden rounded-xl bg-neutral-100 no-underline md:h-[108px] md:w-[108px]">
+                {item.image_url ? <img src={item.image_url} alt={item.prompt_excerpt} className="h-full w-full object-contain" /> : <div className="flex h-full w-full items-center justify-center text-brand-primary"><AlertCircle className="h-6 w-6" /></div>}
             </Link>
             <div className="min-w-0 flex-1 text-start">
                 <h2 className="truncate text-[16px] font-bold text-brand-headline">{item.prompt_excerpt}</h2>

@@ -450,12 +450,12 @@ function DesignCard({
       href={`/${brandId}/history/${item.id}`}
       className={`${panelClass} group overflow-hidden text-brand-headline no-underline transition-shadow hover:shadow-md`}
     >
-      <div className="relative aspect-[1.7/1] overflow-hidden bg-brand-cream">
+      <div className="relative aspect-[1.7/1] overflow-hidden bg-neutral-100">
         {item.image_url ? (
           <img
             src={item.image_url}
             alt={item.prompt_excerpt}
-            className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.03]"
+            className="h-full w-full object-contain"
           />
         ) : (
           <div className="flex h-full items-center justify-center text-brand-primary/50">
