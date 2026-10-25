@@ -23,13 +23,13 @@ PRESET_TO_ASPECT_RATIO: dict[str, str] = {
     "instagram_reel_cover": "9:16",
     "facebook_story":       "9:16",
     "tiktok_video_cover":   "9:16",
-    "facebook_post":        "16:9",
+    "facebook_post":        "40:21",
     "twitter_post":         "16:9",
-    "linkedin_post":        "16:9",
+    "linkedin_post":        "400:209",
     "youtube_thumbnail":    "16:9",
-    "twitter_header":       "16:9",
-    "facebook_cover":       "16:9",
-    "linkedin_banner":      "16:9",
+    "twitter_header":       "3:1",
+    "facebook_cover":       "205:78",
+    "linkedin_banner":      "4:1",
     "youtube_banner":       "16:9",
 }
 
