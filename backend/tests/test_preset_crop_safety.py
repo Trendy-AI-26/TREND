@@ -20,7 +20,7 @@ EXPECTED_REMOVED_PERCENT = {
     "twitter_post": 0.0,
     "twitter_header": 0.0,
     "linkedin_post": 0.48,
-    "linkedin_banner": 62.5,
+    "linkedin_banner": 25.0,
     "tiktok_video_cover": 0.0,
     "youtube_thumbnail": 0.0,
     "youtube_banner": 0.0,
@@ -33,10 +33,10 @@ LEFT = (0, 255, 0)
 RIGHT = (255, 255, 0)
 CENTER = (255, 0, 255)
 INNER_MARKERS = (
-    (0.125, (96, 0, 192)),
+    (0.10, (96, 0, 192)),
     (0.375, (0, 192, 192)),
     (0.625, (255, 128, 0)),
-    (0.875, (255, 255, 255)),
+    (0.90, (255, 255, 255)),
 )
 
 
@@ -119,6 +119,27 @@ def test_provider_sized_image_is_center_cropped_to_exact_png(preset_id):
     else:
         removed = 0.0
     assert removed == pytest.approx(EXPECTED_REMOVED_PERCENT[preset_id], abs=0.01)
+
+
+def test_linkedin_banner_keeps_center_safe_markers_and_product():
+    source = Image.new("RGB", (1536, 512), BACKGROUND)
+    draw = ImageDraw.Draw(source)
+    draw.rectangle((0, 0, 1535, 31), fill=TOP)
+    draw.rectangle((0, 480, 1535, 511), fill=BOTTOM)
+    draw.rectangle((740, 88, 796, 112), fill=LEFT)
+    draw.rectangle((740, 244, 796, 268), fill=CENTER)
+    draw.rectangle((740, 388, 796, 412), fill=RIGHT)
+    draw.rectangle((1000, 190, 1200, 320), fill=(248, 195, 72))
+
+    output = Image.open(io.BytesIO(resize_to_preset(_png(source), 1584, 396)))
+    assert output.format == "PNG"
+    assert output.size == (1584, 396)
+    assert output.getpixel((792, 0)) == BACKGROUND
+    assert output.getpixel((792, 395)) == BACKGROUND
+    assert output.getpixel((792, 37)) == LEFT
+    assert output.getpixel((792, 198)) == CENTER
+    assert output.getpixel((792, 347)) == RIGHT
+    assert output.getpixel((1134, 192)) == (248, 195, 72)
 
 
 @pytest.mark.parametrize("preset_id", PLATFORM_PRESETS)

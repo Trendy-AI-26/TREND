@@ -237,7 +237,15 @@ def build_platform_context(
 
 
 def _composition_guidance(platform: PlatformContext, *, reserve_logo: bool) -> str:
-    if platform.width >= 2 * platform.height:
+    if (platform.width, platform.height) == (1584, 396):
+        crop_guidance = (
+            "For the LinkedIn banner center crop, keep essential text, any CTA, "
+            "products, and important visual elements within the central 75% "
+            "of the source image height. Leave approximately 12.5% at both "
+            "the top and bottom free of critical content, and maintain a "
+            "coherent full-width composition after cropping."
+        )
+    elif platform.width >= 2 * platform.height:
         crop_guidance = (
             "The final canvas is very wide: keep important text and the product "
             "in a central horizontal band, with generous space above and below "

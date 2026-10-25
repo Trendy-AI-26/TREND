@@ -17,7 +17,7 @@ EXPECTED_PROVIDER_SIZES = {
     "twitter_post": "1536x864",
     "twitter_header": "1536x512",
     "linkedin_post": "1280x672",
-    "linkedin_banner": "1536x1024",
+    "linkedin_banner": "1536x512",
     "tiktok_video_cover": "864x1536",
     "youtube_thumbnail": "1280x720",
     "youtube_banner": "1536x864",

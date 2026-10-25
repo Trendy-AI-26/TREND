@@ -211,7 +211,7 @@ def test_platform_notes_cover_all_presets():
         assert preset_id in PLATFORM_NOTES, f"Missing PLATFORM_NOTES entry for {preset_id}"
 
 
-@pytest.mark.parametrize("preset_id", ["facebook_cover", "twitter_header", "linkedin_banner"])
+@pytest.mark.parametrize("preset_id", ["facebook_cover", "twitter_header"])
 def test_wide_preset_keeps_focal_content_in_central_band(preset_id):
     width, height, _ = PLATFORM_PRESETS[preset_id]
     platform = build_platform_context(preset_id, width, height, "wide")
@@ -229,6 +229,24 @@ def test_wide_preset_keeps_focal_content_in_central_band(preset_id):
     assert "clear visual hierarchy, readable text, and balanced spacing" in prompt
     assert "reserved official logo area" not in prompt
     assert f"{width}x{height}" not in prompt
+
+
+def test_linkedin_banner_prompt_protects_central_source_band():
+    width, height, _ = PLATFORM_PRESETS["linkedin_banner"]
+    platform = build_platform_context("linkedin_banner", width, height, "4:1")
+    prompt = build_generation_prompt(
+        brief=SAMPLE_BRIEF,
+        brand_context=None,
+        platform=platform,
+        logo_mode="none",
+        brand_has_logo=False,
+    )
+
+    assert "essential text, any CTA, products, and important visual elements" in prompt
+    assert "central 75% of the source image height" in prompt
+    assert "12.5% at both the top and bottom" in prompt
+    assert "coherent full-width composition after cropping" in prompt
+    assert "central horizontal band" not in prompt
 
 
 @pytest.mark.parametrize(

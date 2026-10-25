@@ -31,6 +31,8 @@ def _openai_size(width: int, height: int) -> str:
         return "1280x720"
     if (width, height) == (1500, 500):
         return "1536x512"
+    if (width, height) == (1584, 396):
+        return "1536x512"
     if (width, height) == (820, 312):
         return "1680x640"
     if width == height:
