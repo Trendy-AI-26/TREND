@@ -1,4 +1,5 @@
 import type { Config } from "tailwindcss";
+import tailwindcssAnimate from 'tailwindcss-animate'
 
 const config: Config = {
   darkMode: ["class"],
@@ -46,7 +47,7 @@ const config: Config = {
         // Landing page theme tokens copied from trendy-nextjs.
         'brand-bg': '#F2EAD3',
         'brand-headline': '#1A1A1A',
-        'brand-primary': '#8B1E1B',
+        'brand-primary': '#7A1521',
         'brand-accent': '#C49A55',
         'brand-ink': '#2d2a26',
         'brand-cream': '#f9f6f0',
@@ -57,10 +58,14 @@ const config: Config = {
         },
       },
       fontFamily: {
-        display: ['var(--font-display)', 'ui-serif', 'Georgia', 'serif'],
-        sans: ['var(--font-sans)', 'ui-sans-serif', 'system-ui', 'sans-serif'],
-        ruqaa: ['"Aref Ruqaa"', 'serif'],
-        readex: ['"Readex Pro"', 'sans-serif'],
+        display: ['var(--font-display)', 'serif'],
+        sans: ['var(--font-sans)', 'sans-serif'],
+        // Landing and product headings share El Messiri; all UI/body text shares Tajawal.
+        ruqaa: ['var(--font-heading)', 'var(--font-arabic)', 'serif'],
+        logo: ['var(--font-logo)', 'var(--font-arabic)', 'serif'],
+        readex: ['var(--font-readex)', 'var(--font-arabic)', 'sans-serif'],
+        tajawal: ['var(--font-sans)', 'sans-serif'],
+        'el-messiri': ['El Messiri', 'var(--font-arabic)', 'serif'],
         mono: ['var(--font-geist-mono)', 'ui-monospace', 'Menlo', 'monospace'],
       },
       fontSize: {
@@ -104,6 +109,6 @@ const config: Config = {
       },
     },
   },
-  plugins: [require("tailwindcss-animate")],
+  plugins: [tailwindcssAnimate],
 };
 export default config;

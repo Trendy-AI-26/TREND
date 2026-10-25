@@ -2,31 +2,28 @@
 
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useTranslations } from 'next-intl';
+import { useEffect, useRef, useState } from 'react'
 import { Download, Loader2, Sparkles } from 'lucide-react'
-import { useActiveKeys } from '@/hooks/use-active-keys'
 import { useGenerate } from '@/hooks/use-generate'
 import { LogoModeSelector } from '@/components/generation/logo-mode-selector'
 import { PresetSelector } from '@/components/generation/preset-selector'
 import { ProviderSelector } from '@/components/generation/provider-selector'
 import { CanvasStage } from '@/components/generation/canvas-stage'
-import { ErrorMessage } from '@/components/generation/error-message'
+import { toast } from 'sonner'
+import { errorMessage } from '@/lib/errors'
 import { Button } from '@/components/ui/button'
 import { downloadImageFile } from '@/lib/download'
 import { PLATFORM_PRESETS } from '@/lib/presets'
-<<<<<<< Updated upstream
-import { EMPTY_GENERATION_BRIEF, GenerationBriefForm, } from '@/components/generation/generation-brief-form'
-import type { GenerationBrief } from '@/types/generation'
-import type { LogoMode, PlatformPreset, Provider } from '@/types'
-=======
-import type { LogoMode, PlatformPreset, Provider } from '@/types'
+import { providerLabel } from '@/lib/providers'
+import { addGenerationNotification } from '@/hooks/use-notifications'
+import type { LogoMode, LogoPlacement, PlatformPreset } from '@/types'
 import {
   EMPTY_GENERATION_BRIEF,
   GenerationBriefForm,
 } from '@/components/generation/generation-brief-form'
-
 import type { GenerationBrief } from '@/types/generation'
->>>>>>> Stashed changes
+import { CaptionPanel } from '@/components/generation/caption-panel'
 
 interface GeneratorFormProps {
   brandId: string
@@ -35,52 +32,27 @@ interface GeneratorFormProps {
 }
 
 export function GeneratorForm({ brandId, brandName, brandHasLogo }: GeneratorFormProps) {
+  const t = useTranslations('components.generation.generator-form');
+  const tOpt = useTranslations('options');
+  const tNotifications = useTranslations('notifications');
+  const te = useTranslations('errors');
   const [brief, setBrief] = useState<GenerationBrief>(EMPTY_GENERATION_BRIEF)
   const [briefReviewed, setBriefReviewed] = useState(false)
-  const [provider, setProvider] = useState<Provider>('openai')
   const [preset, setPreset] = useState<PlatformPreset>('instagram_post')
   const [logoMode, setLogoMode] = useState<LogoMode>('none')
-  const [providerInitialized, setProviderInitialized] = useState(false)
   const [downloading, setDownloading] = useState(false)
-  const [downloadError, setDownloadError] = useState<string | null>(null)
 
-  const { activeKeys, loading: keysLoading } = useActiveKeys(brandId)
   const { state, generate, reset } = useGenerate(brandId)
-
-  useEffect(() => {
-    setProviderInitialized(false)
-  }, [brandId])
-
-  useEffect(() => {
-    if (keysLoading || providerInitialized) return
-
-    if (activeKeys.openaiActive && !activeKeys.geminiActive) {
-      setProvider('openai')
-    } else if (!activeKeys.openaiActive && activeKeys.geminiActive) {
-      setProvider('gemini')
-    } else if (activeKeys.openaiActive && activeKeys.geminiActive) {
-      setProvider('gemini')
-    } else {
-      setProvider('openai')
-    }
-
-    setProviderInitialized(true)
-  }, [keysLoading, activeKeys, providerInitialized])
+  const notifiedGenerationRef = useRef<string | null>(null)
 
   const submitting = state.status === 'submitting'
-  const hasActiveKey =
-    (provider === 'openai' && activeKeys.openaiActive) ||
-    (provider === 'gemini' && activeKeys.geminiActive)
-  const generateDisabled = submitting || !briefReviewed || !hasActiveKey
+  const generateDisabled = submitting || !briefReviewed
 
   const presetInfo = PLATFORM_PRESETS[preset]
   const canvasStatus =
     state.status === 'submitting' ? 'generating' : state.status === 'success' ? 'done' : 'empty'
 
-<<<<<<< Updated upstream
-=======
-  // handleBriefChange function
->>>>>>> Stashed changes
+
   function handleBriefChange(nextBrief: GenerationBrief) {
     setBrief(nextBrief)
     setBriefReviewed(false)
@@ -95,13 +67,16 @@ export function GeneratorForm({ brandId, brandName, brandHasLogo }: GeneratorFor
     event.preventDefault()
     if (generateDisabled) return
 
-    setDownloadError(null)
-
     await generate({
       brief,
-      provider,
       platform_preset: preset,
       logo_mode: logoMode,
+      logo_placement:
+        logoMode === 'none'
+          ? 'none'
+          : logoMode === 'watermark'
+            ? 'watermark'
+            : ('auto' satisfies LogoPlacement),
     })
   }
 
@@ -112,12 +87,11 @@ export function GeneratorForm({ brandId, brandName, brandHasLogo }: GeneratorFor
     if (!result.image_url || !result.download_filename) return
 
     setDownloading(true)
-    setDownloadError(null)
 
     try {
       await downloadImageFile(result.image_url, result.download_filename)
     } catch (err) {
-      setDownloadError(err instanceof Error ? err.message : 'Download failed. Please try again.')
+      toast.error(errorMessage(err, te))
     } finally {
       setDownloading(false)
     }
@@ -126,6 +100,16 @@ export function GeneratorForm({ brandId, brandName, brandHasLogo }: GeneratorFor
   const result = state.status === 'success' ? state.result : null
   const canDownload = Boolean(result?.image_url && result?.download_filename)
 
+  useEffect(() => {
+    if (state.status !== 'success' || notifiedGenerationRef.current === state.result.id) return
+    notifiedGenerationRef.current = state.result.id
+    addGenerationNotification(
+      tNotifications('items.generation.title'),
+      tNotifications('items.generation.description'),
+      tNotifications('justNow'),
+    )
+  }, [state, tNotifications])
+
   return (
     <div className="grid gap-[22px] xl:grid-cols-[minmax(380px,460px)_1fr] xl:items-start">
       <form
@@ -133,17 +117,13 @@ export function GeneratorForm({ brandId, brandName, brandHasLogo }: GeneratorFor
         className="flex flex-col gap-4"
       >
         <div>
-          <h1 className="text-[30px] font-semibold leading-[1.16] tracking-tight">Generate</h1>
+          <h1 className="text-[30px] font-semibold leading-[1.16] tracking-tight">{t('generate')}</h1>
           <p className="mt-1 text-[14px] text-muted-foreground">
-            Answer a few questions and TRENDY AI will create an image that matches {brandName}&apos;s identity.
+            {t('matches_brand_identity', { brandName })}
           </p>
         </div>
 
-<<<<<<< Updated upstream
-        <div className="min-h-0 flex-1 overflow-y-auto pr-1">
-=======
         <div>
->>>>>>> Stashed changes
           <GenerationBriefForm
             value={brief}
             onChange={handleBriefChange}
@@ -151,31 +131,18 @@ export function GeneratorForm({ brandId, brandName, brandHasLogo }: GeneratorFor
               setBrief(completedBrief)
               setBriefReviewed(true)
             }}
-<<<<<<< Updated upstream
-=======
             platformPreset={preset}
             brandId={brandId}
             brandName={brandName}
->>>>>>> Stashed changes
             disabled={submitting}
           />
         </div>
 
-<<<<<<< Updated upstream
-        <div className="shrink-0 space-y-3 border-t border-border-subtle pt-3">
-=======
         <div className="space-y-3 border-t border-border-subtle pt-3">
->>>>>>> Stashed changes
           <PresetSelector value={preset} onChange={handlePresetChange} disabled={submitting} />
 
           <div className="grid gap-3 sm:grid-cols-2">
-            <ProviderSelector
-              value={provider}
-              onChange={setProvider}
-              activeKeys={activeKeys}
-              brandId={brandId}
-              disabled={submitting}
-            />
+            <ProviderSelector disabled={submitting} />
             <LogoModeSelector
               value={logoMode}
               onChange={setLogoMode}
@@ -188,26 +155,12 @@ export function GeneratorForm({ brandId, brandName, brandHasLogo }: GeneratorFor
           <Button type="submit" size="lg" className="w-full" disabled={generateDisabled}>
             {submitting ? (
               <>
-                <Loader2 className="h-4 w-4 animate-spin" />
-                Painting…
-              </>
+                <Loader2 className="h-4 w-4 animate-spin" />{t('painting')}</>
             ) : (
               <>
-                <Sparkles className="h-4 w-4" />
-                Generate
-              </>
+                <Sparkles className="h-4 w-4" />{t('generate2')}</>
             )}
           </Button>
-
-          {!hasActiveKey && (
-            <p className="text-[12px] text-muted-foreground">
-              Add an active provider key before generating.
-            </p>
-          )}
-
-          {state.status === 'error' && (
-            <ErrorMessage code={state.code} message={state.message} brandId={brandId} />
-          )}
         </div>
       </form>
 
@@ -222,7 +175,7 @@ export function GeneratorForm({ brandId, brandName, brandHasLogo }: GeneratorFor
 
         <div className="flex items-center justify-between gap-3">
           <p className="font-mono text-[12px] text-muted-foreground">
-            {presetInfo.width} × {presetInfo.height} · {presetInfo.label} · {result?.provider ?? provider}
+            {presetInfo.width} × {presetInfo.height} · {tOpt(`preset_${preset}`)} · {providerLabel(result?.provider ?? 'openai')}
           </p>
           <Button
             type="button"
@@ -231,11 +184,17 @@ export function GeneratorForm({ brandId, brandName, brandHasLogo }: GeneratorFor
             disabled={!canDownload || downloading}
           >
             <Download className="h-4 w-4" />
-            {downloading ? 'Downloading…' : 'Download'}
+            {downloading ? t('downloading') : t('download')}
           </Button>
         </div>
 
-        {downloadError && <p className="text-[12px] text-destructive">{downloadError}</p>}
+        <CaptionPanel
+          key={result?.id ?? 'pending'}
+          brandId={brandId}
+          generationId={result?.id ?? null}
+          language={result?.language ?? 'en'}
+          enabled={!!result}
+        />
       </div>
     </div>
   )

@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Optional
 
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, Field, field_validator
 
 
 def _validate_brand_name(v: str) -> str:
@@ -44,6 +44,9 @@ class BrandListItem(BaseModel):
     logo_url: Optional[str] = None
     kit_status: str = "not_started"
     created_at: datetime
+    colors: list[str] = Field(default_factory=list)
+    industry: str | None = None
+    tagline: str | None = None
 
 
 class DeleteBrandRequest(BaseModel):

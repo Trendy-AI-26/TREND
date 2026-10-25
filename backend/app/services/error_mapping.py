@@ -1,3 +1,4 @@
+
 import httpx
 
 ERROR_USER_MESSAGES: dict[str, str] = {
@@ -9,6 +10,10 @@ ERROR_USER_MESSAGES: dict[str, str] = {
     "EMPTY_RESPONSE":        "The provider returned no image. Please try again.",
     "PROVIDER_CLIENT_ERROR": "The provider rejected this request. Please try again or adjust your prompt.",
     "PROVIDER_SERVER_ERROR": "The provider service is temporarily unavailable. Please try again.",
+    "REFERENCE_IMAGE_UNSUPPORTED": (
+    "Product image editing is temporarily unavailable."
+),
+
 }
 
 

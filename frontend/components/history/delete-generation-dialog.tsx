@@ -1,21 +1,15 @@
 'use client'
 
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
-import { Button } from '@/components/ui/button'
+import { useTranslations } from 'next-intl';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 
 interface DeleteGenerationDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   onConfirm: () => void
   loading: boolean
-  error: string | null
+  /** Optional inline message. Action failures are shown as toasts by the caller instead. */
+  error?: string | null
 }
 
 export function DeleteGenerationDialog({
@@ -25,35 +19,24 @@ export function DeleteGenerationDialog({
   loading,
   error,
 }: DeleteGenerationDialogProps) {
+  const t = useTranslations('components.history.delete-generation-dialog');
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Delete Generation</DialogTitle>
-          <DialogDescription>
-            This will permanently delete this generation and its stored image. This action cannot be undone.
-          </DialogDescription>
-        </DialogHeader>
-        {error && (
-          <p className="text-sm text-destructive">{error}</p>
-        )}
-        <DialogFooter>
-          <Button
-            variant="outline"
-            onClick={() => onOpenChange(false)}
-            disabled={loading}
-          >
-            Cancel
-          </Button>
-          <Button
-            variant="destructive"
-            onClick={onConfirm}
-            disabled={loading}
-          >
-            {loading ? 'Deleting…' : 'Delete'}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+    <ConfirmDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      tone="danger"
+      title={t('delete_generation')}
+      description={
+        <>
+          {t('this_will_permanently_delete')}
+          {error && <span className="mt-2 block text-destructive">{error}</span>}
+        </>
+      }
+      confirmLabel={t('delete')}
+      loadingLabel={t('deleting')}
+      cancelLabel={t('cancel')}
+      loading={loading}
+      onConfirm={onConfirm}
+    />
   )
 }

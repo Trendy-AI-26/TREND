@@ -6,36 +6,49 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
+    "@fontsource/el-messiri": "^5.3.0",
+    "@fontsource/noto-naskh-arabic": "^5.3.0",
+    "@fontsource/poppins": "^5.3.0",
+    "@fontsource/tajawal": "^5.3.0",
     "@hookform/resolvers": "^5.2.2",
     "@radix-ui/react-dialog": "^1.1.15",
     "@radix-ui/react-label": "^2.1.8",
     "@radix-ui/react-separator": "^1.1.8",
     "@radix-ui/react-slot": "^1.2.4",
     "@radix-ui/react-toast": "^1.2.15",
-    "@supabase/ssr": "^0.8.0",
-    "@supabase/supabase-js": "^2.95.3",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "jose": "^5.10.0",
     "lucide-react": "^0.563.0",
     "next": "14.2.35",
+    "next-intl": "^4.14.3",
     "react": "^18",
     "react-dom": "^18",
     "react-hook-form": "^7.71.1",
+    "sonner": "^2.0.8",
     "tailwind-merge": "^3.4.0",
     "tailwindcss-animate": "^1.0.7",
     "zod": "^4.3.6"
   },
   "devDependencies": {
+    "@testing-library/jest-dom": "^6.4.6",
+    "@testing-library/react": "^14.3.1",
+    "@testing-library/user-event": "^14.5.2",
     "@types/node": "^20",
     "@types/react": "^18",
     "@types/react-dom": "^18",
+    "@vitejs/plugin-react": "^4.3.1",
     "eslint": "^8",
     "eslint-config-next": "14.2.35",
+    "jsdom": "^24.1.0",
     "postcss": "^8",
     "tailwindcss": "^3.4.1",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^1.6.0"
   }
 }

@@ -1,35 +1,11 @@
 import { type NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
 
+// The old e-mail-link confirmation flow no longer exists (users now enter a
+// 6-digit code on /verify-code). Keep the URL alive for stale emails and just
+// send people to the login page.
 export async function GET(request: NextRequest) {
-  const { searchParams } = new URL(request.url)
-  const token_hash = searchParams.get('token_hash')
-  const type = searchParams.get('type') as
-    | 'signup'
-    | 'invite'
-    | 'magiclink'
-    | 'recovery'
-    | 'email_change'
-    | 'email'
-    | null
-
   const redirectTo = request.nextUrl.clone()
-
-  if (token_hash && type) {
-    const supabase = await createClient()
-    const { error } = await supabase.auth.verifyOtp({ type, token_hash })
-
-    if (!error) {
-      redirectTo.pathname = '/brands'
-      redirectTo.searchParams.delete('token_hash')
-      redirectTo.searchParams.delete('type')
-      return NextResponse.redirect(redirectTo)
-    }
-  }
-
-  // If verification fails or params missing, redirect to login
   redirectTo.pathname = '/login'
-  redirectTo.searchParams.delete('token_hash')
-  redirectTo.searchParams.delete('type')
+  redirectTo.search = ''
   return NextResponse.redirect(redirectTo)
 }

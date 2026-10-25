@@ -1,40 +1,23 @@
 'use client'
 
-import type { Provider } from '@/types'
-import type { ActiveKeys } from '@/hooks/use-active-keys'
+import { useTranslations } from 'next-intl'
 import { NoKeyNotice } from '@/components/generation/no-key-notice'
 import { Eyebrow } from '@/components/ui/eyebrow'
-import { SegmentedControl } from '@/components/ui/segmented-control'
 
 interface ProviderSelectorProps {
-  value: Provider
-  onChange: (value: Provider) => void
-  activeKeys: ActiveKeys
-  brandId: string
   disabled?: boolean
 }
 
-export function ProviderSelector({
-  value, onChange, activeKeys, brandId, disabled,
-}: ProviderSelectorProps) {
-  const currentHasKey =
-    (value === 'openai' && activeKeys.openaiActive) ||
-    (value === 'gemini' && activeKeys.geminiActive)
+export function ProviderSelector({ disabled }: ProviderSelectorProps) {
+  const t = useTranslations('components.generation.provider-selector')
 
   return (
-    <div className="flex flex-col gap-2">
-      <Eyebrow>Provider</Eyebrow>
-      <SegmentedControl
-        aria-label="Provider"
-        value={value}
-        onChange={onChange}
-        disabled={disabled}
-        options={[
-          { value: 'openai', label: 'OpenAI' },
-          { value: 'gemini', label: 'Gemini' },
-        ]}
-      />
-      {!currentHasKey && <NoKeyNotice provider={value} brandId={brandId} />}
+    <div className={`flex flex-col gap-2${disabled ? ' opacity-70' : ''}`}>
+      <Eyebrow>{t('provider2')}</Eyebrow>
+      <div className="flex h-10 items-center rounded-md border border-border-subtle bg-muted/30 px-3 text-sm text-foreground">
+        OpenAI (server-managed)
+      </div>
+      <NoKeyNotice />
     </div>
   )
 }

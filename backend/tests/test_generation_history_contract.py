@@ -1,18 +1,14 @@
 import base64
 import json
-import os
 from types import SimpleNamespace
 from uuid import UUID
 
 import pytest
 
-os.environ.setdefault("SUPABASE_URL", "http://127.0.0.1:54321")
-os.environ.setdefault("SUPABASE_SECRET_KEY", "test-secret-key")
+from fastapi import HTTPException
 
-from fastapi import HTTPException  # noqa: E402
-from storage3.exceptions import StorageException  # noqa: E402
-
-from app.routers import generations  # noqa: E402
+from app.core import storage
+from app.routers import generations
 from app.routers.generations import (  # noqa: E402
     PROMPT_EXCERPT_LENGTH,
     _build_detail_response,
@@ -189,87 +185,54 @@ def test_build_detail_response_failed_with_missing_image():
     assert detail.error_message == "Rate limit exceeded"
 
 
-class FakeStorageError(StorageException):
+class FakeStorageError(storage.StorageError):
     def __init__(self, message: str, status: int = 500, code: str = "StorageError"):
-        super().__init__(message)
-        self.message = message
-        self.status = status
-        self.code = code
+        super().__init__(message, status=status, code=code)
 
 
-class FakeStorageBucket:
-    def __init__(self, fake_client):
-        self.fake_client = fake_client
+class FakeBackend:
+    """Replaces the generation repository and the storage helpers."""
 
-    def remove(self, paths):
-        self.fake_client.storage_remove_calls.append(paths)
-        if self.fake_client.storage_error is not None:
-            raise self.fake_client.storage_error
-        return [{"name": path} for path in paths]
-
-
-class FakeStorage:
-    def __init__(self, fake_client):
-        self.fake_client = fake_client
-
-    def from_(self, bucket_name):
-        self.fake_client.storage_bucket_names.append(bucket_name)
-        return FakeStorageBucket(self.fake_client)
-
-
-class FakeQuery:
-    def __init__(self, fake_client, table_name):
-        self.fake_client = fake_client
-        self.table_name = table_name
-        self.operation = None
-        self.filters = {}
-
-    def select(self, _columns):
-        self.operation = "select"
-        return self
-
-    def delete(self):
-        self.operation = "delete"
-        return self
-
-    def eq(self, key, value):
-        self.filters[key] = value
-        return self
-
-    def maybe_single(self):
-        return self
-
-    def execute(self):
-        if self.table_name != "generations":
-            return SimpleNamespace(data=None)
-        if self.operation == "select":
-            return SimpleNamespace(data=self.fake_client.generation_row)
-        if self.operation == "delete":
-            self.fake_client.deleted_generation_filters = self.filters
-            return SimpleNamespace(data=[])
-        return SimpleNamespace(data=None)
-
-
-class FakeSupabaseClient:
     def __init__(self, generation_row, storage_error=None):
         self.generation_row = generation_row
         self.storage_error = storage_error
-        self.storage = FakeStorage(self)
         self.storage_bucket_names = []
         self.storage_remove_calls = []
         self.deleted_generation_filters = None
 
-    def table(self, table_name):
-        return FakeQuery(self, table_name)
+    # repository
+    def get_brand_generation(self, brand_id, generation_id):
+        return self.generation_row
+
+    def delete_generation(self, brand_id, generation_id):
+        self.deleted_generation_filters = {
+            "id": str(generation_id),
+            "brand_id": str(brand_id),
+        }
+
+    # storage
+    def remove(self, bucket, paths):
+        self.storage_bucket_names.append(bucket)
+        self.storage_remove_calls.append(list(paths))
+        if self.storage_error is not None:
+            raise self.storage_error
 
 
-async def _delete_generation_with_fake_client(monkeypatch, fake_client):
-    monkeypatch.setattr(generations, "get_service_client", lambda: fake_client)
+def _install_backend(monkeypatch, backend):
+    monkeypatch.setattr(
+        generations.gen_repo, "get_brand_generation", backend.get_brand_generation
+    )
+    monkeypatch.setattr(generations.gen_repo, "delete_generation", backend.delete_generation)
+    monkeypatch.setattr(generations.storage, "remove", backend.remove)
     monkeypatch.setattr(
         generations,
         "_get_brand_or_404",
         lambda brand_id, user_id: {"id": str(brand_id), "name": "Test Brand"},
     )
+
+
+async def _delete_generation_with_fake_client(monkeypatch, fake_client):
+    _install_backend(monkeypatch, fake_client)
     await generations.delete_generation(
         UUID("10000000-0000-0000-0000-000000000001"),
         UUID("00000000-0000-0000-0000-000000000001"),
@@ -279,10 +242,11 @@ async def _delete_generation_with_fake_client(monkeypatch, fake_client):
 
 @pytest.mark.asyncio
 async def test_delete_generation_removes_image_before_row(monkeypatch):
-    fake_client = FakeSupabaseClient(_sample_row())
+    fake_client = FakeBackend(_sample_row())
     await _delete_generation_with_fake_client(monkeypatch, fake_client)
 
     assert fake_client.storage_remove_calls == [[fake_client.generation_row["image_path"]]]
+    assert fake_client.storage_bucket_names == ["brand-assets"]
     assert fake_client.deleted_generation_filters == {
         "id": "00000000-0000-0000-0000-000000000001",
         "brand_id": "10000000-0000-0000-0000-000000000001",
@@ -291,7 +255,7 @@ async def test_delete_generation_removes_image_before_row(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_delete_generation_failed_row_skips_storage(monkeypatch):
-    fake_client = FakeSupabaseClient(_sample_row(status="failed", image_path=None))
+    fake_client = FakeBackend(_sample_row(status="failed", image_path=None))
     await _delete_generation_with_fake_client(monkeypatch, fake_client)
 
     assert fake_client.storage_remove_calls == []
@@ -300,9 +264,9 @@ async def test_delete_generation_failed_row_skips_storage(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_delete_generation_already_missing_image_deletes_row(monkeypatch):
-    fake_client = FakeSupabaseClient(
+    fake_client = FakeBackend(
         _sample_row(),
-        storage_error=FakeStorageError("Object not found", status=404, code="NotFound"),
+        storage_error=storage.ObjectNotFoundError("Object not found", status=404),
     )
     await _delete_generation_with_fake_client(monkeypatch, fake_client)
 
@@ -311,8 +275,19 @@ async def test_delete_generation_already_missing_image_deletes_row(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_delete_generation_status_404_error_deletes_row(monkeypatch):
+    fake_client = FakeBackend(
+        _sample_row(),
+        storage_error=FakeStorageError("Object not found", status=404, code="NotFound"),
+    )
+    await _delete_generation_with_fake_client(monkeypatch, fake_client)
+
+    assert fake_client.deleted_generation_filters is not None
+
+
+@pytest.mark.asyncio
 async def test_delete_generation_storage_failure_keeps_row(monkeypatch):
-    fake_client = FakeSupabaseClient(
+    fake_client = FakeBackend(
         _sample_row(),
         storage_error=FakeStorageError("Storage unavailable", status=500),
     )
@@ -326,13 +301,8 @@ async def test_delete_generation_storage_failure_keeps_row(monkeypatch):
 
 
 async def _get_detail_with_fake_client(monkeypatch, fake_client):
-    monkeypatch.setattr(generations, "get_service_client", lambda: fake_client)
-    monkeypatch.setattr(
-        generations,
-        "_get_brand_or_404",
-        lambda brand_id, user_id: {"id": str(brand_id), "name": "Test Brand"},
-    )
-    return await generations.get_generation_detail(
+    _install_backend(monkeypatch, fake_client)
+    return generations.get_generation_detail(
         UUID("10000000-0000-0000-0000-000000000001"),
         UUID("00000000-0000-0000-0000-000000000001"),
         current_user=SimpleNamespace(id="user-1"),
@@ -345,7 +315,7 @@ async def test_get_generation_detail_non_terminal_returns_404(monkeypatch, non_t
     # Regression for the detail-endpoint 500: a non-terminal row must 404 rather
     # than reach GenerationDetailResponse (whose status enum only allows
     # succeeded/failed) and raise a Pydantic ValidationError -> unhandled 500.
-    fake_client = FakeSupabaseClient(_sample_row(status=non_terminal_status, image_path=None))
+    fake_client = FakeBackend(_sample_row(status=non_terminal_status, image_path=None))
 
     with pytest.raises(HTTPException) as exc_info:
         await _get_detail_with_fake_client(monkeypatch, fake_client)
@@ -356,7 +326,7 @@ async def test_get_generation_detail_non_terminal_returns_404(monkeypatch, non_t
 
 @pytest.mark.asyncio
 async def test_get_generation_detail_succeeded_returns_payload(monkeypatch):
-    fake_client = FakeSupabaseClient(_sample_row())
+    fake_client = FakeBackend(_sample_row())
 
     detail = await _get_detail_with_fake_client(monkeypatch, fake_client)
 

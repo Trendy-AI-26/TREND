@@ -19,6 +19,9 @@ interface BrandsContextValue {
   loading: boolean
   error: string | null
   accents: Record<string, string>
+  industries: Record<string, string>
+  brandColors: Record<string, string[]>
+  taglines: Record<string, string>
   refetchBrands: () => Promise<void>
   addBrand: (brand: Brand | BrandListItem) => void
   updateBrand: (brand: Brand | BrandListItem | BrandSummaryUpdate) => void
@@ -38,35 +41,53 @@ function toBrandListItem(brand: Brand | BrandListItem): BrandListItem {
   }
 }
 
-function colorFromKit(kit: BrandKit): string | null {
-  const raw = kit.answers.colors?.[0]
-  const hex = raw ? normalizeHex(raw) : null
-  return hex ? `#${hex}` : null
-}
-
 export function BrandsProvider({ children }: { children: React.ReactNode }) {
   const [brands, setBrands] = useState<BrandListItem[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [accents, setAccents] = useState<Record<string, string>>({})
+  const [industries, setIndustries] = useState<Record<string, string>>({})
+  const [brandColors, setBrandColors] = useState<Record<string, string[]>>({})
+  const [taglines, setTaglines] = useState<Record<string, string>>({})
 
   const loadAccents = useCallback(async (items: BrandListItem[]) => {
     const entries = await Promise.all(
       items.map(async (brand) => {
         try {
-          const kit = await apiRequest<BrandKit>(`/brands/${brand.id}/kit`)
-          const color = colorFromKit(kit)
-          return color ? ([brand.id, color] as const) : null
+          // Older deployments omit colors; keep a fallback during rolling deploys.
+          const answers = brand.colors !== undefined
+            ? brand
+            : (await apiRequest<BrandKit>(`/brands/${brand.id}/kit`)).answers
+          const firstColor = answers.colors?.[0]
+          const normalizedColor = firstColor ? normalizeHex(firstColor) : null
+          const color = normalizedColor ? `#${normalizedColor}` : null
+          const industry = answers.industry || null
+          const colors = (answers.colors || [])
+            .map((c) => normalizeHex(c))
+            .filter((h): h is string => Boolean(h))
+            .map((h) => `#${h}`)
+          const tagline = answers.tagline || null
+          return { id: brand.id, color, industry, colors, tagline }
         } catch {
           return null
         }
       }),
     )
-    const next: Record<string, string> = {}
+    const nextAccents: Record<string, string> = {}
+    const nextIndustries: Record<string, string> = {}
+    const nextBrandColors: Record<string, string[]> = {}
+    const nextTaglines: Record<string, string> = {}
     for (const entry of entries) {
-      if (entry) next[entry[0]] = entry[1]
+      if (!entry) continue
+      if (entry.color) nextAccents[entry.id] = entry.color
+      if (entry.industry) nextIndustries[entry.id] = entry.industry
+      if (entry.colors.length) nextBrandColors[entry.id] = entry.colors
+      if (entry.tagline) nextTaglines[entry.id] = entry.tagline
     }
-    setAccents(next)
+    setAccents(nextAccents)
+    setIndustries(nextIndustries)
+    setBrandColors(nextBrandColors)
+    setTaglines(nextTaglines)
   }, [])
 
   const refetchBrands = useCallback(async () => {
@@ -128,6 +149,21 @@ export function BrandsProvider({ children }: { children: React.ReactNode }) {
       delete next[brandId]
       return next
     })
+    setIndustries((current) => {
+      const next = { ...current }
+      delete next[brandId]
+      return next
+    })
+    setBrandColors((current) => {
+      const next = { ...current }
+      delete next[brandId]
+      return next
+    })
+    setTaglines((current) => {
+      const next = { ...current }
+      delete next[brandId]
+      return next
+    })
   }, [])
 
   const setAccent = useCallback((brandId: string, color: string | null) => {
@@ -148,13 +184,29 @@ export function BrandsProvider({ children }: { children: React.ReactNode }) {
       loading,
       error,
       accents,
+      industries,
+      brandColors,
+      taglines,
       refetchBrands,
       addBrand,
       updateBrand,
       removeBrand,
       setAccent,
     }),
-    [accents, addBrand, brands, error, loading, refetchBrands, removeBrand, setAccent, updateBrand]
+    [
+      accents,
+      industries,
+      brandColors,
+      taglines,
+      addBrand,
+      brands,
+      error,
+      loading,
+      refetchBrands,
+      removeBrand,
+      setAccent,
+      updateBrand,
+    ]
   )
 
   return <BrandsContext.Provider value={value}>{children}</BrandsContext.Provider>

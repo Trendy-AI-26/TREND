@@ -1,5 +1,6 @@
 'use client'
 
+import { useTranslations } from 'next-intl';
 import { useEffect, useState } from 'react'
 import { AdminBrandsTable } from '@/components/admin/admin-brands-table'
 import { AdminStatsCards } from '@/components/admin/admin-stats-cards'
@@ -9,6 +10,7 @@ import { apiRequest } from '@/lib/api'
 import { AdminStats } from '@/types'
 
 export default function AdminPage() {
+  const t = useTranslations('app.(dashboard).admin.page');
   const [stats, setStats] = useState<AdminStats | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -34,14 +36,12 @@ export default function AdminPage() {
   return (
     <div>
       <div className="flex flex-wrap items-center gap-3">
-        <h1 className="text-[30px] font-semibold leading-[1.16] tracking-tight">Admin Dashboard</h1>
-        <Badge>Operator</Badge>
+        <h1 className="text-[30px] font-semibold leading-[1.16] tracking-tight">{t('admin_dashboard')}</h1>
+        <Badge>{t('operator')}</Badge>
       </div>
-      <p className="mt-1 text-[14px] text-muted-foreground">
-        Platform-wide totals across every account.
-      </p>
+      <p className="mt-1 text-[14px] text-muted-foreground">{t('platformwide_totals_across_every')}</p>
 
-      {loading && <p className="mt-4 text-muted-foreground">Loading…</p>}
+      {loading && <p className="mt-4 text-muted-foreground">{t('loading')}</p>}
 
       {error && <p className="mt-4 text-[13px] text-destructive">{error}</p>}
 
@@ -52,7 +52,7 @@ export default function AdminPage() {
       )}
 
       <section className="mt-8">
-        <h2 className="text-[22px] font-semibold tracking-tight">All brands</h2>
+        <h2 className="text-[22px] font-semibold tracking-tight">{t('all_brands')}</h2>
         <div className="mt-4">
           <AdminBrandsTable
             items={adminBrands.items}

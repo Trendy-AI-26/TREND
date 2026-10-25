@@ -1,9 +1,10 @@
-//  D:\Level4\TREND\frontend\components\generation\generation-brief-form.tsx
+
 
 'use client'
 
+import { useTranslations } from 'next-intl';
 import { useEffect, useState } from 'react'                          //  added useEffect
-import { ArrowLeft, ArrowRight, Check, Pencil } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Check } from 'lucide-react'
 import { BriefCreativePreview } from '@/components/generation/brief-creative-preview'
 import { usePreviewBrief } from '@/hooks/use-preview-brief'
 import type { PlatformPreset } from '@/types'
@@ -48,12 +49,9 @@ interface GenerationBriefFormProps {
     value: GenerationBrief
     onChange: (value: GenerationBrief) => void
     onComplete: (brief: GenerationBrief) => void
-<<<<<<< Updated upstream
-=======
     platformPreset: PlatformPreset
     brandId: string
-    brandName: string          // added brandName prop
->>>>>>> Stashed changes
+    brandName: string
     disabled?: boolean
 }
 
@@ -99,14 +97,13 @@ export function GenerationBriefForm({
     value,
     onChange,
     onComplete,
-<<<<<<< Updated upstream
-=======
     platformPreset,
     brandId,
-    brandName,              // destructured brandName
->>>>>>> Stashed changes
+    brandName,
     disabled = false,
 }: GenerationBriefFormProps) {
+  const t = useTranslations('components.generation.generation-brief-form');
+  const tOpt = useTranslations('options');
 
     const [step, setStep] = useState(0)
     const [hasAttemptedNext, setHasAttemptedNext] = useState(false)
@@ -115,7 +112,7 @@ export function GenerationBriefForm({
     const allErrors = validateGenerationBrief(value)
 
     // call usePreviewBrief hook at TOP LEVEL (not inside any function)
-    const { preview, loading, error, fetchPreview } = usePreviewBrief(brandId)
+    const { preview, loading, error, fetchPreview, retryPreview } = usePreviewBrief(brandId)
 
     const briefSerialized = JSON.stringify(value)
 
@@ -195,19 +192,15 @@ export function GenerationBriefForm({
         <div className="space-y-4">
             <div className="flex items-center justify-between gap-2">
                 <div>
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-brand-accent">
-                        Structured brief
-                    </p>
-                    <p className="mt-1 text-[13px] text-muted-foreground">
-                        Answer a few questions to create a focused generation brief.
-                    </p>
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-brand-accent">{t('structured_brief')}</p>
+                    <p className="mt-1 text-[13px] text-muted-foreground">{t('answer_a_few_questions')}</p>
                 </div>
                 <span className="font-mono text-[11px] text-muted-foreground">
                     {step + 1}/{steps.length}
                 </span>
             </div>
 
-            <div className="grid grid-cols-6 gap-1" aria-label="Generation brief progress">
+            <div className="grid grid-cols-6 gap-1" aria-label={t('generation_brief_progress')}>
                 {steps.map((label, index) => (
                     <button
                         key={label}
@@ -229,9 +222,9 @@ export function GenerationBriefForm({
             {step === 0 && (
                 <div className="space-y-3">
                     <ChoiceStep
-                        label="What is the campaign goal?"
+                        label={t('what_is_the_campaign')}
                         value={value.campaign_goal}
-                        options={goals}
+                        options={goals.map((g) => ({ ...g, label: tOpt(`goal_${g.value}`) }))}
                         onChange={(next) =>
                             patch({
                                 campaign_goal: next as CampaignGoal,
@@ -244,7 +237,7 @@ export function GenerationBriefForm({
 
                     {value.campaign_goal === 'custom' && (
                         <TextField
-                            label="Describe your campaign goal"
+                            label={t('describe_your_campaign_goal')}
                             value={value.campaign_goal_custom ?? ''}
                             onChange={(next) => patch({ campaign_goal_custom: next })}
                             error={errors.campaign_goal_custom}
@@ -257,9 +250,9 @@ export function GenerationBriefForm({
             {step === 1 && (
                 <div className="space-y-3">
                     <ChoiceStep
-                        label="What do you want to create?"
+                        label={t('what_do_you_want')}
                         value={value.content_type}
-                        options={contentTypes}
+                        options={contentTypes.map((c) => ({ ...c, label: tOpt(`content_type_${c.value}`) }))}
                         onChange={(next) =>
                             patch({
                                 content_type: next as ContentType,
@@ -272,7 +265,7 @@ export function GenerationBriefForm({
 
                     {value.content_type === 'custom' && (
                         <TextField
-                            label="Describe your content type"
+                            label={t('describe_your_content_type')}
                             value={value.content_type_custom ?? ''}
                             onChange={(next) => patch({ content_type_custom: next })}
                             error={errors.content_type_custom}
@@ -293,19 +286,15 @@ export function GenerationBriefForm({
 
             {step === 3 && (
                 <div className="space-y-2">
-                    <Label htmlFor="brief-core-idea">
-                        What is the main idea you want the audience to understand? *
-                    </Label>
-                    <p className="text-[12px] text-muted-foreground">
-                        Write naturally. You do not need to write a professional prompt.
-                    </p>
+                    <Label htmlFor="brief-core-idea">{t('what_is_the_main')}</Label>
+                    <p className="text-[12px] text-muted-foreground">{t('write_naturally_you_do')}</p>
                     <Textarea
                         id="brief-core-idea"
                         value={value.core_idea}
                         onChange={(event) => patch({ core_idea: event.target.value })}
                         disabled={disabled}
                         maxLength={1000}
-                        placeholder="e.g. Show how our iced coffee makes a busy summer morning feel more refreshing."
+                        placeholder={t('eg_show_how_our')}
                         className="min-h-[130px]"
                     />
                     <div className="flex items-center justify-between text-[11px]">
@@ -322,9 +311,9 @@ export function GenerationBriefForm({
             {step === 4 && (
                 <div className="space-y-4">
                     <ChoiceStep
-                        label="How should the content feel?"
+                        label={t('how_should_the_content')}
                         value={value.voice_tone}
-                        options={tones}
+                        options={tones.map((tn) => ({ ...tn, label: tOpt(`tone_${tn.value}`) }))}
                         onChange={(next) =>
                             patch({
                                 voice_tone: next as VoiceTone,
@@ -337,7 +326,7 @@ export function GenerationBriefForm({
 
                     {value.voice_tone === 'custom' && (
                         <TextField
-                            label="Describe your tone"
+                            label={t('describe_your_tone')}
                             value={value.voice_tone_custom ?? ''}
                             onChange={(next) => patch({ voice_tone_custom: next })}
                             error={errors.voice_tone_custom}
@@ -346,7 +335,7 @@ export function GenerationBriefForm({
                     )}
 
                     <div className="border-t border-border-subtle pt-3">
-                        <Label htmlFor="brief-notes">Additional notes (optional)</Label>
+                        <Label htmlFor="brief-notes">{t('additional_notes_optional')}</Label>
                         <Textarea
                             id="brief-notes"
                             value={value.optional_notes ?? ''}
@@ -355,7 +344,7 @@ export function GenerationBriefForm({
                             }
                             disabled={disabled}
                             maxLength={2000}
-                            placeholder="Add visual direction, things to avoid, or layout preferences."
+                            placeholder={t('add_visual_direction_things')}
                             className="mt-2 min-h-[90px]"
                         />
                         <div className="flex items-center justify-between text-[11px]">
@@ -367,7 +356,7 @@ export function GenerationBriefForm({
                     </div>
 
                     <div className="space-y-2">
-                        <Label htmlFor="brief-text">Text to include in the image (optional)</Label>
+                        <Label htmlFor="brief-text">{t('text_to_include_in')}</Label>
                         <Input
                             id="brief-text"
                             value={value.text_to_include ?? ''}
@@ -376,7 +365,7 @@ export function GenerationBriefForm({
                             }
                             disabled={disabled}
                             maxLength={500}
-                            placeholder="e.g. 20% off this week"
+                            placeholder={t('eg_20_off_this')}
                         />
                         {errors.text_to_include && (
                             <p className="text-[12px] text-destructive" role="alert">
@@ -387,23 +376,19 @@ export function GenerationBriefForm({
                 </div>
             )}
 
-            {/* Step 5 now renders BriefCreativePreview + BriefSummary */}
+            {/* Step 5 renders a single canonical BriefCreativePreview with inline edit affordances */}
             {step === 5 && (
-                <div className="space-y-4">
-                    <BriefCreativePreview
-                        preview={preview}
-                        loading={loading}
+                <BriefCreativePreview
+                    preview={preview}
+                    loading={loading}
                         error={error}
                         brandName={brandName}
-                    />
-                    <BriefSummary
-                        brief={value}
+                        retryPreview={retryPreview}
                         onEdit={(targetStep) => {
-                            setHasAttemptedNext(false)
-                            setStep(targetStep)
-                        }}
-                    />
-                </div>
+                        setHasAttemptedNext(false)
+                        setStep(targetStep)
+                    }}
+                />
             )}
 
             <div className="flex items-center justify-between border-t border-border-subtle pt-3">
@@ -413,14 +398,10 @@ export function GenerationBriefForm({
                     onClick={previousStep}
                     disabled={disabled || step === 0}
                 >
-                    <ArrowLeft className="h-4 w-4" />
-                    Back
-                </Button>
+                    <ArrowLeft className="h-4 w-4" />{t('back')}</Button>
 
                 {step < steps.length - 1 ? (
-                    <Button type="button" onClick={nextStep} disabled={disabled}>
-                        Next
-                        <ArrowRight className="h-4 w-4" />
+                    <Button type="button" onClick={nextStep} disabled={disabled}>{t('next')}<ArrowRight className="h-4 w-4" />
                     </Button>
                 ) : (
                     <Button
@@ -428,9 +409,7 @@ export function GenerationBriefForm({
                         onClick={() => onComplete(value)}
                         disabled={disabled || !isGenerationBriefComplete(value)}
                     >
-                        <Check className="h-4 w-4" />
-                        Ready to generate
-                    </Button>
+                        <Check className="h-4 w-4" />{t('ready_to_generate')}</Button>
 
                 )}
             </div>
@@ -512,75 +491,3 @@ function TextField({
     )
 }
 
-function BriefSummary({
-    brief,
-    onEdit,
-}: {
-    brief: GenerationBrief
-    onEdit: (step: number) => void
-}) {
-    const audience = brief.target_audience
-    const audienceValue = [
-        audience.segments.join(', '),
-        audience.location,
-        audience.age_range,
-        audience.gender_focus,
-        audience.details,
-    ]
-        .filter(Boolean)
-        .join(' · ')
-
-    return (
-        <div className="space-y-2 rounded-lg border border-border-subtle bg-card p-3 text-[12px]">
-            <div className="mb-3">
-                <h3 className="text-[16px] font-semibold text-foreground">
-                    Review your brief
-                </h3>
-                <p className="mt-1 text-[12px] text-muted-foreground">
-                    Edit any section before generating.
-                </p>
-            </div>
-
-            <SummaryRow label="Campaign goal" value={brief.campaign_goal_custom || brief.campaign_goal || 'Not completed'} onEdit={() => onEdit(0)} />
-            <SummaryRow label="Content type" value={brief.content_type_custom || brief.content_type || 'Not completed'} onEdit={() => onEdit(1)} />
-            <SummaryRow label="Target audience" value={audienceValue || 'Not completed'} onEdit={() => onEdit(2)} />
-            <SummaryRow label="Core idea" value={brief.core_idea || 'Not completed'} onEdit={() => onEdit(3)} />
-            <SummaryRow label="Voice and tone" value={brief.voice_tone_custom || brief.voice_tone || 'Not completed'} onEdit={() => onEdit(4)} />
-
-            {brief.optional_notes && (
-                <SummaryRow label="Additional notes" value={brief.optional_notes} onEdit={() => onEdit(4)} />
-            )}
-
-            {brief.text_to_include && (
-                <SummaryRow label="Text to include" value={brief.text_to_include} onEdit={() => onEdit(4)} />
-            )}
-        </div>
-    )
-}
-
-function SummaryRow({
-    label,
-    value,
-    onEdit,
-}: {
-    label: string
-    value: string
-    onEdit: () => void
-}) {
-    return (
-        <div className="flex items-start justify-between gap-3 border-b border-border-subtle pb-2 last:border-0">
-            <div className="min-w-0">
-                <p className="font-medium text-muted-foreground">{label}</p>
-                <p className="mt-1 break-words text-foreground">{value}</p>
-            </div>
-            <button
-                type="button"
-                onClick={onEdit}
-                className="shrink-0 text-brand-accent underline-offset-2 hover:underline"
-            >
-                <Pencil className="mr-1 inline-block h-3 w-3" />
-                Edit
-            </button>
-        </div>
-    )
-}

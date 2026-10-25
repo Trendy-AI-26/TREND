@@ -1,5 +1,6 @@
 'use client'
 
+import { useTranslations } from 'next-intl';
 import { ChevronLeft, ChevronRight, Loader2 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -41,6 +42,7 @@ export function AdminBrandsTable({
   onNext,
   onPrev,
 }: AdminBrandsTableProps) {
+  const t = useTranslations('components.admin.admin-brands-table');
   const totalPages = Math.max(1, Math.ceil(total / perPage))
 
   if (error) {
@@ -64,8 +66,8 @@ export function AdminBrandsTable({
             size="icon"
             onClick={onPrev}
             disabled={!hasPrev || loading}
-            aria-label="Previous page"
-            title="Previous page"
+            aria-label={t('previous_page')}
+            title={t('previous_page2')}
           >
             <ChevronLeft className="h-4 w-4" />
           </Button>
@@ -75,8 +77,8 @@ export function AdminBrandsTable({
             size="icon"
             onClick={onNext}
             disabled={!hasNext || loading}
-            aria-label="Next page"
-            title="Next page"
+            aria-label={t('next_page')}
+            title={t('next_page2')}
           >
             <ChevronRight className="h-4 w-4" />
           </Button>
@@ -89,19 +91,19 @@ export function AdminBrandsTable({
         </div>
       ) : items.length === 0 ? (
         <div className="py-16 text-center">
-          <p className="text-[13px] text-muted-foreground">No brands found.</p>
+          <p className="text-[13px] text-muted-foreground">{t('no_brands_found')}</p>
         </div>
       ) : (
         <div className="overflow-x-auto">
           <table className="w-full text-[14px]">
             <thead className="bg-surface-sunken text-left text-micro font-semibold uppercase tracking-[0.09em] text-muted-foreground">
               <tr>
-                <th className="px-4 py-3">Brand name</th>
-                <th className="px-4 py-3">Owner</th>
-                <th className="px-4 py-3">Kit status</th>
-                <th className="px-4 py-3 text-right">Generations</th>
-                <th className="px-4 py-3">Active key</th>
-                <th className="px-4 py-3">Created</th>
+                <th className="px-4 py-3">{t('brand_name')}</th>
+                <th className="px-4 py-3">{t('owner')}</th>
+                <th className="px-4 py-3">{t('kit_status')}</th>
+                <th className="px-4 py-3 text-right">{t('generations')}</th>
+                <th className="px-4 py-3">{t('active_key')}</th>
+                <th className="px-4 py-3">{t('created')}</th>
               </tr>
             </thead>
             <tbody className={loading ? 'opacity-60' : undefined}>
@@ -126,9 +128,9 @@ export function AdminBrandsTable({
                   </td>
                   <td className="px-4 py-3">
                     {brand.has_active_key ? (
-                      <Badge variant="success" className="normal-case tracking-normal">Yes</Badge>
+                      <Badge variant="success" className="normal-case tracking-normal">{t('yes')}</Badge>
                     ) : (
-                      <Badge variant="muted" className="normal-case tracking-normal">No</Badge>
+                      <Badge variant="muted" className="normal-case tracking-normal">{t('no')}</Badge>
                     )}
                   </td>
                   <td className="px-4 py-3 text-muted-foreground">

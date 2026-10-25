@@ -1,5 +1,6 @@
 'use client'
 
+import { useTranslations } from 'next-intl';
 import Link from 'next/link'
 import { ChevronRight } from 'lucide-react'
 import { BrandListItem } from '@/types'
@@ -14,6 +15,7 @@ interface BrandCardProps {
 }
 
 export function BrandCard({ brand }: BrandCardProps) {
+  const t = useTranslations('components.brand.brand-card');
   const params = useParams()
   const { accents } = useBrands()
   const current = params.brandId === brand.id
@@ -28,7 +30,7 @@ export function BrandCard({ brand }: BrandCardProps) {
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-2">
           <h3 className="text-[16px] font-semibold">{brand.name}</h3>
-          {current && <Badge>Current</Badge>}
+          {current && <Badge>{t('current')}</Badge>}
         </div>
         <p className="mt-0.5 text-[12px] text-muted-foreground">
           Created {new Date(brand.created_at).toLocaleDateString()}

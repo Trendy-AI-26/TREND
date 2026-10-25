@@ -1,5 +1,6 @@
 'use client'
 
+import { useTranslations } from 'next-intl';
 import { cn } from '@/lib/utils'
 import { aspectRatioLabel, type PresetInfo } from '@/lib/presets'
 
@@ -12,6 +13,7 @@ interface PresetFrameProps {
 }
 
 export function PresetFrame({ preset, platform, selected, disabled, onSelect }: PresetFrameProps) {
+  const tOpt = useTranslations('options');
   const landscape = preset.width >= preset.height
   const long = 44
   const frameW = landscape ? long : (long * preset.width) / preset.height
@@ -41,7 +43,7 @@ export function PresetFrame({ preset, platform, selected, disabled, onSelect }: 
           style={{ width: frameW, height: frameH }}
         />
       </span>
-      <span className="text-[13px] font-medium leading-none">{preset.shortLabel}</span>
+      <span className="text-[13px] font-medium leading-none">{tOpt(`preset_short_${preset.shortLabelKey}`)}</span>
       {platform && (
         <span className="text-[10px] leading-none text-muted-foreground">{platform}</span>
       )}

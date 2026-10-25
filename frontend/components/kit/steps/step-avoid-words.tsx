@@ -1,5 +1,7 @@
 'use client'
 
+import { useTranslations } from 'next-intl';
+import { useLocale } from 'next-intl'
 import { KitQuestion } from '@/components/kit/kit-question'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
@@ -12,25 +14,29 @@ interface StepProps {
 }
 
 export function StepAvoidWords({ answers, onChange }: StepProps) {
+  const t = useTranslations('components.kit.steps.step-avoid-words');
+  const locale = useLocale()
   return (
     <div className="space-y-6">
       <KitQuestion
-        before="Anything to "
-        emphasis="avoid"
-        after="?"
-        helper="Optional. Words or themes TRENDY AI should stay away from."
+        align="center"
+        before={t('anything_to_prefix')}
+        emphasis={t('avoid_word')}
+        helper={t('avoid_help')}
       />
-      <div className="space-y-2">
-        <Label htmlFor="kit-avoid">Avoid</Label>
+      <div className="mx-auto w-full max-w-[760px] space-y-3 rounded-xl border border-brand-accent/15 bg-white p-5 sm:p-7">
+        <Label htmlFor="kit-avoid" className="font-tajawal text-[12px] font-semibold">{t('avoid_label')}</Label>
         <Textarea
           id="kit-avoid"
           value={answers.avoid_words ?? ''}
           maxLength={500}
           onChange={(e) => onChange({ avoid_words: e.target.value || null })}
-          placeholder="Words or themes to avoid…"
-          rows={4}
+          placeholder={t('words_or_themes_to')}
+          rows={10}
+          className={`min-h-[300px] resize-y border-brand-accent/15 bg-brand-cream/20 font-tajawal text-[13px] ${locale === 'ar' ? 'text-right' : 'text-left'}`}
+          dir={locale === 'ar' ? 'rtl' : 'ltr'}
         />
-        <p className="text-[12px] text-muted-foreground">
+        <p dir="ltr" className={`text-[12px] text-muted-foreground ${locale === 'ar' ? 'text-left' : 'text-right'}`}>
           {answers.avoid_words?.length ?? 0}/500
         </p>
       </div>

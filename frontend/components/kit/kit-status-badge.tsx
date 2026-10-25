@@ -1,12 +1,9 @@
+'use client'
+
+import { useTranslations } from 'next-intl';
 import Link from 'next/link'
 import { Badge } from '@/components/ui/badge'
 import { KitStatus } from '@/types'
-
-const LABELS: Record<KitStatus, string> = {
-  not_started: 'Not started',
-  in_progress: 'In progress',
-  complete: 'Complete',
-}
 
 const VARIANTS: Record<KitStatus, 'muted' | 'warning' | 'success'> = {
   not_started: 'muted',
@@ -21,12 +18,15 @@ export function KitStatusBadge({
   status: KitStatus
   brandId?: string
 }) {
+  const t = useTranslations('components.kit.kit-status-badge');
+  const label = t(status)
+
   const badge = (
     <Badge
       variant={VARIANTS[status]}
-      aria-label={`Brand kit status: ${LABELS[status]}`}
+      aria-label={t('status_aria', { status: label })}
     >
-      {LABELS[status]}
+      {label}
     </Badge>
   )
 
@@ -36,7 +36,7 @@ export function KitStatusBadge({
     <Link
       href={`/${brandId}/kit`}
       className="no-underline"
-      aria-label={`Brand kit status: ${LABELS[status]}. Click to edit.`}
+      aria-label={t('status_aria_edit', { status: label })}
     >
       {badge}
     </Link>

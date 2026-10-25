@@ -14,6 +14,7 @@ class BrandContext:
     audience: str | None = None
     colors: list[str] = field(default_factory=list)
     avoid_words: str | None = None
+    industry: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -195,6 +196,17 @@ VOICE_TONE_MAP: dict[str, str] = {
     "youthful": "Youthful, trendy, and dynamic.",
     "urgent": "Urgent, action-oriented, and high-energy.",
 }
+LANGUAGE_INSTRUCTION_MAP: dict[str, str] = {
+    "ar": (
+        "Write newly generated campaign copy in Arabic. "
+        "Preserve user-provided text exactly as written and do not translate it."
+    ),
+    "en": (
+        "Write newly generated campaign copy in English. "
+        "Preserve user-provided text exactly as written and do not translate it."
+    ),
+}
+
 
 
 def build_platform_context(
@@ -251,6 +263,8 @@ def _build_brand_identity_section(brand_context: BrandContext | None) -> str | N
         lines.append(f'Tagline: "{brand_context.tagline}"')
     if brand_context.tone and brand_context.tone in TONE_STYLE_MAP:
         lines.append(f"Visual style: {TONE_STYLE_MAP[brand_context.tone]}")
+    if brand_context.industry:
+        lines.append(f"Business field: {brand_context.industry} — tailor concepts and recommendations to this industry.")
     if brand_context.audience:
         lines.append(
             f"Target audience: {brand_context.audience} "
@@ -259,7 +273,13 @@ def _build_brand_identity_section(brand_context: BrandContext | None) -> str | N
     if brand_context.colors:
         lines.append(
             f"Brand colors: {', '.join(brand_context.colors)} "
-            "— incorporate these as the dominant palette."
+            "— use these exact user-provided colors as the source of truth for "
+            "the visual palette. Build a cohesive hierarchy with one dominant "
+            "color, supporting colors, and intentional accents. You may use "
+            "carefully derived tints, shades, and neutral backgrounds, but do "
+            "not replace, distort, or introduce unrelated hues. Maintain strong "
+            "contrast, legibility, color harmony, and professional saturation "
+            "across the whole composition."
         )
     if brand_context.avoid_words:
         lines.append(
@@ -269,17 +289,89 @@ def _build_brand_identity_section(brand_context: BrandContext | None) -> str | N
     return "=== BRAND IDENTITY ===\n" + "\n".join(lines)
 
 
-def _build_logo_section(logo_mode: str, brand_has_logo: bool) -> str | None:
-    """Helper building the === LOGO === prompt layer."""
-    if logo_mode in ("prompt", "both") and brand_has_logo:
+LOGO_PLACEMENT_PROMPT: dict[str, str] = {
+    "corner": "Reserve a clean, visually balanced area in a corner for the official logo.",
+    "prominent": "Reserve a clear, prominent, uncluttered area for the official logo.",
+    "watermark": "Keep a low-detail area suitable for a subtle official watermark.",
+    "auto": "Reserve the safest visually balanced area for the official logo.",
+}
+
+
+def _build_logo_section(
+    logo_mode: str,
+    brand_has_logo: bool,
+    logo_placement: str = "none",
+) -> str | None:
+    """Build instructions for a post-generation exact-logo overlay."""
+    placement = logo_placement
+    if placement == "none" and logo_mode in ("prompt", "both"):
+        # Legacy callers requested a logo in the prompt; use the reliable
+        # post-processing path instead of asking the model to redraw it.
+        placement = "auto"
+
+    if placement in LOGO_PLACEMENT_PROMPT and brand_has_logo:
         return (
-            "=== LOGO ===\n"
-            "Include the brand logo in the design — place it in a corner or "
-            "integrate it naturally into the composition. "
-            "Ensure it is clearly visible but does not dominate the scene."
+            "=== LOGO PLACEMENT ===\n"
+            "The official brand logo will be added after image generation. "
+            "Do not generate, draw, recreate, imitate, redesign, replace, "
+            "or invent any logo, brand mark, symbol, or fake brand text. "
+            f"{LOGO_PLACEMENT_PROMPT[placement]}"
         )
     return None
 
+def _build_trend_section(
+    trend_context: dict | None,
+) -> str | None:
+    if not trend_context:
+        return None
+
+    lines = [
+        f"Selected trend: {trend_context.get('name', '')}",
+    ]
+
+    visual_style = trend_context.get(
+        "visual_style"
+    ) or []
+
+    if visual_style:
+        lines.append("Apply the trend through:")
+        lines.extend(
+            f"- {item}"
+            for item in visual_style
+        )
+
+    content_patterns = trend_context.get(
+        "content_patterns"
+    ) or []
+
+    if content_patterns:
+        lines.append("Suggested content patterns:")
+        lines.extend(
+            f"- {item}"
+            for item in content_patterns
+        )
+
+    avoid_patterns = trend_context.get(
+        "avoid_patterns"
+    ) or []
+
+    if avoid_patterns:
+        lines.append("Avoid:")
+        lines.extend(
+            f"- {item}"
+            for item in avoid_patterns
+        )
+
+    lines.append(
+        "The selected trend is optional creative guidance. "
+        "It must not override safety rules, brand identity, "
+        "user-provided text, or platform constraints."
+    )
+
+    return (
+        "=== TREND DIRECTION ===\n"
+        + "\n".join(lines)
+    )
 
 def build_generation_prompt(
     *,
@@ -288,6 +380,9 @@ def build_generation_prompt(
     platform: PlatformContext,
     logo_mode: str,
     brand_has_logo: bool,
+    logo_placement: str = "none",
+    product_edit_instruction: str | None = None,
+    trend_context: dict | None = None,
 ) -> str:
     """Deterministic prompt composer combining GenerationBrief with Brand, Platform and Logo rules."""
     sections: list[str] = [SYSTEM_ROLE_PROMPT]
@@ -301,8 +396,11 @@ def build_generation_prompt(
         f"Tone & Style: {_resolve_mapped_field(brief.voice_tone, brief.voice_tone_custom, VOICE_TONE_MAP)}",
     ]
 
+    language_instruction = _language_instruction(brief)
+   
+
     if brief.text_to_include:
-        brief_lines.append(f'Text to Include: "{brief.text_to_include}"')
+        brief_lines.append(f'Exact visible text to include; preserve exactly: "{brief.text_to_include}"')
 
     if brief.optional_notes:
         brief_lines.append(f"Design Notes: {brief.optional_notes}")
@@ -314,16 +412,38 @@ def build_generation_prompt(
     if brand_sec:
         sections.append(brand_sec)
 
+
     # Layer 4: Composition guidance (always present)
     sections.append(f"=== COMPOSITION ===\n{platform.note}")
 
     # Layer 5: Logo (conditional)
-    logo_sec = _build_logo_section(logo_mode, brand_has_logo)
+    logo_sec = _build_logo_section(logo_mode, brand_has_logo, logo_placement)
     if logo_sec:
         sections.append(logo_sec)
 
-    # Layer 6: Output rules
-    sections.append(OUTPUT_RULES_PROMPT)
+    # Layer 6: Product reference instructions
+    if product_edit_instruction:
+        sections.append(
+            "=== PRODUCT IMAGE INSTRUCTIONS ===\n"
+            "A product reference image is provided. "
+            "Use the same product in the generated design.\n"
+            "Preserve the product identity, shape, packaging, "
+            "logo, label, and important colors unless the user "
+            "explicitly asks to change them.\n"
+            f"User product instruction: "
+            f"{product_edit_instruction}"
+        )
+    trend_section = _build_trend_section(trend_context)
+
+    if trend_section:
+        sections.append(trend_section)
+
+    # Layer 7: Output rules
+    sections.append(
+        OUTPUT_RULES_PROMPT
+        + "\n"
+        + language_instruction
+    )
 
     return "\n\n".join(sections)
 
@@ -335,6 +455,7 @@ def compose_full_prompt(
     platform: PlatformContext,
     logo_mode: str,
     brand_has_logo: bool,
+    logo_placement: str = "none",
 ) -> str:
     """Legacy compose_full_prompt for backwards compatibility."""
     sections: list[str] = [SYSTEM_ROLE_PROMPT]
@@ -345,10 +466,34 @@ def compose_full_prompt(
 
     sections.append(f"=== COMPOSITION ===\n{platform.note}")
 
-    logo_sec = _build_logo_section(logo_mode, brand_has_logo)
+    logo_sec = _build_logo_section(logo_mode, brand_has_logo, logo_placement)
     if logo_sec:
         sections.append(logo_sec)
 
     sections.append(f"=== IMAGE REQUEST ===\n{user_prompt}")
 
     return "\n\n".join(sections)
+
+
+def _value(value: object) -> str:
+    return getattr(value, "value", value) if value is not None else ""
+
+
+def _language_instruction(brief: GenerationBrief) -> str:
+    language = (
+        brief.language.value
+        if hasattr(brief.language, "value")
+        else str(brief.language)
+    )
+
+    if language == "en":
+        return "Write newly generated campaign copy in English."
+
+    return "Write newly generated campaign copy in Arabic."
+
+
+def _mapped(mapping: dict[str, str], value: object, custom: str | None = None) -> str:
+    key = _value(value)
+    if key == "custom":
+        return custom or "Custom"
+    return mapping.get(key, key.replace("_", " "))

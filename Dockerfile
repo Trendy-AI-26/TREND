@@ -8,10 +8,10 @@ RUN npm ci --frozen-lockfile
 
 COPY frontend/ ./
 
-ARG NEXT_PUBLIC_SUPABASE_URL
-ARG NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
-ENV NEXT_PUBLIC_SUPABASE_URL=$NEXT_PUBLIC_SUPABASE_URL
-ENV NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=$NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
+ARG NEXT_PUBLIC_STORAGE_PUBLIC_URL
+ARG NEXT_SERVER_API_URL=http://127.0.0.1:8000
+ENV NEXT_PUBLIC_STORAGE_PUBLIC_URL=$NEXT_PUBLIC_STORAGE_PUBLIC_URL
+ENV NEXT_SERVER_API_URL=$NEXT_SERVER_API_URL
 
 RUN npm run build
 
@@ -54,6 +54,7 @@ ENV PATH=/home/appuser/.local/bin:$PATH \
 
 # Copy backend code
 COPY --chown=appuser:appuser backend/app /app/backend/app
+COPY --chown=appuser:appuser backend/db /app/backend/db
 
 # Copy frontend artifacts from build stage
 COPY --from=frontend-builder --chown=appuser:appuser /app/frontend/.next/standalone /app/frontend
@@ -64,11 +65,9 @@ COPY --from=frontend-builder --chown=appuser:appuser /app/frontend/public /app/f
 COPY --chown=appuser:appuser scripts/container-entrypoint.sh /app/scripts/container-entrypoint.sh
 RUN chmod +x /app/scripts/container-entrypoint.sh
 
-# Build args to environment
-ARG NEXT_PUBLIC_SUPABASE_URL
-ARG NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
-ENV NEXT_PUBLIC_SUPABASE_URL=$NEXT_PUBLIC_SUPABASE_URL \
-    NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=$NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
+# Runtime server-side calls use the same backend as the build-time rewrite.
+ARG NEXT_SERVER_API_URL=http://127.0.0.1:8000
+ENV NEXT_SERVER_API_URL=$NEXT_SERVER_API_URL
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \

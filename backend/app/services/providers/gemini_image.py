@@ -4,7 +4,7 @@ import logging
 from google import genai
 from google.genai import types as genai_types
 
-from app.services.providers.base import ProviderError, ProviderResult
+from app.services.providers.base import ProviderError, ProviderResult, ReferenceImage
 
 logger = logging.getLogger(__name__)
 
@@ -13,10 +13,12 @@ def gemini_generate(
     *,
     api_key: str,
     prompt: str,
-    aspect_ratio: str,
+    width: int,
+    height: int,
     model: str,
+    reference_image: ReferenceImage | None = None,
 ) -> ProviderResult:
-    logger.info("gemini_generate: model=%s aspect_ratio=%s", model, aspect_ratio)
+    logger.info("gemini_generate: model=%s width=%d height=%d", model, width, height)
     client = genai.Client(
         api_key=api_key,
         http_options=genai_types.HttpOptions(timeout=120000),

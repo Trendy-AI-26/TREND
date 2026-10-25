@@ -16,6 +16,8 @@ export async function POST(
   }
   const auth = request.headers.get('authorization')
   if (auth) headers['Authorization'] = auth
+  const cookie = request.headers.get('cookie')
+  if (cookie) headers['Cookie'] = cookie
 
   let upstream: Response
   try {

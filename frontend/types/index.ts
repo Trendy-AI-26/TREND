@@ -1,8 +1,4 @@
-<<<<<<< Updated upstream
 import type { GenerationBrief } from './generation'
-
-=======
->>>>>>> Stashed changes
 export * from './generation'
 
 export interface Profile {
@@ -28,6 +24,22 @@ export interface ErrorResponse {
   }
 }
 
+export interface QuotaSummary {
+  plan: string
+  max_active_brands: number
+  active_brands: number
+  generation_limit: number
+  generation_reserved: number
+  generation_consumed: number
+  generation_remaining: number
+  daily_generation_limit: number
+  daily_generation_reserved: number
+  daily_generation_consumed: number
+  daily_generation_remaining: number
+  trial_ends_at: string | null
+  trial_active: boolean
+}
+
 export interface Brand {
   id: string
   name: string
@@ -43,6 +55,9 @@ export interface BrandListItem {
   logo_url: string | null
   kit_status: KitStatus
   created_at: string
+  colors?: string[]
+  industry?: string | null
+  tagline?: string | null
 }
 
 export interface CreateBrandRequest {
@@ -56,6 +71,19 @@ export interface UpdateBrandRequest {
 export interface LogoUploadResponse {
   logo_url: string
 }
+
+export interface ProductAssetResponse {
+  id: string
+  brand_id: string
+  image_url: string
+  content_type: string
+  file_size_bytes: number
+  width: number
+  height: number
+  created_at: string
+}
+
+export interface ProductAssetUploadResponse extends ProductAssetResponse { }
 
 export interface ProviderKey {
   id: string
@@ -83,15 +111,15 @@ export interface ValidateKeyResponse {
   key_id: string
 }
 
-export type ToneOption = 'formal' | 'casual' | 'playful' | 'professional' | 'friendly'
 export type KitStatus = 'not_started' | 'in_progress' | 'complete'
 
 export interface KitAnswers {
+  product_asset_id: string | null
   tagline: string | null
-  tone: ToneOption | null
   audience: string | null
   colors: string[]
   avoid_words: string | null
+  industry: string | null
 }
 
 export interface BrandKit {
@@ -110,6 +138,7 @@ export interface UpsertKitRequest {
 
 export type Provider = 'openai' | 'gemini'
 export type LogoMode = 'none' | 'prompt' | 'watermark' | 'both'
+export type LogoPlacement = 'none' | 'corner' | 'prominent' | 'watermark' | 'auto'
 export type GenerationStatus = 'pending' | 'processing' | 'succeeded' | 'failed'
 
 export type PlatformPreset =
@@ -129,9 +158,9 @@ export type PlatformPreset =
 
 export interface GenerateRequest {
   brief: GenerationBrief
-  provider: Provider
   platform_preset: PlatformPreset
   logo_mode: LogoMode
+  logo_placement?: LogoPlacement
 }
 
 export interface GenerationResponse {
@@ -140,6 +169,7 @@ export interface GenerationResponse {
   provider: Provider
   model: string
   platform_preset: PlatformPreset
+  language: TextLanguage
   width: number
   height: number
   logo_mode: LogoMode
@@ -174,6 +204,7 @@ export interface GenerationHistoryPage {
   items: GenerationHistoryItem[]
   next_cursor: string | null
   page_size: 24
+  successful_count: number | null
 }
 
 export interface GenerationDetail extends GenerationResponse {
@@ -220,4 +251,27 @@ export interface AdminBrandsPage {
   page: number
   per_page: number
   total: number
+}
+export type TextLanguage = 'ar' | 'en'
+export type CaptionTone = string
+
+export interface CaptionPreferences {
+  tone?: CaptionTone | null
+  include_cta?: boolean
+  include_emojis?: boolean
+  max_hashtags?: number
+  extra_notes?: string | null
+}
+
+export interface CaptionRequest {
+  preferences?: CaptionPreferences
+}
+
+export interface CaptionResponse {
+  language: 'ar' | 'en'
+  caption: string
+  hook: string | null
+  hashtags: string[]
+  keywords: string[]
+  trend_used: boolean
 }

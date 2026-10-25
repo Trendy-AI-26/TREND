@@ -1,23 +1,29 @@
 import type { Metadata } from "next";
 import localFont from "next/font/local";
-import { Instrument_Serif, Hanken_Grotesk } from "next/font/google";
-import { Toaster } from "@/components/ui/toaster";
+import { Toaster } from "@/components/ui/sonner";
+import { ConfirmProvider } from "@/components/ui/confirm-dialog";
+
+// خطوط محلية عبر npm — ما بتحتاج أي اتصال بـ Google وقت التشغيل
+import "@fontsource/poppins/500.css";
+import "@fontsource/poppins/600.css";
+import "@fontsource/poppins/700.css";
+import "@fontsource/poppins/400.css";
+import "@fontsource/noto-naskh-arabic/400.css";
+import "@fontsource/noto-naskh-arabic/500.css";
+import "@fontsource/noto-naskh-arabic/600.css";
+import "@fontsource/noto-naskh-arabic/700.css";
+import "@fontsource/el-messiri/400.css";
+import "@fontsource/el-messiri/500.css";
+import "@fontsource/el-messiri/600.css";
+import "@fontsource/el-messiri/700.css";
+import "@fontsource/tajawal/300.css";
+import "@fontsource/tajawal/400.css";
+import "@fontsource/tajawal/500.css";
+import "@fontsource/tajawal/700.css";
+
 import "./globals.css";
-
-
-const display = Instrument_Serif({
-  subsets: ["latin"],
-  weight: "400",
-  style: ["normal", "italic"],
-  variable: "--font-display",
-  display: "swap",
-});
-
-const sans = Hanken_Grotesk({
-  subsets: ["latin"],
-  variable: "--font-sans",
-  display: "swap",
-});
+import { NextIntlClientProvider } from "next-intl";
+import { getLocale, getMessages } from "next-intl/server";
 
 const geistMono = localFont({
   src: "./fonts/GeistMonoVF.woff",
@@ -28,24 +34,29 @@ const geistMono = localFont({
 export const metadata: Metadata = {
   title: "TRENDY AI",
   description: "Arabic-first brand studio for platform-ready visual content",
-  icons: {
-    icon: '/trendy_logo.png',
-  },
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const locale = await getLocale();
+  const messages = await getMessages();
+  const dir = locale === "ar" ? "rtl" : "ltr";
+
   return (
     <html
-      lang="en"
-      className={`${display.variable} ${sans.variable} ${geistMono.variable}`}
+      lang={locale}
+      dir={dir}
+      suppressHydrationWarning
+      className={geistMono.variable}
     >
       <body className="font-sans antialiased">
-        {children}
-        <Toaster />
+        <NextIntlClientProvider messages={messages}>
+          <ConfirmProvider>{children}</ConfirmProvider>
+          <Toaster />
+        </NextIntlClientProvider>
       </body>
     </html>
   );

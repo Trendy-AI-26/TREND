@@ -1,43 +1,29 @@
 import { notFound } from 'next/navigation'
-import { createClient } from '@/lib/supabase/server'
+import { getServerSession, getSessionUser } from '@/lib/auth/server'
 
 // Server-side operator gate. The backend `/admin/*` 403 is the real security
 // control; this hides the Admin UI from non-operators without leaking the
 // allow-list. notFound() is a Server Component API, so this layout is a Server
-// Component that resolves is_admin from `/me` before rendering any admin view.
+// Component that resolves is_admin from the backend `GET /auth/session` before
+// rendering any admin view.
 //
-// This runs in Node (not the browser), so it must call the backend at an
-// absolute, server-reachable URL — the public `NEXT_PUBLIC_API_URL` is the
-// relative `/api` path that only resolves in the browser via the next.config
-// rewrite. We hit the same internal address that rewrite targets.
-const BACKEND_INTERNAL_URL = (
-  process.env.BACKEND_INTERNAL_URL ??
-  process.env.NEXT_SERVER_API_URL ??
-  'http://127.0.0.1:8000'
-).replace(/\/+$/, '')
-
+// This runs in Node (not the browser), so the helper calls the backend at the
+// absolute, server-reachable NEXT_SERVER_API_URL (the same address the
+// next.config rewrite targets), not the browser-relative `/api` path.
 export default async function AdminLayout({
   children,
 }: {
   children: React.ReactNode
 }) {
-  const supabase = await createClient()
-  const {
-    data: { session },
-  } = await supabase.auth.getSession()
+  const session = await getServerSession()
 
   if (!session) {
     notFound()
   }
 
-  const response = await fetch(`${BACKEND_INTERNAL_URL}/me`, {
-    headers: { Authorization: `Bearer ${session.access_token}` },
-    cache: 'no-store',
-  })
+  const user = await getSessionUser(session)
 
-  const profile = response.ok ? await response.json() : null
-
-  if (!profile?.is_admin) {
+  if (!user?.is_admin) {
     notFound()
   }
 

@@ -1817,3 +1817,16 @@ Post-processing (resize/crop via Pillow) is required to achieve exact preset dim
 ---
 
 *End of Implementation Plan*
+
+
+---
+
+## Current Delivery Status — Sprint 3
+
+Sprint 2, **Detailed Questionnaire & Generation Pipeline**, is recorded as completed. Its carry-over defect is the duplicate **Preview Brief** rendering in the brief review experience; this is a P0 item for Sprint 3 and must be resolved before extending the flow.
+
+Sprint 3 is documented in [`docs/sprint-3-plan.md`](./sprint-3-plan.md). The approved planning scope is trend-aware generation through an optional regional Trends provider, Arabic-first localization with explicit Arabic/English language selection, and independent SEO-aware caption generation after image creation. The plan preserves the Sprint 2 rule that the frontend sends structured brief data while the server owns prompt composition.
+
+The live Trends dependency remains provider-agnostic because Google’s official Trends API is currently described as an alpha with limited tester access.[1] The application should therefore support a configured provider adapter and continue to generate images when Trends is unavailable.
+
+[1]: https://developers.google.com/search/blog/2025/07/trends-api "Introducing the Google Trends API (alpha) — Google Search Central Blog"

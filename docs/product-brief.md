@@ -16,9 +16,17 @@ Users often know what they want to communicate but do not know how to write a st
 
 TRENDY AI asks a few clear questions, remembers the selected brand identity, and turns the answers into a detailed provider-ready prompt while keeping the user in control of the final brief.
 
+## Commercial model
+
+TRENDY AI is designed as a commercial SaaS product with two supported operating modes. In **managed generation mode**, the customer pays TRENDY AI through a subscription or credit package, and TRENDY AI pays the connected AI provider and accounts for usage. In **Bring Your Own API Key (BYOK) mode**, the customer connects a provider key, pays the provider directly, and uses TRENDY AI as the brand-management and content-production workspace. The product may still charge a workspace subscription or plan fee in BYOK mode.
+
+The payment system is a roadmap layer and is not part of the current Sprint 0–3 implementation. When implemented, billing should record the plan, generation allowance, credit consumption, provider, model, and billing mode. API keys must remain server-side, be encrypted or stored through Supabase Vault, and never be returned to the browser.
+
 ## Primary users
 
 The first target users are Arabic-speaking small-business owners, creators, marketers, and teams that need consistent social-media visuals without becoming prompt-engineering experts.
+
+The initial commercial niches include perfumes, clothing, abayas, cosmetics, retail, food, hospitality, and local services. Agencies are also an important segment because one account can manage multiple customer brands.
 
 ## Product personality
 
@@ -40,7 +48,7 @@ The MVP includes rebranding the application to TRENDY AI, a structured generatio
 
 ## Out of scope for Sprint 0–3
 
-Google Trends automation, scheduled publishing, social-media account integrations, payments, team collaboration, advanced image editing, and a complete redesign of the existing generation provider adapters are outside the current scope.
+Google Trends automation, scheduled publishing, social-media account integrations, payments, subscriptions, invoices, credit accounting, team collaboration, advanced image editing, and a complete redesign of the existing generation provider adapters are outside the current scope. The intended future billing model is documented above so that the product architecture can preserve a clean separation between generation logic and commercial accounting.
 
 ## Success signals
 

@@ -1,14 +1,15 @@
-import { createClient } from './supabase/client'
-
 export class ApiError extends Error {
   code: string
   requestId?: string
+  /** HTTP status of the failed response; 0 when no response was received (network failure). */
+  status: number
 
-  constructor(message: string, code: string, requestId?: string) {
+  constructor(message: string, code: string, requestId?: string, status = 0) {
     super(message)
     this.name = 'ApiError'
     this.code = code
     this.requestId = requestId
+    this.status = status
   }
 }
 
@@ -55,34 +56,66 @@ function parseErrorPayload(
   return null
 }
 
+function getApiBase(): string {
+  return process.env.NEXT_PUBLIC_API_URL || '/api'
+}
+
+/**
+ * Asks the backend to clear the httpOnly session cookie. Failures are ignored:
+ * the caller is leaving the authenticated area either way.
+ */
+export async function logout(): Promise<void> {
+  try {
+    await fetch(`${getApiBase()}/auth/logout`, {
+      method: 'POST',
+      credentials: 'include',
+    })
+  } catch {
+    // ignore
+  }
+}
+
+export interface ApiRequestOptions extends RequestInit {
+  /**
+   * On HTTP 401, log out and go to /login (default). Auth endpoints such as
+   * `/auth/login` set this to false: their 401 is a normal error to display.
+   */
+  redirectOn401?: boolean
+}
+
 export async function apiRequest<T = unknown>(
   endpoint: string,
-  options: RequestInit = {}
+  { redirectOn401 = true, ...options }: ApiRequestOptions = {}
 ): Promise<T> {
-  const supabase = createClient()
-  const { data: { session } } = await supabase.auth.getSession()
-
   const headers = new Headers(options.headers)
 
   if (!headers.has('Content-Type') && !(options.body instanceof FormData)) {
     headers.set('Content-Type', 'application/json')
   }
 
-  if (session?.access_token) {
-    headers.set('Authorization', `Bearer ${session.access_token}`)
+  // The session is an httpOnly cookie set by the backend; no token handling here.
+  let response: Response
+  try {
+    response = await fetch(`${getApiBase()}${endpoint}`, {
+      ...options,
+      headers,
+      credentials: 'include',
+    })
+  } catch (err) {
+    // fetch rejects with a TypeError when no response arrives (offline, DNS, CORS...).
+    // Anything else (e.g. an AbortError from the caller's signal) is rethrown untouched.
+    if (err instanceof TypeError) {
+      throw new ApiError(err.message || 'Network error', 'NETWORK_ERROR', undefined, 0)
+    }
+    throw err
   }
 
-  const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}${endpoint}`, {
-    ...options,
-    headers,
-  })
-
-  if (response.status === 401) {
+  if (response.status === 401 && redirectOn401) {
     if (typeof window !== 'undefined') {
-      await supabase.auth.signOut()
+      await logout()
       window.location.href = '/login'
     }
-    throw new ApiError('Unauthorized', 'UNAUTHORIZED')
+    throw new ApiError('Unauthorized', 'UNAUTHORIZED', undefined, response.status)
   }
 
   if (!response.ok) {
@@ -103,7 +136,7 @@ export async function apiRequest<T = unknown>(
         // JSON parse failed, use default message
       }
     }
-    throw new ApiError(message, code, requestId)
+    throw new ApiError(message, code, requestId, response.status)
   }
 
   if (

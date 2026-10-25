@@ -1,5 +1,6 @@
 'use client'
 
+import { useTranslations } from 'next-intl';
 import { useCallback } from 'react'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
@@ -13,6 +14,7 @@ interface GenerationDetailPageProps {
 }
 
 export default function GenerationDetailPage({ params }: GenerationDetailPageProps) {
+  const t = useTranslations('app.(dashboard).[brandId].history.[generationId].page');
   const { brandId, generationId } = params
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -41,15 +43,13 @@ export default function GenerationDetailPage({ params }: GenerationDetailPagePro
   if (notFound) {
     return (
       <div className="flex flex-col items-center justify-center py-20 text-center">
-        <p className="text-lg font-medium">Generation not found</p>
-        <p className="mt-2 text-sm text-muted-foreground">
-          This generation may have been deleted or does not exist.
-        </p>
+        <p className="text-lg font-medium">{t('generation_not_found')}</p>
+        <p className="mt-2 text-sm text-muted-foreground">{t('this_generation_may_have')}</p>
         <Link
           href={`/${brandId}/history${backSearch ? `?${backSearch}` : ''}`}
           className="mt-4 text-sm text-primary underline underline-offset-2"
         >
-          Back to History
+          {t('back_to_history')}
         </Link>
       </div>
     )

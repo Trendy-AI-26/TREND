@@ -1,5 +1,6 @@
 'use client'
 
+import { useTranslations } from 'next-intl';
 import { ImagePlus } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { aspectRatioLabel, type PresetInfo } from '@/lib/presets'
@@ -21,6 +22,8 @@ export function CanvasStage({
   imageUrl,
   imageAlt,
 }: CanvasStageProps) {
+  const t = useTranslations('components.generation.canvas-stage');
+  const tOpt = useTranslations('options');
   const landscape = preset.width >= preset.height
   const ratio = `${preset.width} / ${preset.height}`
 
@@ -52,10 +55,10 @@ export function CanvasStage({
               <ImagePlus className="h-5 w-5" />
             </span>
             <p className="max-w-[26ch] font-display text-[24px] leading-tight text-[#475569]">
-              Describe what you see for {brandName}.
+              {t('describe_what_you_see_for', { brandName })}
             </p>
             <p className="font-mono text-[12px] text-muted-foreground">
-              {preset.shortLabel} · {aspectRatioLabel(preset.width, preset.height)} · {preset.width}×{preset.height}
+              {tOpt(`preset_short_${preset.shortLabelKey}`)} · {aspectRatioLabel(preset.width, preset.height)} · {preset.width}×{preset.height}
             </p>
           </div>
         )}
@@ -66,7 +69,7 @@ export function CanvasStage({
               <div className="absolute inset-0 animate-basar-shimmer bg-[linear-gradient(100deg,transparent_20%,color-mix(in_srgb,var(--brand)_14%,white)_42%,white_50%,color-mix(in_srgb,var(--brand)_14%,white)_58%,transparent_80%)]" />
             </div>
             <p className="absolute inset-x-0 bottom-4 text-center text-[12px] text-muted-foreground">
-              ✦ Painting your image…
+              ✦ {t('painting_your_image')}
             </p>
           </>
         )}
@@ -75,7 +78,7 @@ export function CanvasStage({
           // eslint-disable-next-line @next/next/no-img-element
           <img
             src={imageUrl}
-            alt={imageAlt ?? 'Generated image'}
+            alt={imageAlt ?? t('generated_image')}
             className="h-full w-full animate-basar-reveal object-cover"
           />
         )}

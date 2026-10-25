@@ -2,16 +2,21 @@
 
 import { useState } from "react";
 import Image from 'next/image'
+import { useTranslations } from 'next-intl';
+import LanguageSwitcher from './language-switcher';
 
-const NAV_LINKS = [
-  { href: "#hero", label: "About us" },
-  { href: "#studio", label: "Content Studio" },
-  { href: "#trial", label: "Free Trial" },
-  { href: "#audiences", label: "Who is this for?" },
-  { href: "#footer", label: "Contact us" },
-];
 export default function Header() {
   const [menuOpen, setMenuOpen] = useState(false);
+  const t = useTranslations();
+
+  const NAV_LINKS = [
+    { href: "#hero", label: t("nav.about") },
+    { href: "#why", label: t("nav.why") },
+    { href: "#audiences", label: t("nav.audiences") },
+    { href: "#trial", label: t("nav.trial") },
+    { href: "#studio", label: t("nav.studio") },
+    { href: "#footer", label: t("nav.contact") },
+  ];
 
   return (
     <header className="sticky top-0 z-50 bg-brand-bg/90 backdrop-blur-md border-b border-brand-accent/30">
@@ -24,7 +29,7 @@ export default function Header() {
             height={36}
             className="h-9 w-9 object-contain"
           />
-          <span className="font-display text-[24px] font-semibold">Trendy</span>
+          <span className="font-logo text-[24px] font-semibold">Trendy</span>
         </div>
 
         <nav className="hidden md:flex gap-8 text-sm font-semibold text-brand-headline">
@@ -40,20 +45,24 @@ export default function Header() {
         </nav>
 
         <div className="flex items-center gap-3 font-readex">
+          {/* Language Toggle */}
+          <LanguageSwitcher />
+
           <a
             href="/login"
             className="hidden sm:inline-flex items-center text-sm font-semibold text-brand-headline hover:text-brand-primary transition-colors"
           >
-            Sign in
+            {t("nav.signIn")}
           </a>
           <span className="hidden sm:inline text-brand-accent" aria-hidden="true">|</span>
           <a
             href="/signup"
             className="hidden sm:inline-flex items-center text-sm font-bold text-brand-primary hover:text-brand-headline transition-colors"
           >
-            Sign up
+            {t("nav.signUp")}
           </a>
           <button
+            type="button"
             className="md:hidden text-2xl text-brand-headline p-1"
             aria-label="Toggle menu"
             onClick={() => setMenuOpen((open) => !open)}
@@ -75,13 +84,15 @@ export default function Header() {
               {link.label}
             </a>
           ))}
-          <div className="mt-2 flex items-center justify-center gap-3 border-t border-brand-accent/20 pt-4">
+          <div className="mt-2 flex items-center justify-center gap-3 border-t border-brand-accent/20 pt-4 flex-wrap">
+            {/* Language toggle in mobile menu */}
+            <LanguageSwitcher />
             <a
               href="/login"
               onClick={() => setMenuOpen(false)}
               className="text-sm font-semibold text-brand-headline hover:text-brand-primary transition-colors"
             >
-              Sign in
+              {t("nav.signIn")}
             </a>
             <span className="text-brand-accent" aria-hidden="true">|</span>
             <a
@@ -89,7 +100,7 @@ export default function Header() {
               onClick={() => setMenuOpen(false)}
               className="text-sm font-bold text-brand-primary hover:text-brand-headline transition-colors"
             >
-              Sign up
+              {t("nav.signUp")}
             </a>
           </div>
         </div>

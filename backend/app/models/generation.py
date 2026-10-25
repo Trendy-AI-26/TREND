@@ -4,18 +4,30 @@ from datetime import datetime
 from enum import Enum
 from typing import Literal
 from pydantic import BaseModel, Field, field_validator, model_validator
+from uuid import UUID
 
 
 class ProviderEnum(str, Enum):
     openai = "openai"
     gemini = "gemini"
 
+class TextLanguageEnum(str, Enum):
+    en = "en"
+    ar = "ar"
 
 class LogoModeEnum(str, Enum):
     none = "none"
     prompt = "prompt"
     watermark = "watermark"
     both = "both"
+
+
+class LogoPlacementEnum(str, Enum):
+    none = "none"
+    corner = "corner"
+    prominent = "prominent"
+    watermark = "watermark"
+    auto = "auto"
 
 
 class GenerationStatusEnum(str, Enum):
@@ -50,6 +62,7 @@ class GenerationResponse(BaseModel):
     provider: ProviderEnum
     model: str
     platform_preset: PlatformPresetEnum
+    language: TextLanguageEnum
     width: int
     height: int
     logo_mode: LogoModeEnum
@@ -73,6 +86,7 @@ class GenerationHistoryItem(BaseModel):
     provider: ProviderEnum
     model: str
     platform_preset: PlatformPresetEnum
+    language: TextLanguageEnum
     width: int
     height: int
     logo_mode: LogoModeEnum
@@ -87,6 +101,7 @@ class GenerationHistoryPage(BaseModel):
     items: list[GenerationHistoryItem]
     next_cursor: str | None
     page_size: Literal[24]
+    successful_count: int | None
 
 
 class GenerationDetailResponse(BaseModel):
@@ -95,6 +110,7 @@ class GenerationDetailResponse(BaseModel):
     provider: ProviderEnum
     model: str
     platform_preset: PlatformPresetEnum
+    language: TextLanguageEnum
     width: int
     height: int
     logo_mode: LogoModeEnum
@@ -191,7 +207,6 @@ class VoiceToneEnum(str, Enum):
     custom = "custom"
 
 
-
 class TargetAudience(BaseModel):
     @field_validator("segments")
     @classmethod
@@ -233,7 +248,7 @@ class TargetAudience(BaseModel):
         return self
     segments: list[AudienceSegmentEnum] = Field(
         default_factory=list,
-        max_length=2,
+        max_length=3,
     )
     location: str | None = Field(default=None, max_length=100)
     age_range: AgeRangeEnum | None = None
@@ -242,6 +257,7 @@ class TargetAudience(BaseModel):
 
 
 class GenerationBrief(BaseModel):
+    language: TextLanguageEnum = TextLanguageEnum.ar
     @field_validator(
         "campaign_goal_custom",
         "content_type_custom",
@@ -332,18 +348,43 @@ class GenerationBrief(BaseModel):
             raise ValueError(
                 f"{field_name} must be null when the selected value is not custom"
             )
-
+        
+class PreviewBriefRequest(BaseModel):
+    brief: GenerationBrief
+    platform_preset: PlatformPresetEnum
 
 class GenerateRequest(BaseModel):
+    """Image-generation request body.
+
+    Security: the provider, model, and API key are resolved exclusively on the
+    server via app.services.generation_resolver. They are deliberately absent
+    here, and "extra": "forbid" makes any attempt to inject them (api_key,
+    provider, model, ...) fail loudly with a 422 instead of being ignored
+    silently. product_asset_id stays a legitimate client choice.
+    """
+
     brief: GenerationBrief
-    provider: ProviderEnum
     platform_preset: PlatformPresetEnum
     logo_mode: LogoModeEnum = LogoModeEnum.none
-
+    logo_placement: LogoPlacementEnum = LogoPlacementEnum.none
+    product_asset_id: UUID | None = None
+    product_edit_instruction: str | None = Field(
+        default=None,
+        max_length=2000,
+        description=(
+            "Optional instructions describing how the product image "
+            "should be used or visually modified."
+        ),
+    )
+    trend_id: UUID | None = None
+    model_config = {"extra": "forbid"}
+    
 
 __all__ = [
     "ProviderEnum",
+    "TextLanguageEnum",
     "LogoModeEnum",
+    "LogoPlacementEnum",
     "GenerationStatusEnum",
     "PlatformPresetEnum",
     "GenerateRequest",
@@ -360,4 +401,5 @@ __all__ = [
     "VoiceToneEnum",
     "TargetAudience",
     "GenerationBrief",
+    
 ]

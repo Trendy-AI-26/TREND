@@ -1,38 +1,42 @@
-import Reveal from "./Reveal";
+"use client";
 
-const FEATURES = [
-  {
-    tag: "01 — Cost",
-    title: "Replace an entire team",
-    body: "No need to hire a separate market researcher, brand designer, and content writer. Trendy combines them into one AI assistant for a simple subscription cost.",
-  },
-  {
-    tag: "02 — Time",
-    title: "From months to minutes",
-    body: "The branding journey that usually takes weeks of meetings and revisions becomes a smart, streamlined pipeline completed in a single session.",
-  },
-  {
-    tag: "03 — Decisions",
-    title: "Decisions backed by data",
-    body: "Competitor reports, market trends, and real SWOT analysis before you spend a single dollar on marketing or design.",
-  },
-];
+import Reveal from "./Reveal";
+import { useTranslations } from 'next-intl';
 
 export default function WhySection() {
+  const t = useTranslations();
+
+  const FEATURES = [
+    {
+      tag: t("why.tag1"),
+      title: t("why.title1"),
+      body: t("why.body1"),
+    },
+    {
+      tag: t("why.tag2"),
+      title: t("why.title2"),
+      body: t("why.body2"),
+    },
+    {
+      tag: t("why.tag3"),
+      title: t("why.title3"),
+      body: t("why.body3"),
+    },
+  ];
+
   return (
-    <section className="py-24 bg-brand-headline text-brand-bg relative border-y border-brand-accent/20">
+    <section className="py-24 bg-brand-headline text-brand-bg relative border-y border-brand-accent/20" id="why">
       <div className="max-w-7xl mx-auto px-6">
         <Reveal className="max-w-2xl mb-14">
           <div className="inline-flex items-center gap-2 bg-brand-bg/10 border border-brand-bg/20 text-brand-bg font-bold text-xs px-4 py-1.5 rounded-full mb-5 font-readex">
             <i className="w-2 h-2 rounded-full bg-brand-accent block" />
-            Why Trendy
+            {t("why.badge")}
           </div>
           <h2 className="text-4xl md:text-5xl mb-4 text-white font-ruqaa">
-            Built to save you three things
+            {t("why.heading")}
           </h2>
           <p className="text-lg opacity-80 leading-relaxed font-readex">
-            Time, cost, and confusion. Every feature on the platform is designed to
-            serve these three goals.
+            {t("why.subheading")}
           </p>
         </Reveal>
 

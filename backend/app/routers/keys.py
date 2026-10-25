@@ -4,14 +4,16 @@ from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
+from app import db
 from app.core.auth import User, get_current_user
-from app.core.supabase import get_service_client
-from app.core.vault import store_secret, read_secret, delete_secret
+from app.core.vault import VaultError, decrypt_secret, encrypt_secret
 from app.models.provider_key import (
     AddKeyRequest,
     ProviderKeyResponse,
     ValidateKeyResponse,
 )
+from app.repositories import brands as brand_repo
+from app.repositories import provider_keys as key_repo
 from app.services.provider_validation import validate_provider_key
 
 logger = logging.getLogger(__name__)
@@ -27,33 +29,17 @@ def _error_response(status_code: int, code: str, message: str) -> HTTPException:
 
 
 def _get_brand_or_404(brand_id: UUID, user_id: str) -> dict:
-    client = get_service_client()
-    result = (
-        client.table("brands")
-        .select("*")
-        .eq("id", str(brand_id))
-        .eq("owner_user_id", user_id)
-        .maybe_single()
-        .execute()
-    )
-    if result is None or result.data is None:
+    brand = brand_repo.get_owned_brand(brand_id, user_id)
+    if brand is None:
         raise _error_response(404, "BRAND_NOT_FOUND", "Brand not found")
-    return result.data
+    return brand
 
 
 def _get_key_or_404(brand_id: UUID, key_id: UUID) -> dict:
-    client = get_service_client()
-    result = (
-        client.table("provider_keys")
-        .select("*")
-        .eq("id", str(key_id))
-        .eq("brand_id", str(brand_id))
-        .maybe_single()
-        .execute()
-    )
-    if result is None or result.data is None:
+    key = key_repo.get_key(brand_id, key_id)
+    if key is None:
         raise _error_response(404, "KEY_NOT_FOUND", "Key not found")
-    return result.data
+    return key
 
 
 def _key_response(row: dict) -> ProviderKeyResponse:
@@ -76,16 +62,7 @@ async def list_keys(
     current_user: User = Depends(get_current_user),
 ):
     _get_brand_or_404(brand_id, current_user.id)
-    client = get_service_client()
-    result = (
-        client.table("provider_keys")
-        .select("*")
-        .eq("brand_id", str(brand_id))
-        .order("provider")
-        .order("created_at", desc=True)
-        .execute()
-    )
-    return [_key_response(row) for row in result.data or []]
+    return [_key_response(row) for row in key_repo.list_keys(brand_id)]
 
 
 @router.post("", response_model=ProviderKeyResponse, status_code=status.HTTP_201_CREATED)
@@ -95,70 +72,54 @@ async def add_key(
     current_user: User = Depends(get_current_user),
 ):
     _get_brand_or_404(brand_id, current_user.id)
-    client = get_service_client()
 
     key_hint = body.key[-4:] if len(body.key) >= 4 else ("*" * len(body.key))
 
     try:
-        vault_secret_id = store_secret(
-            name=f"provider_key_{uuid4()}",
-            value=body.key,
-        )
-    except Exception as e:
-        logger.error("Vault store failed: %s", e)
+        encrypted_key = encrypt_secret(body.key)
+    except VaultError as e:
+        logger.error("Key encryption failed: %s", e)
         raise _error_response(502, "VAULT_ERROR", "Failed to store key securely") from e
 
     # Validate BEFORE touching active status so failures don't orphan the old key
-    is_valid, validation_error = await validate_provider_key(body.provider, body.key)
+    try:
+        is_valid, validation_error = await validate_provider_key(body.provider, body.key)
+    except Exception as e:
+        logger.exception("Provider key validation crashed for provider=%s", body.provider)
+        raise _error_response(
+            502,
+            "PROVIDER_VALIDATION_ERROR",
+            "The provider could not validate this key. Check the key, model access, and provider availability.",
+        ) from e
     now = datetime.now(timezone.utc).isoformat()
 
-    deactivated_key_id = None
     try:
-        if body.make_active:
-            existing = (
-                client.table("provider_keys")
-                .select("id")
-                .eq("brand_id", str(brand_id))
-                .eq("provider", body.provider)
-                .eq("is_active", True)
-                .maybe_single()
-                .execute()
-            )
-            if existing and existing.data:
-                deactivated_key_id = existing.data["id"]
-                client.table("provider_keys").update(
-                    {"is_active": False}
-                ).eq("id", deactivated_key_id).execute()
-
-        row_data = {
-            "brand_id": str(brand_id),
-            "provider": body.provider,
-            "vault_secret_id": vault_secret_id,
-            "label": body.label,
-            "key_hint": key_hint,
-            "is_active": body.make_active,
-            "is_valid": is_valid,
-            "last_validated_at": now,
-            "last_validation_error": None if is_valid is True else validation_error,
-        }
-        result = client.table("provider_keys").insert(row_data).execute()
+        # The previous active key is deactivated in the same transaction as the
+        # insert, so a failure leaves it active (no manual rollback needed).
+        row = key_repo.insert_key(
+            {
+                "brand_id": str(brand_id),
+                "provider": body.provider,
+                "encrypted_key": encrypted_key,
+                "label": body.label,
+                "key_hint": key_hint,
+                "is_active": body.make_active,
+                "is_valid": is_valid,
+                "last_validated_at": now,
+                "last_validation_error": None if is_valid is True else validation_error,
+            },
+            deactivate_existing=bool(body.make_active),
+        )
     except Exception as e:
-        if deactivated_key_id:
-            try:
-                client.table("provider_keys").update(
-                    {"is_active": True}
-                ).eq("id", deactivated_key_id).execute()
-            except Exception:
-                logger.error("Failed to re-activate key %s during rollback", deactivated_key_id)
-        # Best-effort cleanup of orphaned vault secret
-        try:
-            delete_secret(vault_secret_id)
-        except Exception:
-            logger.warning("Failed to clean up vault secret %s after add_key failure", vault_secret_id)
-        if "uq_provider_keys_one_active" in str(e):
+        if db.is_unique_violation(e, "uq_provider_keys_one_active"):
             raise _error_response(409, "ACTIVE_KEY_CONFLICT", "Another key is already active for this provider") from e
-        raise
-    return _key_response(result.data[0])
+        logger.exception("Failed to persist provider key for brand=%s provider=%s", brand_id, body.provider)
+        raise _error_response(
+            502,
+            "KEY_SAVE_ERROR",
+            "The key was validated but could not be saved. Check the database migrations.",
+        ) from e
+    return _key_response(row)
 
 
 @router.post("/{key_id}/validate", response_model=ValidateKeyResponse)
@@ -171,26 +132,24 @@ async def validate_key(
     key = _get_key_or_404(brand_id, key_id)
 
     try:
-        api_key = read_secret(key["vault_secret_id"])
-    except Exception as e:
-        logger.error("Vault read failed: %s", e)
-        raise _error_response(502, "VAULT_ERROR", "Failed to retrieve key from vault") from e
+        api_key = decrypt_secret(key["encrypted_key"])
+    except VaultError as e:
+        logger.error("Key decryption failed: %s", e)
+        raise _error_response(502, "VAULT_ERROR", "Failed to retrieve key") from e
 
     if not api_key:
-        raise _error_response(502, "VAULT_ERROR", "Key not found in vault") from None
+        raise _error_response(502, "VAULT_ERROR", "Key not found") from None
 
     is_valid, error_message = await validate_provider_key(key["provider"], api_key)
 
     now = datetime.now(timezone.utc)
 
-    update_data: dict = {
-        "last_validated_at": now.isoformat(),
-        "last_validation_error": None if is_valid is True else error_message,
-    }
-    if is_valid is not None:
-        update_data["is_valid"] = is_valid
-    client = get_service_client()
-    client.table("provider_keys").update(update_data).eq("id", str(key_id)).execute()
+    key_repo.update_validation(
+        key_id,
+        validated_at=now.isoformat(),
+        error=None if is_valid is True else error_message,
+        is_valid=is_valid,
+    )
 
     return ValidateKeyResponse(
         valid=is_valid,
@@ -212,43 +171,13 @@ async def activate_key(
     if key["is_active"]:
         return _key_response(key)
 
-    client = get_service_client()
-
-    existing = (
-        client.table("provider_keys")
-        .select("id")
-        .eq("brand_id", str(brand_id))
-        .eq("provider", key["provider"])
-        .eq("is_active", True)
-        .maybe_single()
-        .execute()
-    )
-    deactivated_key_id = existing.data["id"] if existing and existing.data else None
-
-    if deactivated_key_id:
-        client.table("provider_keys").update(
-            {"is_active": False}
-        ).eq("id", deactivated_key_id).execute()
-
     try:
-        result = (
-            client.table("provider_keys")
-            .update({"is_active": True})
-            .eq("id", str(key_id))
-            .execute()
-        )
+        row = key_repo.activate_key(brand_id, key_id, key["provider"])
     except Exception as e:
-        if deactivated_key_id:
-            try:
-                client.table("provider_keys").update(
-                    {"is_active": True}
-                ).eq("id", deactivated_key_id).execute()
-            except Exception:
-                logger.error("Failed to re-activate key %s during rollback", deactivated_key_id)
-        if "uq_provider_keys_one_active" in str(e):
+        if db.is_unique_violation(e, "uq_provider_keys_one_active"):
             raise _error_response(409, "ACTIVE_KEY_CONFLICT", "Another key is already active for this provider") from e
         raise
-    return _key_response(result.data[0])
+    return _key_response(row)
 
 
 @router.delete("/{key_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -258,13 +187,6 @@ async def delete_key(
     current_user: User = Depends(get_current_user),
 ):
     _get_brand_or_404(brand_id, current_user.id)
-    key = _get_key_or_404(brand_id, key_id)
+    _get_key_or_404(brand_id, key_id)
 
-    try:
-        delete_secret(key["vault_secret_id"])
-    except Exception as e:
-        logger.error("Failed to delete vault secret %s: %s", key["vault_secret_id"], e)
-        raise _error_response(502, "VAULT_ERROR", "Failed to delete key from vault — please retry") from e
-
-    client = get_service_client()
-    client.table("provider_keys").delete().eq("id", str(key_id)).execute()
+    key_repo.delete_key(key_id)

@@ -1,5 +1,6 @@
 'use client'
 
+import { useTranslations } from 'next-intl';
 import type { LogoMode } from '@/types'
 import { Eyebrow } from '@/components/ui/eyebrow'
 import { Notice } from '@/components/ui/notice'
@@ -17,28 +18,29 @@ interface LogoModeSelectorProps {
 export function LogoModeSelector({
   value, onChange, brandHasLogo, brandId, disabled,
 }: LogoModeSelectorProps) {
+  const t = useTranslations('components.generation.logo-mode-selector');
   const noLogoTitle = 'Upload a logo in Settings'
 
   return (
     <div className="flex flex-col gap-2">
-      <Eyebrow>Logo</Eyebrow>
+      <Eyebrow>{t('logo')}</Eyebrow>
       <SegmentedControl
-        aria-label="Logo mode"
+        aria-label={t('logo_mode')}
         value={value}
         onChange={onChange}
         disabled={disabled}
         options={[
-          { value: 'none', label: 'None' },
-          { value: 'prompt', label: 'In prompt' },
+          { value: 'none', label: t('none') },
+          { value: 'prompt', label: t('in_prompt') },
           {
             value: 'watermark',
-            label: 'Mark',
+            label: t('mark'),
             disabled: !brandHasLogo,
             title: brandHasLogo ? undefined : noLogoTitle,
           },
           {
             value: 'both',
-            label: 'Both',
+            label: t('both'),
             disabled: !brandHasLogo,
             title: brandHasLogo ? undefined : noLogoTitle,
           },
@@ -48,11 +50,9 @@ export function LogoModeSelector({
         <Notice variant="info">
           Watermark modes need a brand logo. Add one in{' '}
           {brandId ? (
-            <Link href={`/${brandId}/settings`} className="font-medium text-brand underline underline-offset-2">
-              Settings
-            </Link>
+            <Link href={`/${brandId}/settings`} className="font-medium text-brand underline underline-offset-2">{t('settings')}</Link>
           ) : (
-            <strong>Settings</strong>
+            <strong>{t('settings2')}</strong>
           )}
           .
         </Notice>

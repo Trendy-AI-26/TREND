@@ -1,3 +1,6 @@
+# LEGACY: historical Render-only deployment; do not deploy this manifest.
+# It predates the PostgreSQL/S3 migration. Use docker-compose.coolify.yml
+# and docs/deploy-coolify.md for the supported deployment.
 services:
   - type: web
     name: trendy-ai-api
