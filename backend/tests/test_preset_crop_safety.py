@@ -12,18 +12,18 @@ from app.services.watermark import WATERMARK_MARGIN_PX, apply_logo
 
 EXPECTED_REMOVED_PERCENT = {
     "instagram_post": 0.0,
-    "instagram_story": 15.62,
-    "instagram_reel_cover": 15.62,
-    "facebook_post": 21.25,
+    "instagram_story": 0.0,
+    "instagram_reel_cover": 0.0,
+    "facebook_post": 0.0,
     "facebook_cover": 0.12,
-    "facebook_story": 15.62,
-    "twitter_post": 15.62,
+    "facebook_story": 0.0,
+    "twitter_post": 0.0,
     "twitter_header": 0.0,
-    "linkedin_post": 21.63,
+    "linkedin_post": 0.48,
     "linkedin_banner": 62.5,
-    "tiktok_video_cover": 15.62,
-    "youtube_thumbnail": 15.62,
-    "youtube_banner": 15.62,
+    "tiktok_video_cover": 0.0,
+    "youtube_thumbnail": 0.0,
+    "youtube_banner": 0.0,
 }
 
 BACKGROUND = (16, 16, 16)

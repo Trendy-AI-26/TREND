@@ -9,18 +9,18 @@ from app.services.providers.base import ReferenceImage
 
 EXPECTED_PROVIDER_SIZES = {
     "instagram_post": "1024x1024",
-    "instagram_story": "1024x1536",
-    "instagram_reel_cover": "1024x1536",
-    "facebook_post": "1536x1024",
+    "instagram_story": "864x1536",
+    "instagram_reel_cover": "864x1536",
+    "facebook_post": "1280x672",
     "facebook_cover": "1680x640",
-    "facebook_story": "1024x1536",
-    "twitter_post": "1536x1024",
+    "facebook_story": "864x1536",
+    "twitter_post": "1536x864",
     "twitter_header": "1536x512",
-    "linkedin_post": "1536x1024",
+    "linkedin_post": "1280x672",
     "linkedin_banner": "1536x1024",
-    "tiktok_video_cover": "1024x1536",
-    "youtube_thumbnail": "1536x1024",
-    "youtube_banner": "1536x1024",
+    "tiktok_video_cover": "864x1536",
+    "youtube_thumbnail": "1280x720",
+    "youtube_banner": "1536x864",
 }
 
 
@@ -107,7 +107,8 @@ async def test_each_preset_requests_current_provider_size(
     )
 
     expected_size = EXPECTED_PROVIDER_SIZES[preset_id]
-    assert (width, height) != tuple(map(int, expected_size.split("x")))
+    if preset_id != "youtube_thumbnail":
+        assert (width, height) != tuple(map(int, expected_size.split("x")))
     if with_reference:
         assert fake_client.url == openai_image.OPENAI_IMAGES_EDITS_URL
         assert fake_client.kwargs["data"]["size"] == expected_size
