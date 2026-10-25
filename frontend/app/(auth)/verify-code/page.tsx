@@ -6,7 +6,14 @@ import { useEffect, useRef, useState } from 'react'
 import { ArrowRight, Clock3 } from 'lucide-react'
 import { useLocale, useTranslations } from 'next-intl'
 import LanguageSwitcher from '@/components/language-switcher'
-import { createClient } from '@/lib/supabase/client'
+import { useRouter } from 'next/navigation'
+import {
+  RESET_TOKEN_KEY,
+  authApi,
+  authErrorMessage,
+  parsePurpose,
+  type CodePurpose,
+} from '@/lib/auth/client'
 
 function maskEmail(email: string) {
   const [name, domain] = email.split('@')
@@ -15,6 +22,7 @@ function maskEmail(email: string) {
 }
 
 export default function VerifyCodePage() {
+  const router = useRouter()
   const t = useTranslations('auth')
   const shell = useTranslations('components.auth.auth-shell')
   const locale = useLocale()
@@ -23,13 +31,17 @@ export default function VerifyCodePage() {
   const [email, setEmail] = useState('')
   const [seconds, setSeconds] = useState(9 * 60 + 44)
   const [error, setError] = useState<string | null>(null)
-  const [verified, setVerified] = useState(false)
+  const [notice, setNotice] = useState<string | null>(null)
+  const [purpose, setPurpose] = useState<CodePurpose>('verify_email')
   const [loading, setLoading] = useState(false)
+  const [resending, setResending] = useState(false)
   const inputRefs = useRef<Array<HTMLInputElement | null>>([])
 
   useEffect(() => {
-    const value = new URLSearchParams(window.location.search).get('email')
+    const params = new URLSearchParams(window.location.search)
+    const value = params.get('email')
     if (value) setEmail(value)
+    setPurpose(parsePurpose(params.get('purpose')))
   }, [])
 
   useEffect(() => {
@@ -62,20 +74,40 @@ export default function VerifyCodePage() {
     if (!isComplete) return
     setLoading(true)
     setError(null)
-    const { error: verifyError } = await createClient().auth.verifyOtp({ email, token: code.join(''), type: 'recovery' })
-    setLoading(false)
-    if (verifyError) {
-      setError(verifyError.message)
-      return
+    setNotice(null)
+    try {
+      if (purpose === 'reset_password') {
+        const { reset_token } = await authApi.verifyResetCode({ email, code: code.join('') })
+        window.sessionStorage.setItem(RESET_TOKEN_KEY, reset_token)
+        router.push('/reset-password')
+      } else {
+        // The backend sets the session cookie on success.
+        await authApi.verifyEmail({ email, code: code.join('') })
+        router.push('/dashboard')
+        router.refresh()
+      }
+    } catch (err) {
+      setLoading(false)
+      setError(authErrorMessage(err, t))
     }
-    setVerified(true)
   }
 
-  function resendCode() {
-    if (seconds > 0) return
+  async function resendCode() {
+    if (seconds > 0 || resending) return
+    setResending(true)
+    setError(null)
+    setNotice(null)
+    try {
+      await authApi.resendCode({ email, purpose })
+    } catch (err) {
+      setResending(false)
+      setError(authErrorMessage(err, t))
+      return
+    }
+    setResending(false)
     setSeconds(9 * 60 + 44)
     setCode(['', '', '', '', '', ''])
-    setError(null)
+    setNotice(t('codeResent'))
     inputRefs.current[0]?.focus()
   }
 
@@ -93,14 +125,6 @@ export default function VerifyCodePage() {
 
         <section className="flex flex-1 items-center justify-center py-6 sm:py-8">
           <div className="w-full max-w-[480px] rounded-[28px] bg-white px-6 py-7 shadow-[0_16px_36px_rgba(102,43,65,0.08)] sm:px-11 sm:py-9">
-            {verified ? (
-              <div className="text-center">
-                <p className="text-[12px] font-bold uppercase tracking-[0.1em] text-[#8b1d46]">{t('verifyEyebrow')}</p>
-                <h1 className="font-el-messiri mt-2 text-[29px] font-bold leading-tight tracking-[-0.045em] text-[#111827]">{t('codeVerifiedTitle')}</h1>
-                <p className="font-tajawal mt-2 text-[14px] leading-5 text-[#777b82]">{t('codeVerifiedDescription')}</p>
-                <Link href="/login" className="mt-6 inline-flex items-center gap-2 font-tajawal text-[13px] font-bold text-[#861b41] hover:underline">{t('signIn')} <ArrowRight className="h-4 w-4 rtl-flip-chevron" /></Link>
-              </div>
-            ) : (
               <>
                 <p className="text-[12px] font-bold uppercase tracking-[0.1em] text-[#8b1d46]">{t('verifyEyebrow')}</p>
                 <h1 className="font-el-messiri mt-2 text-[29px] font-bold leading-tight tracking-[-0.045em] text-[#111827] sm:text-[32px]">{t('verifyTitle')}</h1>
@@ -108,6 +132,7 @@ export default function VerifyCodePage() {
 
                 <form onSubmit={handleSubmit} className="mt-6">
                   {error && <div role="alert" className="mb-4 rounded-xl bg-red-50 px-4 py-3 text-sm text-[#7A1521]">{error}</div>}
+                  {notice && <div role="status" className="mb-4 rounded-xl bg-[#f1f7f3] px-4 py-3 text-sm text-[#56836d]">{notice}</div>}
                   <div className="flex justify-between gap-2 sm:gap-3" dir="ltr">
                     {code.map((digit, index) => (
                       <input
@@ -140,11 +165,10 @@ export default function VerifyCodePage() {
                     {loading ? t('verifyingCode') : t('verifyCode')} <ArrowRight className="h-[19px] w-[19px] rtl-flip-chevron" strokeWidth={2} />
                   </button>
 
-                  <p className="font-tajawal mt-6 text-center text-[13px] text-[#85878b]">{t('didNotGetCode')}{' '}<button type="button" onClick={resendCode} disabled={seconds > 0} className="font-bold text-[#8b1d46] hover:underline disabled:cursor-not-allowed disabled:text-[#999b9e]">{t('resendCode')}</button></p>
-                  <p className="font-tajawal mt-2 text-center text-[13px] text-[#a2a3a6]">{t('wrongEmail')}{' '}<Link href="/forgot-password" className="font-semibold text-[#4d5158] hover:underline">{t('changeEmail')}</Link></p>
+                  <p className="font-tajawal mt-6 text-center text-[13px] text-[#85878b]">{t('didNotGetCode')}{' '}<button type="button" onClick={resendCode} disabled={seconds > 0 || resending} className="font-bold text-[#8b1d46] hover:underline disabled:cursor-not-allowed disabled:text-[#999b9e]">{t('resendCode')}</button></p>
+                  <p className="font-tajawal mt-2 text-center text-[13px] text-[#a2a3a6]">{t('wrongEmail')}{' '}<Link href={purpose === 'reset_password' ? '/forgot-password' : '/signup'} className="font-semibold text-[#4d5158] hover:underline">{t('changeEmail')}</Link></p>
                 </form>
               </>
-            )}
           </div>
         </section>
 

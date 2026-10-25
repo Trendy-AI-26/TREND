@@ -22,12 +22,13 @@ cleanup() {
 trap 'cleanup' SIGTERM SIGINT
 
 MISSING_VARS=""
-[ -z "$SUPABASE_URL" ] && MISSING_VARS="$MISSING_VARS SUPABASE_URL"
-[ -z "$SUPABASE_SECRET_KEY" ] && MISSING_VARS="$MISSING_VARS SUPABASE_SECRET_KEY"
+for name in DATABASE_URL AUTH_JWT_SECRET S3_ENDPOINT_URL S3_PUBLIC_BASE_URL S3_REGION S3_ACCESS_KEY_ID S3_SECRET_ACCESS_KEY; do
+    [ -n "${!name}" ] || MISSING_VARS="$MISSING_VARS $name"
+done
 
 if [ -n "$MISSING_VARS" ]; then
     echo "ERROR: Missing required environment variables:$MISSING_VARS"
-    echo "Please set all required variables: SUPABASE_URL, SUPABASE_SECRET_KEY"
+    echo "Please configure the database, shared auth secret, and S3 storage variables."
     exit 1
 fi
 
@@ -35,8 +36,14 @@ BACKEND_HOST="${BACKEND_HOST:-0.0.0.0}"
 BACKEND_PORT="${BACKEND_PORT:-8000}"
 FRONTEND_PORT="${FRONTEND_PORT:-3000}"
 
-echo "Starting backend on ${BACKEND_HOST}:${BACKEND_PORT}..."
+export AUTH_JWT_SECRET
 cd /app/backend
+echo "Applying database migrations..."
+python -m app.db.migrate
+# The explicit migration above is authoritative; avoid a duplicate startup run.
+export RUN_MIGRATIONS_ON_STARTUP=false
+
+echo "Starting backend on ${BACKEND_HOST}:${BACKEND_PORT}..."
 uvicorn app.main:app --host "$BACKEND_HOST" --port "$BACKEND_PORT" &
 BACKEND_PID=$!
 

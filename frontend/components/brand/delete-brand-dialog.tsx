@@ -2,17 +2,11 @@
 
 import { useTranslations } from 'next-intl';
 import { useState } from 'react'
-import { TriangleAlert } from 'lucide-react'
+import { toast } from 'sonner'
 import { apiRequest } from '@/lib/api'
+import { errorMessage } from '@/lib/errors'
 import { Brand } from '@/types'
-import { Button } from '@/components/ui/button'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 
 interface DeleteBrandDialogProps {
   brand: Pick<Brand, 'id' | 'name'>
@@ -28,72 +22,42 @@ export function DeleteBrandDialog({
   onBrandDeleted,
 }: DeleteBrandDialogProps) {
   const t = useTranslations('components.brand.delete-brand-dialog');
+  const tt = useTranslations('toasts');
+  const te = useTranslations('errors');
   const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
 
   const handleDelete = async () => {
     setLoading(true)
-    setError(null)
     try {
-      
       await apiRequest(`/brands/${brand.id}`, {
         method: 'DELETE',
         body: JSON.stringify({ confirm_name: brand.name }),
       })
       onBrandDeleted()
       onOpenChange(false)
+      toast.success(tt('brandDeleted'))
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('failed_to_delete_brand'))
+      toast.error(errorMessage(err, te))
     } finally {
       setLoading(false)
     }
   }
 
-  const handleOpenChange = (newOpen: boolean) => {
-    if (!newOpen) setError(null)
-    onOpenChange(newOpen)
-  }
-
   return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="max-w-[360px] gap-0 rounded-2xl border-brand-accent/30 bg-white p-6 font-readex text-brand-headline sm:rounded-2xl">
-<DialogHeader className="gap-0 text-start sm:text-start">
-  <div className="flex items-start gap-3 rtl:flex-row-reverse">
-    <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-brand-primary/10 text-brand-primary">
-      <TriangleAlert className="h-5 w-5" />
-    </span>
-    <div>
-      <DialogTitle className="text-[16px] font-bold leading-normal tracking-normal">
-        {t('delete_title')}
-      </DialogTitle>
-     <DialogDescription className="mt-2 text-[13px] leading-relaxed text-brand-headline/60">
-  {t.rich('confirm_text', {
-    name: brand.name,
-    b: (chunks) => <span className="font-bold text-brand-headline">{chunks}</span>,
-  })}
-</DialogDescription>
-    </div>
-  </div>
-</DialogHeader>
-
-        {error && <p className="mt-3 text-[13px] text-destructive">{error}</p>}
-
-    
-        <div className="mt-8 flex items-center gap-2 ltr:flex-row-reverse">
-          <Button type="button" onClick={handleDelete} disabled={loading} className="h-10 px-5">
-            {loading ? t('deleting') : t('confirm_delete')}
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            className="h-10 px-4"
-            onClick={() => handleOpenChange(false)}
-            disabled={loading}
-          >
-            {t('cancel')}
-          </Button>
-        </div>
-      </DialogContent>
-    </Dialog>
+    <ConfirmDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      tone="danger"
+      title={t('delete_title')}
+      description={t.rich('confirm_text', {
+        name: brand.name,
+        b: (chunks) => <span className="font-bold text-brand-headline">{chunks}</span>,
+      })}
+      confirmLabel={t('confirm_delete')}
+      loadingLabel={t('deleting')}
+      cancelLabel={t('cancel')}
+      loading={loading}
+      onConfirm={handleDelete}
+    />
   )
 }

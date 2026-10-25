@@ -1,6 +1,6 @@
 import { headers } from 'next/headers'
 import { notFound, redirect } from 'next/navigation'
-import { createClient } from '@/lib/supabase/server'
+import { getServerSession } from '@/lib/auth/server'
 import { GenerationWizard } from '@/components/generation/wizard/generation-wizard'
 import type { Brand } from '@/types'
 
@@ -24,14 +24,12 @@ async function getServerApiUrl(path: string) {
 }
 
 async function loadBrand(brandId: string): Promise<Brand> {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  const { data: { session } } = await supabase.auth.getSession()
-  if (!user || !session?.access_token) redirect('/login')
+  const session = await getServerSession()
+  if (!session) redirect('/login')
 
   const apiUrl = await getServerApiUrl(`/brands/${brandId}`)
   const response = await fetch(apiUrl, {
-    headers: { Authorization: `Bearer ${session.access_token}` },
+    headers: { Authorization: `Bearer ${session.token}` },
     cache: 'no-store',
   })
   if (response.status === 404) notFound()

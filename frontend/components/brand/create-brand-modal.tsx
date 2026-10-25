@@ -4,6 +4,8 @@ import { useTranslations } from 'next-intl';
 import { useState } from 'react'
 import { ArrowLeft, ArrowRight, Check } from 'lucide-react'
 import { apiRequest } from '@/lib/api'
+import { errorMessage } from '@/lib/errors'
+import { toast } from 'sonner'
 import { saveKit } from '@/hooks/use-kit'
 import { useBrands } from '@/hooks/use-brands'
 import { Brand } from '@/types'
@@ -62,6 +64,8 @@ function spectrumColor(x: number, y: number, width: number, height: number) {
 export function CreateBrandModal({ open, onOpenChange, onBrandCreated }: CreateBrandModalProps) {
   const t = useTranslations('components.brand.create-brand-modal');
   const tColors = useTranslations('components.kit.steps.step-colors');
+  const tt = useTranslations('toasts');
+  const te = useTranslations('errors');
   const { setAccent } = useBrands()
   const [step, setStep] = useState<1 | 2>(1)
   const [name, setName] = useState('')
@@ -70,7 +74,6 @@ export function CreateBrandModal({ open, onOpenChange, onBrandCreated }: CreateB
   const [hasPickerPosition, setHasPickerPosition] = useState(false)
   const [pickerOpen, setPickerOpen] = useState(false)
   const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
 
   const reset = () => {
     setStep(1)
@@ -79,7 +82,6 @@ export function CreateBrandModal({ open, onOpenChange, onBrandCreated }: CreateB
     setPickerPosition({ x: 0.78, y: 0.12 })
     setHasPickerPosition(false)
     setPickerOpen(false)
-    setError(null)
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -93,7 +95,6 @@ export function CreateBrandModal({ open, onOpenChange, onBrandCreated }: CreateB
 
 
     setLoading(true)
-    setError(null)
     try {
       const brand = await apiRequest<Brand>('/brands', {
         method: 'POST',
@@ -115,8 +116,9 @@ export function CreateBrandModal({ open, onOpenChange, onBrandCreated }: CreateB
       onBrandCreated(brand)
       reset()
       onOpenChange(false)
+      toast.success(tt('brandCreated'))
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('create_failed'))
+      toast.error(errorMessage(err, te))
     } finally {
       setLoading(false)
     }
@@ -277,9 +279,6 @@ export function CreateBrandModal({ open, onOpenChange, onBrandCreated }: CreateB
               </div>
             </div>
           )}
-
-          {error && <p className="mt-3 text-[13px] text-destructive">{error}</p>}
-
 
           <div className="mt-8 flex items-center gap-2 ltr:flex-row-reverse">
             {step === 1 ? (

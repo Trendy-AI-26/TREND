@@ -1,0 +1,6 @@
+[lint.per-file-ignores]
+# Re-exports of the router submodules.
+"app/routers/__init__.py" = ["F401"]
+# Pre-existing undefined name (`aspect_ratio`); this file is intentionally left
+# untouched by the Supabase -> Postgres migration.
+"app/services/providers/gemini_image.py" = ["F821"]

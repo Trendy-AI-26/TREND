@@ -2,6 +2,7 @@ from uuid import uuid4
 
 from fastapi.testclient import TestClient
 
+from app import db
 from app.core.auth import User
 from app.main import app
 from app.routers import brands as brands_router
@@ -45,29 +46,10 @@ def test_preview_brand_brief_returns_creative_direction(monkeypatch):
         "updated_at": "2024-01-01T00:00:00Z",
     }
 
-    class FakeQuery:
-        def __init__(self, data):
-            self.data = data
+    def fake_fetch_one(sql, params=None, **_kwargs):
+        return fake_brand if "FROM brands" in sql else None
 
-        def select(self, *args, **kwargs):
-            return self
-
-        def eq(self, *args, **kwargs):
-            return self
-
-        def maybe_single(self):
-            return self
-
-        def execute(self):
-            return self
-
-    class FakeClient:
-        def table(self, table_name):
-            if table_name == "brands":
-                return FakeQuery(fake_brand)
-            return FakeQuery([])
-
-    monkeypatch.setattr(brands_router, "get_service_client", lambda: FakeClient())
+    monkeypatch.setattr(db, "fetch_one", fake_fetch_one)
     _install_user()
 
     try:
@@ -109,32 +91,17 @@ def test_preview_brand_brief_enforces_brand_ownership(monkeypatch):
     brand_id = str(uuid4())
     owner_id = "brand-owner"
 
-    class FakeQuery:
-        def __init__(self):
-            self.owner_filter = None
+    seen_params = []
 
-        def select(self, *args, **kwargs):
-            return self
+    def fake_fetch_one(sql, params=None, **_kwargs):
+        # Ownership must be part of the brand query itself.
+        assert "owner_user_id" in sql
+        seen_params.append(dict(params))
+        if params["user_id"] == owner_id:
+            return {"id": brand_id, "name": "Owned Brand"}
+        return None
 
-        def eq(self, field, value):
-            if field == "owner_user_id":
-                self.owner_filter = value
-            return self
-
-        def maybe_single(self):
-            return self
-
-        def execute(self):
-            data = None
-            if self.owner_filter == owner_id:
-                data = {"id": brand_id, "name": "Owned Brand"}
-            return type("Result", (), {"data": data})()
-
-    class FakeClient:
-        def table(self, table_name):
-            return FakeQuery()
-
-    monkeypatch.setattr(brands_router, "get_service_client", lambda: FakeClient())
+    monkeypatch.setattr(db, "fetch_one", fake_fetch_one)
     _install_user("different-user")
 
     try:
@@ -145,6 +112,7 @@ def test_preview_brand_brief_enforces_brand_ownership(monkeypatch):
 
         assert response.status_code == 404
         assert response.json()["error"]["code"] == "BRAND_NOT_FOUND"
+        assert seen_params == [{"brand_id": brand_id, "user_id": "different-user"}]
     finally:
         app.dependency_overrides.pop(brands_router.get_current_user, None)
 

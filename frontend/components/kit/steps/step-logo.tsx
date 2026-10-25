@@ -7,6 +7,8 @@ import { Beaker, CloudUpload, ScanSearch, Upload } from 'lucide-react'
 import { KitQuestion } from '@/components/kit/kit-question'
 import { Button } from '@/components/ui/button'
 import { apiRequest } from '@/lib/api'
+import { errorMessage } from '@/lib/errors'
+import { toast } from 'sonner'
 import type { ProductAssetResponse, ProductAssetUploadResponse } from '@/types'
 
 interface StepLogoProps {
@@ -18,6 +20,8 @@ interface StepLogoProps {
 
 export function StepLogo({ brandId, brandName, productAssetId, onAssetChange }: StepLogoProps) {
     const t = useTranslations('components.kit.steps.step-logo')
+    const tt = useTranslations('toasts')
+    const te = useTranslations('errors')
     const inputRef = useRef<HTMLInputElement>(null)
     const [uploading, setUploading] = useState(false)
     const [error, setError] = useState<string | null>(null)
@@ -33,11 +37,11 @@ export function StepLogo({ brandId, brandName, productAssetId, onAssetChange }: 
             .then((asset) => {
                 if (!cancelled) setImageUrl(asset.image_url)
             })
-            .catch(() => {
-                if (!cancelled) setError(t('image_load_failed'))
+            .catch((loadError) => {
+                if (!cancelled) toast.error(errorMessage(loadError, te))
             })
         return () => { cancelled = true }
-    }, [brandId, productAssetId, t])
+    }, [brandId, productAssetId, te])
 
     async function uploadProductImage(file?: File) {
         if (!file) return
@@ -61,8 +65,9 @@ export function StepLogo({ brandId, brandName, productAssetId, onAssetChange }: 
             })
             setImageUrl(response.image_url)
             onAssetChange(response.id)
+            toast.success(tt('productImageUploaded'))
         } catch (uploadError) {
-            setError(uploadError instanceof Error ? uploadError.message : t('upload_failed'))
+            toast.error(errorMessage(uploadError, te))
         } finally {
             setUploading(false)
             if (inputRef.current) inputRef.current.value = ''

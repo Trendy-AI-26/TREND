@@ -1,37 +1,35 @@
-from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
+from app import db
 from app.core.auth import User
 from app.routers import brands
 from app.services import quota
 
 
-class FakeRpc:
-    def __init__(self, response=None, error=None):
-        self.response = response
-        self.error = error
+class FakeDb:
+    """Stands in for app.db.fetch_one; records (function name, params)."""
 
-    def execute(self):
-        if self.error:
-            raise self.error
-        return SimpleNamespace(data=self.response)
-
-
-class FakeClient:
     def __init__(self, responses=None, error=None):
         self.responses = responses or {}
         self.error = error
         self.calls = []
 
-    def rpc(self, name, params):
-        self.calls.append((name, params))
-        return FakeRpc(self.responses.get(name), self.error)
+    def fetch_one(self, sql, params=None, **_kwargs):
+        name = sql.split("SELECT ", 1)[1].split("(", 1)[0].strip()
+        self.calls.append((name, dict(params or {})))
+        if self.error:
+            raise self.error
+        return {"result": self.responses.get(name)}
 
 
-def test_reserve_generation_slot_uses_atomic_rpc(monkeypatch):
-    client = FakeClient(responses={"reserve_generation_slot": {"status": "reserved"}})
-    monkeypatch.setattr(quota, "get_service_client", lambda: client)
+def _install(monkeypatch, client):
+    monkeypatch.setattr(db, "fetch_one", client.fetch_one)
+
+
+def test_reserve_generation_slot_uses_atomic_function(monkeypatch):
+    client = FakeDb(responses={"reserve_generation_slot": {"status": "reserved"}})
+    _install(monkeypatch, client)
     generation_id = uuid4()
 
     quota.reserve_generation_slot(user_id="user-1", generation_id=generation_id)
@@ -45,8 +43,7 @@ def test_reserve_generation_slot_uses_atomic_rpc(monkeypatch):
 
 
 def test_generation_limit_error_is_stable(monkeypatch):
-    client = FakeClient(error=Exception("GENERATION_LIMIT_REACHED"))
-    monkeypatch.setattr(quota, "get_service_client", lambda: client)
+    _install(monkeypatch, FakeDb(error=Exception("GENERATION_LIMIT_REACHED")))
 
     with pytest.raises(quota.QuotaError) as error:
         quota.reserve_generation_slot(user_id="user-1", generation_id=uuid4())
@@ -54,14 +51,14 @@ def test_generation_limit_error_is_stable(monkeypatch):
     assert error.value.code == "GENERATION_LIMIT_REACHED"
 
 
-def test_commit_and_release_are_separate_idempotent_rpc_operations(monkeypatch):
-    client = FakeClient(
+def test_commit_and_release_are_separate_idempotent_operations(monkeypatch):
+    client = FakeDb(
         responses={
             "commit_generation_slot": {"status": "committed"},
             "release_generation_slot": {"status": "released"},
         }
     )
-    monkeypatch.setattr(quota, "get_service_client", lambda: client)
+    _install(monkeypatch, client)
     generation_id = uuid4()
 
     quota.commit_generation_slot(user_id="user-1", generation_id=generation_id)
@@ -73,8 +70,8 @@ def test_commit_and_release_are_separate_idempotent_rpc_operations(monkeypatch):
     ]
 
 
-def test_quota_summary_maps_rpc_response(monkeypatch):
-    client = FakeClient(
+def test_quota_summary_maps_function_response(monkeypatch):
+    client = FakeDb(
         responses={
             "get_generation_quota_summary": {
                 "plan": "beta",
@@ -87,12 +84,40 @@ def test_quota_summary_maps_rpc_response(monkeypatch):
             }
         }
     )
-    monkeypatch.setattr(quota, "get_service_client", lambda: client)
+    _install(monkeypatch, client)
 
     summary = quota.get_quota_summary(user_id="user-1")
 
     assert summary.max_active_brands == 3
     assert summary.generation_remaining == 6
+
+
+def test_create_brand_calls_function_and_returns_row(monkeypatch):
+    client = FakeDb(responses={"create_brand_if_allowed": {"id": "b1", "name": "Acme"}})
+    _install(monkeypatch, client)
+
+    row = quota.create_brand_if_allowed(user_id="user-1", name="Acme")
+
+    assert row["id"] == "b1"
+    assert client.calls == [
+        ("create_brand_if_allowed", {"p_user_id": "user-1", "p_name": "Acme"})
+    ]
+
+
+@pytest.mark.parametrize(
+    ("message", "code"),
+    [
+        ("BRAND_LIMIT_REACHED", "BRAND_LIMIT_REACHED"),
+        ("DUPLICATE_BRAND_NAME", "DUPLICATE_BRAND_NAME"),
+    ],
+)
+def test_create_brand_errors_are_stable(monkeypatch, message, code):
+    _install(monkeypatch, FakeDb(error=Exception(message)))
+
+    with pytest.raises(quota.QuotaError) as error:
+        quota.create_brand_if_allowed(user_id="user-1", name="Acme")
+
+    assert error.value.code == code
 
 
 @pytest.mark.asyncio
@@ -122,8 +147,7 @@ async def test_create_brand_returns_limit_error(monkeypatch):
     assert error.value.detail["error"]["code"] == "BRAND_LIMIT_REACHED"
 
 def test_trial_and_daily_quota_errors_are_stable(monkeypatch):
-    client = FakeClient(error=Exception("DAILY_GENERATION_LIMIT_REACHED"))
-    monkeypatch.setattr(quota, "get_service_client", lambda: client)
+    _install(monkeypatch, FakeDb(error=Exception("DAILY_GENERATION_LIMIT_REACHED")))
     with pytest.raises(quota.QuotaError) as error:
         quota.reserve_generation_slot(user_id="user-1", generation_id=uuid4())
     assert error.value.code == "DAILY_GENERATION_LIMIT_REACHED"
@@ -131,7 +155,7 @@ def test_trial_and_daily_quota_errors_are_stable(monkeypatch):
 
 
 def test_quota_summary_includes_trial_and_daily_fields(monkeypatch):
-    client = FakeClient(
+    client = FakeDb(
         responses={
             "get_generation_quota_summary": {
                 "plan": "beta",
@@ -150,7 +174,7 @@ def test_quota_summary_includes_trial_and_daily_fields(monkeypatch):
             }
         }
     )
-    monkeypatch.setattr(quota, "get_service_client", lambda: client)
+    _install(monkeypatch, client)
     summary = quota.get_quota_summary(user_id="user-1")
     assert summary.daily_generation_remaining == 0
     assert summary.daily_generation_consumed == 2

@@ -4,7 +4,7 @@ import Image from 'next/image'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { Bot, CreditCard, FolderOpen, Gauge, LogOut, Palette, Plus, Settings, Sliders, User, X } from 'lucide-react'
-import { createClient } from '@/lib/supabase/client'
+import { logout } from '@/lib/api'
 import { normalizeHex, TRENDY_AI_ACCENT } from '@/components/brand/brand-workspace'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
@@ -37,8 +37,7 @@ export function AppSidebar({
   const workspaceId = currentBrandId ?? activeBrand?.id
 
   async function handleLogout() {
-    const supabase = createClient()
-    await supabase.auth.signOut()
+    await logout()
     router.push('/login')
     router.refresh()
   }

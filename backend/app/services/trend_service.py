@@ -3,7 +3,7 @@ from uuid import UUID
 
 from fastapi import HTTPException
 
-from app.core.supabase import get_service_client
+from app import db
 
 
 def _error_response(
@@ -136,24 +136,17 @@ def rank_candidates(
 def get_active_trend_or_404(
     trend_id: UUID,
 ) -> dict:
-    client = get_service_client()
-
-    result = (
-        client.table("trends")
-        .select("*")
-        .eq("id", str(trend_id))
-        .maybe_single()
-        .execute()
+    trend = db.fetch_one(
+        "SELECT * FROM trends WHERE id = CAST(:trend_id AS uuid)",
+        {"trend_id": str(trend_id)},
     )
 
-    if result is None or result.data is None:
+    if trend is None:
         raise _error_response(
             404,
             "TREND_NOT_FOUND",
             "Selected trend was not found.",
         )
-
-    trend = result.data
 
     if not is_trend_usable(trend):
         raise _error_response(
@@ -170,17 +163,9 @@ def find_candidate_trends(
     brief,
     platform_preset: str,
 ) -> list[dict]:
-    client = get_service_client()
-
-    result = (
-        client.table("trends")
-        .select("*")
-        .eq("status", "active")
-        .limit(100)
-        .execute()
+    trends = db.fetch_all(
+        "SELECT * FROM trends WHERE status = 'active' LIMIT 100"
     )
-
-    trends = result.data or []
 
     return rank_candidates(
         trends,

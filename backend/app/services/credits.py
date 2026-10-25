@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from typing import Any
 from uuid import UUID, uuid4
 
-from app.core.supabase import get_service_client
+from app import db
 
 GENERATION_CREDIT_COST = 1
 
@@ -28,27 +28,22 @@ class CreditReservation:
     amount: int
 
 
-def _extract_rpc_data(response: Any) -> Any:
-    """
-    Extract the data returned by Supabase RPC.
+def _call(sql: str, params: dict[str, Any]) -> Any:
+    """Run ``SELECT <plpgsql function>(...) AS result`` and return the value."""
+    row = db.fetch_one(sql, params)
 
-    Supabase responses normally expose a .data property.
-    """
-
-    data = getattr(response, "data", None)
-
-    if data is None:
+    if row is None or row.get("result") is None:
         raise CreditsError(
             "CREDITS_RPC_EMPTY_RESPONSE",
-            "The credits RPC returned an empty response.",
+            "The credits function returned an empty response.",
         )
 
-    return data
+    return row["result"]
 
 
 def _map_rpc_error(exc: Exception) -> CreditsError:
     """
-    Convert database/RPC errors into stable application errors.
+    Convert database errors into stable application errors.
     """
 
     raw_message = str(exc)
@@ -99,7 +94,7 @@ def _read_reservation(
     fallback_reservation_id: str,
 ) -> CreditReservation:
     """
-    Convert the RPC result into the Python reservation object.
+    Convert the function result into the Python reservation object.
     """
 
     if isinstance(data, list):
@@ -127,20 +122,14 @@ def get_available_credits(user_id: str) -> int:
     Read the available credit balance.
 
     This is a read-only operation. The actual reservation must still
-    be performed through reserve_generation_credit RPC.
+    be performed through the reserve_generation_credit function.
     """
 
-    client = get_service_client()
-
     try:
-        response = client.rpc(
-            "get_available_credits",
-            {
-                "p_user_id": user_id,
-            },
-        ).execute()
-
-        data = _extract_rpc_data(response)
+        data = _call(
+            "SELECT get_available_credits(CAST(:p_user_id AS uuid)) AS result",
+            {"p_user_id": user_id},
+        )
 
         if isinstance(data, list):
             data = data[0] if data else {}
@@ -167,9 +156,9 @@ def reserve_credits(
     idempotency_key: str | None = None,
 ) -> CreditReservation:
     """
-    Reserve credits atomically inside Supabase.
+    Reserve credits atomically inside PostgreSQL.
 
-    The balance check and reservation happen together inside the RPC.
+    The balance check and reservation happen together inside the function.
     Do not read the balance and update it separately in Python.
     """
 
@@ -177,8 +166,6 @@ def reserve_credits(
         raise ValueError("Credit amount must be positive.")
 
     reservation_id = idempotency_key or f"credit-reservation-{uuid4()}"
-
-    client = get_service_client()
 
     params = {
         "p_user_id": user_id,
@@ -188,12 +175,12 @@ def reserve_credits(
     }
 
     try:
-        response = client.rpc(
-            "reserve_generation_credit",
+        data = _call(
+            "SELECT reserve_generation_credit("
+            "CAST(:p_user_id AS uuid), CAST(:p_generation_id AS uuid), "
+            "CAST(:p_amount AS integer), CAST(:p_idempotency_key AS text)) AS result",
             params,
-        ).execute()
-
-        data = _extract_rpc_data(response)
+        )
 
         return _read_reservation(
             data=data,
@@ -216,18 +203,18 @@ def commit_credits(
     Permanently consume a successful reservation.
     """
 
-    client = get_service_client()
-
     try:
-        client.rpc(
-            "commit_generation_credit",
+        db.fetch_one(
+            "SELECT commit_generation_credit("
+            "CAST(:p_user_id AS uuid), CAST(:p_generation_id AS uuid), "
+            "CAST(:p_reservation_id AS text), CAST(:p_amount AS integer)) AS result",
             {
                 "p_user_id": reservation.user_id,
                 "p_generation_id": reservation.generation_id,
                 "p_reservation_id": reservation.reservation_id,
                 "p_amount": reservation.amount,
             },
-        ).execute()
+        )
 
     except Exception as exc:
         raise _map_rpc_error(exc) from exc
@@ -272,18 +259,18 @@ def release_credits(
         resolved_amount = amount
         resolved_reservation_id = reservation_id
 
-    client = get_service_client()
-
     try:
-        client.rpc(
-            "release_generation_credit",
+        db.fetch_one(
+            "SELECT release_generation_credit("
+            "CAST(:p_user_id AS uuid), CAST(:p_generation_id AS uuid), "
+            "CAST(:p_reservation_id AS text), CAST(:p_amount AS integer)) AS result",
             {
                 "p_user_id": resolved_user_id,
                 "p_generation_id": resolved_generation_id,
                 "p_reservation_id": resolved_reservation_id,
                 "p_amount": resolved_amount,
             },
-        ).execute()
+        )
 
     except Exception as exc:
         raise _map_rpc_error(exc) from exc

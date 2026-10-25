@@ -18,6 +18,9 @@ import { StepAvoidWords } from './steps/step-avoid-words'
 import { StepReview } from './steps/step-review'
 import { isKitColor } from '@/components/brand/brand-workspace'
 import { Button } from '@/components/ui/button'
+import { useConfirm } from '@/components/ui/confirm-dialog'
+import { toast } from 'sonner'
+import { errorMessage } from '@/lib/errors'
 import { cn } from '@/lib/utils'
 
 interface KitWizardProps {
@@ -39,13 +42,16 @@ const STEP_KEYS = [
 
 export function KitWizard({ brandId, brandName, initialKit }: KitWizardProps) {
   const t = useTranslations('components.kit.kit-wizard');
+  const tc = useTranslations('confirm');
+  const tt = useTranslations('toasts');
+  const te = useTranslations('errors');
+  const confirm = useConfirm()
   const locale = useLocale()
   const [step, setStep] = useState(0)
   const [answers, setAnswers] = useState<KitAnswers>(initialKit.answers)
   const [savedStatus, setSavedStatus] = useState<KitStatus>(initialKit.status)
   const [isDirty, setIsDirty] = useState(false)
   const [saving, setSaving] = useState(false)
-  const [saveError, setSaveError] = useState<string | null>(null)
   const router = useRouter()
   const { setAccent, updateBrand } = useBrands()
   const persistedColor = useRef(initialKit.answers.colors[0] ?? null)
@@ -69,7 +75,6 @@ export function KitWizard({ brandId, brandName, initialKit }: KitWizardProps) {
   const handleSave = async () => {
     if (saving) return
     setSaving(true)
-    setSaveError(null)
     try {
       const saved = await saveKit(brandId, {
         ...answers,
@@ -81,16 +86,24 @@ export function KitWizard({ brandId, brandName, initialKit }: KitWizardProps) {
       if (saved.answers.colors[0]) setAccent(brandId, saved.answers.colors[0])
       updateBrand({ id: brandId, kit_status: saved.status })
       router.refresh()
+      toast.success(tt('kitSaved'))
     } catch (e) {
-      setSaveError(e instanceof Error ? e.message : t('save_failed'))
+      toast.error(errorMessage(e, te))
     } finally {
       setSaving(false)
     }
   }
 
+  const leavingRef = useRef(false)
+
   useEffect(() => {
     if (!isDirty) return
-    const handler = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = '' }
+    const handler = (e: BeforeUnloadEvent) => {
+      // The custom confirm dialog already asked; do not stack the browser prompt on top.
+      if (leavingRef.current) return
+      e.preventDefault()
+      e.returnValue = ''
+    }
     window.addEventListener('beforeunload', handler)
     return () => window.removeEventListener('beforeunload', handler)
   }, [isDirty])
@@ -113,15 +126,28 @@ export function KitWizard({ brandId, brandName, initialKit }: KitWizardProps) {
         url.pathname === window.location.pathname &&
         url.search === window.location.search
       ) return
-      const confirmed = window.confirm(t('unsaved_changes_confirm'))
-      if (!confirmed) {
-        e.preventDefault()
-        e.stopPropagation()
-      }
+      // Stop the navigation now; the (async) confirm decides whether to resume it.
+      e.preventDefault()
+      e.stopPropagation()
+      void confirm({
+        title: tc('unsavedTitle'),
+        description: t('unsaved_changes_confirm'),
+        confirmLabel: tc('leave'),
+        cancelLabel: tc('stay'),
+        tone: 'danger',
+      }).then((confirmed) => {
+        if (!confirmed) return
+        if (url.origin === window.location.origin) {
+          router.push(`${url.pathname}${url.search}${url.hash}`)
+        } else {
+          leavingRef.current = true
+          window.location.assign(url.href)
+        }
+      })
     }
     document.addEventListener('click', handleClick, true)
     return () => document.removeEventListener('click', handleClick, true)
-  }, [t])
+  }, [t, tc, confirm, router])
 
   const last = step === STEP_KEYS.length - 1
   const colorsInvalid = answers.colors.some((color) => !isKitColor(color))
@@ -212,7 +238,6 @@ export function KitWizard({ brandId, brandName, initialKit }: KitWizardProps) {
               brandName={brandName}
               savedStatus={savedStatus}
               isDirty={isDirty}
-              saveError={saveError}
             />
           )}
         </div>

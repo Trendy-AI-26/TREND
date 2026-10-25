@@ -1,27 +1,18 @@
 import logging
 from typing import Optional
 from uuid import uuid4
-from fastapi import Depends, HTTPException, status
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from pydantic import BaseModel
-import jwt
-from jwt import PyJWKClient
-from jwt.exceptions import PyJWKClientError, PyJWTError
 
+from fastapi import Depends, HTTPException, Request, status
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from pydantic import BaseModel
 
 from app.config import settings
+from app.core.security import SESSION_COOKIE_NAME, TokenError, decode_session_token
 
 logger = logging.getLogger(__name__)
 
 
 security = HTTPBearer(auto_error=False)
-
-_jwks_client = PyJWKClient(
-    f"{settings.SUPABASE_URL}/auth/v1/.well-known/jwks.json",
-    cache_jwk_set=True,
-    lifespan=3600,
-    timeout=5,
-)
 
 
 class User(BaseModel):
@@ -51,8 +42,25 @@ def _auth_error(status_code: int, code: str, message: str) -> HTTPException:
     )
 
 
-def get_current_user(credentials: Optional[HTTPAuthorizationCredentials] = Depends(security)) -> User:
-    if credentials is None:
+def _extract_token(
+    request: Request,
+    credentials: Optional[HTTPAuthorizationCredentials],
+) -> Optional[str]:
+    """The `trendy_session` cookie wins; otherwise an `Authorization: Bearer` JWT."""
+    cookie_token = request.cookies.get(SESSION_COOKIE_NAME)
+    if cookie_token:
+        return cookie_token
+    if credentials is not None and credentials.credentials:
+        return credentials.credentials
+    return None
+
+
+def get_current_user(
+    request: Request,
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
+) -> User:
+    token = _extract_token(request, credentials)
+    if token is None:
         raise _auth_error(
             status.HTTP_401_UNAUTHORIZED,
             "AUTHENTICATION_REQUIRED",
@@ -60,26 +68,8 @@ def get_current_user(credentials: Optional[HTTPAuthorizationCredentials] = Depen
         )
 
     try:
-        signing_key = _jwks_client.get_signing_key_from_jwt(credentials.credentials)
-        payload = jwt.decode(
-            credentials.credentials,
-            signing_key.key,
-            algorithms=["RS256", "ES256"],
-            audience="authenticated",
-        )
-        user_id: str = payload.get("sub")
-        email: str = payload.get("email")
-
-        if user_id is None or email is None:
-            raise _auth_error(
-                status.HTTP_401_UNAUTHORIZED,
-                "INVALID_TOKEN",
-                "Token payload missing required claims",
-            )
-
-        return User(id=user_id, email=email, access_token=credentials.credentials)
-
-    except (PyJWTError, PyJWKClientError):
+        payload = decode_session_token(token)
+    except TokenError:
         logger.warning("JWT validation failed")
         raise _auth_error(
             status.HTTP_401_UNAUTHORIZED,
@@ -87,6 +77,17 @@ def get_current_user(credentials: Optional[HTTPAuthorizationCredentials] = Depen
             "Invalid authentication token",
         )
 
+    user_id = payload.get("sub")
+    email = payload.get("email")
+
+    if user_id is None or email is None:
+        raise _auth_error(
+            status.HTTP_401_UNAUTHORIZED,
+            "INVALID_TOKEN",
+            "Token payload missing required claims",
+        )
+
+    return User(id=user_id, email=email, access_token=token)
 
 
 def get_current_admin_user(user: User = Depends(get_current_user)) -> User:

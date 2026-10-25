@@ -6,9 +6,10 @@ from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from PIL import Image
 
 from app.config import settings
+from app.core import storage
 from app.core.auth import User, get_current_user
-from app.core.supabase import get_service_client
 from app.models.product_asset import ProductAssetResponse, ProductAssetUploadResponse
+from app.repositories import product_assets as asset_repo
 
 logger = logging.getLogger(__name__)
 
@@ -43,45 +44,28 @@ def _error_response(
 
 
 def _get_owned_brand(brand_id: UUID, user_id: str) -> dict:
-    client = get_service_client()
+    brand = asset_repo.get_owned_brand(brand_id, user_id)
 
-    result = (
-        client.table("brands")
-        .select("id, owner_user_id, name")
-        .eq("id", str(brand_id))
-        .eq("owner_user_id", user_id)
-        .maybe_single()
-        .execute()
-    )
-
-    if result is None or result.data is None:
+    if brand is None:
         raise _error_response(
             status.HTTP_404_NOT_FOUND,
             "BRAND_NOT_FOUND",
             "Brand not found",
         )
 
-    return result.data
+    return brand
 
 
-def _signed_url(client, storage_path: str) -> str:
-    result = (
-        client.storage
-        .from_(settings.PRODUCT_ASSETS_BUCKET)
-        .create_signed_url(storage_path, 3600)
-    )
-
-    if isinstance(result, dict):
-        url = result.get("signedURL") or result.get("signed_url")
-
-        if url:
-            return url
-
-    raise _error_response(
-        status.HTTP_502_BAD_GATEWAY,
-        "PRODUCT_ASSET_URL_FAILED",
-        "Could not create product image URL",
-    )
+def _signed_url(storage_path: str) -> str:
+    """Time-limited URL for the private product-assets bucket."""
+    try:
+        return storage.signed_url(settings.PRODUCT_ASSETS_BUCKET, storage_path, 3600)
+    except storage.StorageError as exc:
+        raise _error_response(
+            status.HTTP_502_BAD_GATEWAY,
+            "PRODUCT_ASSET_URL_FAILED",
+            "Could not create product image URL",
+        ) from exc
 
 
 @router.post(
@@ -146,18 +130,13 @@ async def upload_product_asset(
         f"{asset_id}.{extension}"
     )
 
-    client = get_service_client()
-
     try:
-        client.storage.from_(
-            settings.PRODUCT_ASSETS_BUCKET
-        ).upload(
+        storage.upload(
+            settings.PRODUCT_ASSETS_BUCKET,
             storage_path,
             file_bytes,
-            {
-                "content-type": content_type,
-                "upsert": "false",
-            },
+            content_type,
+            upsert=False,
         )
 
         row = {
@@ -171,24 +150,15 @@ async def upload_product_asset(
             "height": image.height,
         }
 
-        result = (
-            client.table("product_assets")
-            .insert(row)
-            .execute()
-        )
+        saved = asset_repo.insert_asset(row)
 
-        if not result.data:
+        if not saved:
             raise RuntimeError("Product asset insert returned no data")
-
-        saved = result.data[0]
 
         return ProductAssetUploadResponse(
             id=saved["id"],
             brand_id=saved["brand_id"],
-            image_url=_signed_url(
-                client,
-                saved["storage_path"],
-            ),
+            image_url=_signed_url(saved["storage_path"]),
             content_type=saved["content_type"],
             file_size_bytes=saved["file_size_bytes"],
             width=saved["width"],
@@ -207,9 +177,7 @@ async def upload_product_asset(
         )
 
         try:
-            client.storage.from_(
-                settings.PRODUCT_ASSETS_BUCKET
-            ).remove([storage_path])
+            storage.remove(settings.PRODUCT_ASSETS_BUCKET, [storage_path])
         except Exception:
             logger.warning(
                 "Product asset cleanup failed path=%s",
@@ -232,27 +200,17 @@ async def get_product_asset(
     current_user: User = Depends(get_current_user),
 ):
     _get_owned_brand(brand_id, current_user.id)
-    client = get_service_client()
-    result = (
-        client.table("product_assets")
-        .select("id, brand_id, owner_user_id, storage_path, content_type, file_size_bytes, width, height, created_at")
-        .eq("id", str(asset_id))
-        .eq("brand_id", str(brand_id))
-        .eq("owner_user_id", current_user.id)
-        .maybe_single()
-        .execute()
-    )
-    if result is None or result.data is None:
+    asset = asset_repo.get_owned_asset(asset_id, brand_id, current_user.id)
+    if asset is None:
         raise _error_response(
             status.HTTP_404_NOT_FOUND,
             "PRODUCT_ASSET_NOT_FOUND",
             "Product image not found",
         )
-    asset = result.data
     return ProductAssetResponse(
         id=asset["id"],
         brand_id=asset["brand_id"],
-        image_url=_signed_url(client, asset["storage_path"]),
+        image_url=_signed_url(asset["storage_path"]),
         content_type=asset["content_type"],
         file_size_bytes=asset["file_size_bytes"],
         width=asset["width"],
@@ -272,44 +230,25 @@ async def delete_product_asset(
 ):
     _get_owned_brand(brand_id, current_user.id)
 
-    client = get_service_client()
+    asset = asset_repo.get_owned_asset(asset_id, brand_id, current_user.id)
 
-    result = (
-        client.table("product_assets")
-        .select("id, storage_path")
-        .eq("id", str(asset_id))
-        .eq("brand_id", str(brand_id))
-        .eq("owner_user_id", current_user.id)
-        .maybe_single()
-        .execute()
-    )
-
-    if result is None or result.data is None:
+    if asset is None:
         raise _error_response(
             status.HTTP_404_NOT_FOUND,
             "PRODUCT_ASSET_NOT_FOUND",
             "Product image not found",
         )
 
-    storage_path = result.data["storage_path"]
+    storage_path = asset["storage_path"]
 
     try:
-        client.storage.from_(
-            settings.PRODUCT_ASSETS_BUCKET
-        ).remove([storage_path])
+        storage.remove(settings.PRODUCT_ASSETS_BUCKET, [storage_path])
+    except storage.ObjectNotFoundError:
+        pass  # already gone
     except Exception:
         logger.warning(
             "Failed to delete product asset from storage path=%s",
             storage_path,
         )
 
-    client.table("product_assets").delete().eq(
-        "id",
-        str(asset_id),
-    ).eq(
-        "brand_id",
-        str(brand_id),
-    ).eq(
-        "owner_user_id",
-        current_user.id,
-    ).execute()
+    asset_repo.delete_asset(asset_id, brand_id, current_user.id)

@@ -1,3 +1,5 @@
+import asyncio
+import logging
 from contextlib import asynccontextmanager
 from uuid import uuid4
 
@@ -6,13 +8,23 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from sqlalchemy.exc import IntegrityError
 
-from app.config import settings
-from app.routers import admin, brands, generations, health, keys, kit, me, preview, product_assets, trends
+from app.config import settings, validate_startup_settings
+from app.routers import admin, auth, brands, generations, health, keys, kit, me, preview, product_assets, trends
+
+logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
+    # Refuse to start production without AUTH_JWT_SECRET.
+    validate_startup_settings()
+    if settings.RUN_MIGRATIONS_ON_STARTUP:
+        # Imported lazily; the advisory lock makes concurrent starts safe.
+        from app.db.migrate import run_migrations
+
+        await asyncio.to_thread(run_migrations)
     yield
 
 
@@ -38,6 +50,7 @@ app.add_middleware(
 
 
 app.include_router(health.router, tags=["health"])
+app.include_router(auth.router)
 app.include_router(me.router, tags=["account"])
 app.include_router(admin.router)
 app.include_router(brands.router)
@@ -100,6 +113,22 @@ async def request_validation_exception_handler(
             "error": {
                 "code": "VALIDATION_ERROR",
                 "message": message,
+                "request_id": str(uuid4()),
+            }
+        },
+    )
+
+
+@app.exception_handler(IntegrityError)
+async def integrity_error_handler(request: Request, exc: IntegrityError):
+    # Check / unique / foreign-key violations that no service caught.
+    logger.exception("Unhandled database integrity error", exc_info=exc)
+    return JSONResponse(
+        status_code=400,
+        content={
+            "error": {
+                "code": "DATA_CONSTRAINT_VIOLATION",
+                "message": "The data could not be saved because it breaks a data rule.",
                 "request_id": str(uuid4()),
             }
         },

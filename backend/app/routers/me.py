@@ -6,8 +6,9 @@ from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from PIL import Image
 
 from app.config import settings
+from app.core import storage
 from app.core.auth import User, get_current_user, is_admin_email
-from app.core.supabase import get_service_client
+from app.repositories import profiles as profile_repo
 from app.models.profile import (
     AvatarUploadResponse,
     ProfileResponse,
@@ -46,44 +47,33 @@ def get_my_quota(current_user: User = Depends(get_current_user)):
     return QuotaSummaryResponse(**summary.__dict__)
 
 
-def _create_avatar_signed_url(client, storage_path: str) -> str:
-    result = client.storage.from_(settings.AVATARS_BUCKET).create_signed_url(
-        storage_path, AVATAR_SIGNED_URL_TTL
-    )
-
-    if isinstance(result, dict):
-        signed_url = result.get("signedURL") or result.get("signed_url")
-        if signed_url:
-            return signed_url
-
-    raise _error_response(
-        status.HTTP_502_BAD_GATEWAY,
-        "AVATAR_URL_FAILED",
-        "Could not create avatar URL",
-    )
+def _create_avatar_signed_url(storage_path: str) -> str:
+    """Time-limited URL for the private avatars bucket."""
+    try:
+        return storage.signed_url(
+            settings.AVATARS_BUCKET, storage_path, AVATAR_SIGNED_URL_TTL
+        )
+    except storage.StorageError as exc:
+        raise _error_response(
+            status.HTTP_502_BAD_GATEWAY,
+            "AVATAR_URL_FAILED",
+            "Could not create avatar URL",
+        ) from exc
 
 
 @router.get("/me", response_model=ProfileResponse)
 def get_profile(current_user: User = Depends(get_current_user)):
-    client = get_service_client()
-    result = (
-        client.table("profiles")
-        .select("*")
-        .eq("user_id", current_user.id)
-        .maybe_single()
-        .execute()
-    )
+    row = profile_repo.get_profile(current_user.id)
 
-    if result is None or result.data is None:
+    if row is None:
         raise _error_response(
             status.HTTP_404_NOT_FOUND,
             "PROFILE_NOT_FOUND",
             "Profile not found",
         )
 
-    row = result.data
     avatar_path = row.get("avatar_path")
-    avatar_url = _create_avatar_signed_url(client, avatar_path) if avatar_path else None
+    avatar_url = _create_avatar_signed_url(avatar_path) if avatar_path else None
 
     return ProfileResponse(
         user_id=row["user_id"],
@@ -111,25 +101,18 @@ async def update_profile(
             "No fields provided for update",
         )
 
-    client = get_service_client()
-    result = (
-        client.table("profiles")
-        .update(update_data)
-        .eq("user_id", current_user.id)
-        .execute()
-    )
+    row = profile_repo.update_profile(current_user.id, update_data)
 
-    if not result.data:
+    if not row:
         raise _error_response(
             status.HTTP_404_NOT_FOUND,
             "PROFILE_NOT_FOUND",
             "Profile not found",
         )
 
-    row = result.data[0]
     avatar_path = row.get("avatar_path")
     avatar_url = (
-        _create_avatar_signed_url(client, avatar_path)
+        _create_avatar_signed_url(avatar_path)
         if avatar_path
         else row.get("avatar_url")
     )
@@ -199,41 +182,29 @@ async def upload_avatar(
 
     extension, content_type = AVATAR_FORMATS[image.format]
     storage_path = f"avatars/{current_user.id}/avatar.{extension}"
-    client = get_service_client()
-
-    profile_result = (
-        client.table("profiles")
-        .select("avatar_path")
-        .eq("user_id", current_user.id)
-        .maybe_single()
-        .execute()
-    )
-    if profile_result is None or profile_result.data is None:
+    profile_row = profile_repo.get_avatar_path(current_user.id)
+    if profile_row is None:
         raise _error_response(
             status.HTTP_404_NOT_FOUND,
             "PROFILE_NOT_FOUND",
             "Profile not found",
         )
 
-    old_avatar_path = profile_result.data.get("avatar_path")
+    old_avatar_path = profile_row.get("avatar_path")
     uploaded = False
 
     try:
-        client.storage.from_(settings.AVATARS_BUCKET).upload(
+        storage.upload(
+            settings.AVATARS_BUCKET,
             storage_path,
             image_bytes,
-            {"content-type": content_type, "upsert": "true"},
+            content_type,
+            upsert=True,
         )
         uploaded = True
-        signed_url = _create_avatar_signed_url(client, storage_path)
+        signed_url = _create_avatar_signed_url(storage_path)
 
-        update_result = (
-            client.table("profiles")
-            .update({"avatar_path": storage_path, "avatar_url": None})
-            .eq("user_id", current_user.id)
-            .execute()
-        )
-        if not update_result.data:
+        if not profile_repo.set_avatar_path(current_user.id, storage_path):
             raise _error_response(
                 status.HTTP_404_NOT_FOUND,
                 "PROFILE_NOT_FOUND",
@@ -242,7 +213,7 @@ async def upload_avatar(
 
         if old_avatar_path and old_avatar_path != storage_path:
             try:
-                client.storage.from_(settings.AVATARS_BUCKET).remove([old_avatar_path])
+                storage.remove(settings.AVATARS_BUCKET, [old_avatar_path])
             except Exception:
                 logger.warning(
                     "Failed to remove old avatar path=%s",
@@ -255,7 +226,7 @@ async def upload_avatar(
     except HTTPException:
         if uploaded:
             try:
-                client.storage.from_(settings.AVATARS_BUCKET).remove([storage_path])
+                storage.remove(settings.AVATARS_BUCKET, [storage_path])
             except Exception:
                 logger.warning(
                     "Failed to clean up avatar path=%s", storage_path, exc_info=True
@@ -264,7 +235,7 @@ async def upload_avatar(
     except Exception as exc:
         if uploaded:
             try:
-                client.storage.from_(settings.AVATARS_BUCKET).remove([storage_path])
+                storage.remove(settings.AVATARS_BUCKET, [storage_path])
             except Exception:
                 logger.warning(
                     "Failed to clean up avatar path=%s", storage_path, exc_info=True
@@ -279,23 +250,16 @@ async def upload_avatar(
 
 @router.delete("/me/avatar", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_avatar(current_user: User = Depends(get_current_user)):
-    client = get_service_client()
-    result = (
-        client.table("profiles")
-        .select("avatar_path")
-        .eq("user_id", current_user.id)
-        .maybe_single()
-        .execute()
-    )
+    result = profile_repo.get_avatar_path(current_user.id)
 
-    if result is None or result.data is None:
+    if result is None:
         raise _error_response(
             status.HTTP_404_NOT_FOUND,
             "PROFILE_NOT_FOUND",
             "Profile not found",
         )
 
-    avatar_path = result.data.get("avatar_path")
+    avatar_path = result.get("avatar_path")
     if not avatar_path:
         raise _error_response(
             status.HTTP_404_NOT_FOUND,
@@ -304,7 +268,9 @@ async def delete_avatar(current_user: User = Depends(get_current_user)):
         )
 
     try:
-        client.storage.from_(settings.AVATARS_BUCKET).remove([avatar_path])
+        storage.remove(settings.AVATARS_BUCKET, [avatar_path])
+    except storage.ObjectNotFoundError:
+        pass  # already gone: still clear the profile reference
     except Exception as exc:
         logger.exception("Failed to delete avatar path=%s", avatar_path)
         raise _error_response(
@@ -313,6 +279,4 @@ async def delete_avatar(current_user: User = Depends(get_current_user)):
             "Could not delete avatar",
         ) from exc
 
-    client.table("profiles").update({"avatar_path": None, "avatar_url": None}).eq(
-        "user_id", current_user.id
-    ).execute()
+    profile_repo.set_avatar_path(current_user.id, None)

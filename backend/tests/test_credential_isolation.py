@@ -12,7 +12,7 @@ from pydantic import ValidationError
 from app.config import settings
 from app.main import app
 from app.core.auth import User, get_current_user
-from app.models.generation import GenerateRequest, GenerationBrief
+from app.models.generation import GenerateRequest
 from app.services.generation_resolver import resolve_generation_config
 
 

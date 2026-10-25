@@ -2,7 +2,6 @@ from app.models.generation import GenerationBrief
 from app.services.brief_preview import build_creative_direction
 from app.services.prompt_composer import build_generation_prompt
 from tests.test_prompt_composer import SAMPLE_PLATFORM
-from tests.test_prompt_composer import SAMPLE_PLATFORM
 from tests.test_generation import VALID_BRIEF
 
 def test_creative_direction_preserves_user_text():

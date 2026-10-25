@@ -3,8 +3,9 @@ from uuid import UUID
 
 from fastapi import HTTPException, status
 
+from app import db
 from app.config import settings
-from app.core.supabase import get_service_client
+from app.core import storage
 from app.services.providers.base import ReferenceImage
 
 
@@ -48,29 +49,24 @@ def get_owned_product_asset(
     - تخص الـ Brand المطلوب.
     - تخص المستخدم الحالي.
     """
-    client = get_service_client()
-
-    result = (
-        client.table("product_assets")
-        .select(
-            "id, brand_id, owner_user_id, storage_path, "
-            "content_type, file_size_bytes, width, height"
-        )
-        .eq("id", str(asset_id))
-        .eq("brand_id", str(brand_id))
-        .eq("owner_user_id", user_id)
-        .maybe_single()
-        .execute()
+    row = db.fetch_one(
+        """
+        SELECT id, brand_id, owner_user_id, storage_path,
+               content_type, file_size_bytes, width, height
+        FROM product_assets
+        WHERE id = CAST(:asset_id AS uuid)
+          AND brand_id = CAST(:brand_id AS uuid)
+          AND owner_user_id = CAST(:user_id AS uuid)
+        """,
+        {"asset_id": str(asset_id), "brand_id": str(brand_id), "user_id": user_id},
     )
 
-    if result is None or result.data is None:
+    if row is None:
         raise _product_asset_error(
             status.HTTP_404_NOT_FOUND,
             "PRODUCT_ASSET_NOT_FOUND",
             "Product image not found.",
         )
-
-    row = result.data
 
     return ProductAssetRecord(
         id=UUID(str(row["id"])),
@@ -92,7 +88,7 @@ def load_product_asset_reference(
 ) -> ReferenceImage:
     """
     قراءة سجل صورة المنتج ثم تنزيل محتوى الصورة
-    من Supabase Storage.
+    من التخزين (S3/MinIO).
     """
     asset = get_owned_product_asset(
         asset_id=asset_id,
@@ -107,13 +103,10 @@ def load_product_asset_reference(
             "Product image exceeds the allowed size.",
         )
 
-    client = get_service_client()
-
     try:
-        image_bytes = (
-            client.storage
-            .from_(settings.PRODUCT_ASSETS_BUCKET)
-            .download(asset.storage_path)
+        image_bytes = storage.download(
+            settings.PRODUCT_ASSETS_BUCKET,
+            asset.storage_path,
         )
     except Exception as exc:
         raise _product_asset_error(

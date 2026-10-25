@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useLocale, useTranslations } from 'next-intl'
-import { AlertCircle, ChevronLeft, ChevronRight } from 'lucide-react'
+import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { addGenerationNotification } from '@/hooks/use-notifications'
@@ -95,12 +95,25 @@ export function GenerationWizard({ brandId, brandName, brandHasLogo }: Generatio
     setStep((current) => Math.max(0, current - 1))
   }
 
-  function handleGenerate() {
+  // newIntent=true only for an explicit "generate another one" after a success;
+  // retries of an unresolved request keep their idempotency key.
+  function submit(newIntent: boolean) {
     if (!allComplete) return
     window.scrollTo({ top: 0, behavior: 'smooth' })
-    void run(answers.style.productImage, (productAssetId) =>
-      buildGenerateRequest({ answers, brandHasLogo, locale, productAssetId }),
+    void run(
+      answers.style.productImage,
+      (productAssetId) =>
+        buildGenerateRequest({ answers, brandHasLogo, locale, productAssetId }),
+      newIntent,
     )
+  }
+
+  function handleGenerate() {
+    submit(false)
+  }
+
+  function handleRegenerate() {
+    submit(true)
   }
 
   function handleEditAnswers() {
@@ -173,7 +186,7 @@ export function GenerationWizard({ brandId, brandName, brandHasLogo }: Generatio
           withCaption={answers.platform.withCaption}
           captionPreferences={{ include_cta: answers.idea.cta !== 'none' }}
           basedOn={basedOn}
-          onRegenerate={handleGenerate}
+          onRegenerate={handleRegenerate}
           onEditAnswers={handleEditAnswers}
         />
       )}
@@ -263,25 +276,7 @@ export function GenerationWizard({ brandId, brandName, brandHasLogo }: Generatio
             </div>
           </section>
 
-          {/* رسالة الخطأ إذا فشل التوليد */}
-          {generation.status === 'error' && (
-            <div
-              role="alert"
-              className="flex items-start gap-3 rounded-[12px] border border-destructive/30 bg-destructive/5 px-4 py-3.5"
-            >
-              <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-destructive" />
-              <div className="min-w-0">
-                <p className="text-[13.5px] font-bold text-destructive">{t('error_title')}</p>
-                <p className="mt-0.5 text-[12.5px] text-brand-headline/70">{t('error_generic')}</p>
-                {generation.message && (
-                  <p className="mt-1 break-words text-[11.5px] text-brand-headline/40" dir="auto">
-                    {generation.message}
-                  </p>
-                )}
-              </div>
-            </div>
-          )}
-
+          {/* خطأ التوليد يظهر كإشعار (toast) من use-wizard-generation */}
           <ReadyToGenerateCard
             completedSections={completedSections}
             totalSections={steps.length}

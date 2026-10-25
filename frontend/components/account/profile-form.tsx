@@ -10,7 +10,8 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { useToast } from '@/hooks/use-toast'
+import { toast } from 'sonner'
+import { errorMessage } from '@/lib/errors'
 
 interface ProfileFormProps {
   profile: Profile
@@ -18,10 +19,10 @@ interface ProfileFormProps {
 }
 
 export function ProfileForm({ profile, onUpdate }: ProfileFormProps) {
-  const { toast } = useToast()
   const router = useRouter()
   const locale = useLocale()
   const t = useTranslations()
+  const te = useTranslations('errors')
   const [fullName, setFullName] = useState(profile.full_name ?? '')
   const [avatarUrl, setAvatarUrl] = useState(profile.avatar_url ?? '')
   const [avatarFile, setAvatarFile] = useState<File | null>(null)
@@ -81,9 +82,9 @@ export function ProfileForm({ profile, onUpdate }: ProfileFormProps) {
         setAvatarFile(null)
       }
       onUpdate(nextProfile)
-      toast({ title: t('account.profileUpdated'), description: t('account.changesSaved') })
+      toast.success(t('account.profileUpdated'), { description: t('account.changesSaved') })
     } catch (err) {
-      toast({ title: t('account.error'), description: err instanceof Error ? err.message : t('account.updateFailed'), variant: 'destructive' })
+      toast.error(errorMessage(err, te))
     } finally {
       setLoading(false)
     }

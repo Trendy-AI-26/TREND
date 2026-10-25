@@ -8,6 +8,8 @@ import { useParams, useRouter } from 'next/navigation'
 import { useBrand } from '@/hooks/use-brand'
 import { useBrands } from '@/hooks/use-brands'
 import { apiRequest } from '@/lib/api'
+import { errorMessage } from '@/lib/errors'
+import { toast } from 'sonner'
 import { DeleteBrandDialog } from '@/components/brand/delete-brand-dialog'
 import { BrandDot } from '@/components/brand/brand-dot'
 import { Button } from '@/components/ui/button'
@@ -17,6 +19,8 @@ import type { Brand, LogoUploadResponse } from '@/types'
 
 export default function BrandSettingsPage() {
   const t = useTranslations('app.(dashboard).[brandId].settings.page')
+  const tt = useTranslations('toasts')
+  const te = useTranslations('errors')
   const params = useParams()
   const router = useRouter()
   const brandId = Array.isArray(params.brandId) ? params.brandId[0] : params.brandId ?? ''
@@ -24,10 +28,7 @@ export default function BrandSettingsPage() {
   const { updateBrand, removeBrand, accents } = useBrands()
   const [newName, setNewName] = useState('')
   const [renameLoading, setRenameLoading] = useState(false)
-  const [renameError, setRenameError] = useState<string | null>(null)
-  const [renameSuccess, setRenameSuccess] = useState(false)
   const [logoLoading, setLogoLoading] = useState(false)
-  const [logoError, setLogoError] = useState<string | null>(null)
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
   const nameDirty = useRef(false)
 
@@ -40,16 +41,14 @@ export default function BrandSettingsPage() {
 
   const handleRename = async () => {
     setRenameLoading(true)
-    setRenameError(null)
-    setRenameSuccess(false)
     try {
       const updated = await apiRequest<Brand>(`/brands/${brandId}`, { method: 'PATCH', body: JSON.stringify({ name: newName.trim() }) })
       mutate(updated)
       updateBrand(updated)
       nameDirty.current = false
-      setRenameSuccess(true)
+      toast.success(tt('brandRenamed'))
     } catch (err) {
-      setRenameError(err instanceof Error ? err.message : t('failed_to_rename_brand'))
+      toast.error(errorMessage(err, te))
     } finally {
       setRenameLoading(false)
     }
@@ -59,7 +58,6 @@ export default function BrandSettingsPage() {
     const file = e.target.files?.[0]
     if (!file) return
     setLogoLoading(true)
-    setLogoError(null)
     try {
       const formData = new FormData()
       formData.append('file', file)
@@ -67,8 +65,9 @@ export default function BrandSettingsPage() {
       const updatedBrand = { ...brand, logo_url: result.logo_url }
       mutate(updatedBrand)
       updateBrand(updatedBrand)
+      toast.success(tt('logoUploaded'))
     } catch (err) {
-      setLogoError(err instanceof Error ? err.message : t('failed_to_upload_logo'))
+      toast.error(errorMessage(err, te))
     } finally {
       setLogoLoading(false)
       e.target.value = ''
@@ -77,14 +76,14 @@ export default function BrandSettingsPage() {
 
   const handleLogoRemove = async () => {
     setLogoLoading(true)
-    setLogoError(null)
     try {
       await apiRequest(`/brands/${brandId}/logo`, { method: 'DELETE' })
       const updatedBrand = { ...brand, logo_url: null }
       mutate(updatedBrand)
       updateBrand(updatedBrand)
+      toast.success(tt('logoRemoved'))
     } catch (err) {
-      setLogoError(err instanceof Error ? err.message : t('failed_to_remove_logo'))
+      toast.error(errorMessage(err, te))
     } finally {
       setLogoLoading(false)
     }
@@ -104,13 +103,11 @@ export default function BrandSettingsPage() {
         <CardContent className="space-y-3 px-6 py-6">
           <CardTitle className="font-tajawal text-[16px] font-semibold text-brand-headline">{t('brand_name')}</CardTitle>
           <div dir="ltr" className="flex flex-col gap-3 sm:flex-row">
-            <Input type="text" value={newName} onChange={(e) => { setNewName(e.target.value); nameDirty.current = true; setRenameSuccess(false) }} dir="rtl" className="h-11 rounded-lg border-[#dce2e9] font-tajawal" />
+            <Input type="text" value={newName} onChange={(e) => { setNewName(e.target.value); nameDirty.current = true }} dir="rtl" className="h-11 rounded-lg border-[#dce2e9] font-tajawal" />
             <Button type="button" onClick={handleRename} disabled={renameLoading || !newName.trim()} size="lg" className="h-11 rounded-lg px-5 font-tajawal">
               {renameLoading ? t('saving') : t('save')}
             </Button>
           </div>
-          {renameError && <p className="font-tajawal text-[13px] text-destructive">{renameError}</p>}
-          {renameSuccess && <p className="font-tajawal text-[13px] text-success">{t('name_updated')}</p>}
         </CardContent>
       </Card>
 
@@ -129,7 +126,6 @@ export default function BrandSettingsPage() {
             </div>
             <BrandDot color={accents[brandId]} logoUrl={brand.logo_url} name={brand.name} size={48} />
           </div>
-          {logoError && <p className="mt-3 font-tajawal text-[13px] text-destructive">{logoError}</p>}
         </CardContent>
       </Card>
 

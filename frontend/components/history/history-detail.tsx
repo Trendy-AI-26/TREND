@@ -38,7 +38,6 @@ export function HistoryDetail({ detail, brandId, backSearch, onDelete, onDeleted
   const backHref = `/${brandId}/history${backSearch ? `?${backSearch}` : ''}`
   const [dialogOpen, setDialogOpen] = useState(false)
   const [deleting, setDeleting] = useState(false)
-  const [deleteError, setDeleteError] = useState<string | null>(null)
   const [imageUnavailable, setImageUnavailable] = useState(false)
   const showImage = Boolean(detail.image_url) && !imageUnavailable
   const shouldShowUnavailable = detail.status === 'succeeded' && !showImage
@@ -49,14 +48,9 @@ export function HistoryDetail({ detail, brandId, backSearch, onDelete, onDeleted
 
   async function handleConfirmDelete() {
     setDeleting(true)
-    setDeleteError(null)
     const outcome = await onDelete()
     setDeleting(false)
-    if (outcome.ok) {
-      onDeleted()
-    } else {
-      setDeleteError(outcome.message ?? t('failed_to_delete_try_again'))
-    }
+    if (outcome.ok) onDeleted()
   }
 
   return (
@@ -136,7 +130,6 @@ export function HistoryDetail({ detail, brandId, backSearch, onDelete, onDeleted
         onOpenChange={setDialogOpen}
         onConfirm={handleConfirmDelete}
         loading={deleting}
-        error={deleteError}
       />
     </div>
   )
