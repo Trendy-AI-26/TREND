@@ -994,7 +994,7 @@
         "required_elements": "Essential required elements",
         "required_count": "{completed} of {total} items complete",
         "step_brand": "Brand",
-        "step_logo": "Logo",
+        "step_logo": "Logo & product image",
         "step_tagline": "Tagline",
         "step_tone": "Tone",
         "step_industry": "Industry",
@@ -1062,6 +1062,8 @@
           "color_red": "Red"
         },
         "step-review": {
+          "brand_logo": "Brand logo",
+          "brand_logo_alt": "Brand logo for {brandName}",
           "identity_summary": "Identity summary",
           "required_summary": "{complete} of {total} required items complete",
           "required_field_missing": "Not added yet",
@@ -1103,6 +1105,14 @@
           "registered_name_help": "The name you registered. Continue to tell TRENDY AI how it should look and sound."
         },
         "step-logo": {
+          "brand_logo_label": "Brand logo (optional)",
+          "brand_logo_hint": "Upload your official logo for use across your brand and generated designs. This is separate from a product photo. PNG, JPG, or WebP up to 5 MB.",
+          "brand_logo_alt": "Brand logo for {brandName}",
+          "choose_logo": "Upload brand logo",
+          "replace_logo": "Replace brand logo",
+          "logo_size_error": "The logo must be smaller than 5 MB.",
+          "product_optional_hint": "Product reference image (optional). This is not your brand logo.",
+          "product_image_label": "Product reference image (optional)",
           "question_before": "What product are we ",
           "question_emphasis": "marketing",
           "question_after": "?",

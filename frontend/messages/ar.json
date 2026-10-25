@@ -994,7 +994,7 @@
         "required_elements": "العناصر المطلوبة الأساسية",
         "required_count": "{completed} من {total} عناصر مكتملة",
         "step_brand": "العلامة",
-        "step_logo": "الشعار البصري",
+        "step_logo": "الشعار وصورة المنتج",
         "step_tagline": "الشعار",
         "step_tone": "النبرة",
         "step_industry": "مجال العمل",
@@ -1062,6 +1062,8 @@
           "color_red": "أحمر"
         },
         "step-review": {
+          "brand_logo": "شعار العلامة التجارية",
+          "brand_logo_alt": "شعار العلامة التجارية لـ {brandName}",
           "identity_summary": "ملخص الهوية",
           "required_summary": "اكتمل {complete} من {total} عناصر أساسية",
           "required_field_missing": "لم يُحدّد بعد",
@@ -1103,6 +1105,14 @@
           "registered_name_help": "الاسم يلي سجّلتيه. كمّلي خبري TRENDY AI كيف لازم يبين ويحكي."
         },
         "step-logo": {
+          "brand_logo_label": "شعار العلامة التجارية (اختياري)",
+          "brand_logo_hint": "ارفع الشعار الرسمي لاستخدامه في صفحات العلامة والتصاميم. صورة المنتج منفصلة عنه. PNG أو JPG أو WebP حتى 5 ميغابايت.",
+          "brand_logo_alt": "شعار العلامة التجارية لـ {brandName}",
+          "choose_logo": "رفع شعار العلامة",
+          "replace_logo": "استبدال شعار العلامة",
+          "logo_size_error": "يجب أن يكون حجم الشعار أقل من 5 ميغابايت.",
+          "product_optional_hint": "صورة المنتج المرجعية اختيارية، وهي ليست شعار العلامة التجارية.",
+          "product_image_label": "صورة المنتج المرجعية (اختياري)",
           "question_before": "شو المنتج يلي بدنا ",
           "question_emphasis": "نسوّقه",
           "question_after": "؟",
