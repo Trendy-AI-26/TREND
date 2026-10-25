@@ -22,15 +22,24 @@ def get_idempotency(user_id: str, scope: str, idempotency_key: str) -> dict[str,
 
 
 def create_idempotency(
-    user_id: str, scope: str, idempotency_key: str, request_hash: str
+    user_id: str,
+    scope: str,
+    idempotency_key: str,
+    request_hash: str,
+    generation_id: UUID | str | None = None,
 ) -> dict[str, Any] | None:
-    """Raises ``db.IntegrityError`` when the (user, scope, key) triple exists."""
+    """Insert a ``processing`` record, optionally already linked to its generation.
+
+    The generation row must exist first (the column is a foreign key).
+    Raises ``db.IntegrityError`` when the (user, scope, key) triple exists.
+    """
     return db.fetch_one(
         """
         INSERT INTO idempotency_records
-            (user_id, scope, idempotency_key, request_hash, status)
+            (user_id, scope, idempotency_key, request_hash, generation_id, status)
         VALUES
-            (CAST(:user_id AS uuid), :scope, :idempotency_key, :request_hash, 'processing')
+            (CAST(:user_id AS uuid), :scope, :idempotency_key, :request_hash,
+             CAST(:generation_id AS uuid), 'processing')
         RETURNING *
         """,
         {
@@ -38,7 +47,45 @@ def create_idempotency(
             "scope": scope,
             "idempotency_key": idempotency_key,
             "request_hash": request_hash,
+            "generation_id": None if generation_id is None else str(generation_id),
         },
+    )
+
+
+def save_checkpoint(record_id: str, checkpoint: dict[str, Any]) -> bool:
+    """Persist a recovery checkpoint on a still-``processing`` record.
+
+    Returns False when no row was updated (record missing or already final).
+    """
+    row = db.fetch_one(
+        """
+        UPDATE idempotency_records
+        SET response_body = CAST(:checkpoint AS jsonb)
+        WHERE id = CAST(:record_id AS uuid) AND status = 'processing'
+        RETURNING id
+        """,
+        {"record_id": str(record_id), "checkpoint": db.json_param(checkpoint)},
+    )
+    return row is not None
+
+
+def delete_idempotency_for_generation(generation_id: UUID | str) -> None:
+    """Admission compensation: remove only the record owned by this generation."""
+    db.execute(
+        "DELETE FROM idempotency_records WHERE generation_id = CAST(:generation_id AS uuid)",
+        {"generation_id": str(generation_id)},
+    )
+
+
+def fail_idempotency_for_generation(generation_id: UUID | str, response_status: int) -> None:
+    """Close the record owned by this generation as failed, keeping its link."""
+    db.execute(
+        """
+        UPDATE idempotency_records
+        SET status = 'failed', response_status = :response_status
+        WHERE generation_id = CAST(:generation_id AS uuid)
+        """,
+        {"generation_id": str(generation_id), "response_status": response_status},
     )
 
 
@@ -57,8 +104,9 @@ def finish_idempotency(
     status: str,
     response_status: int,
     completed_at: str | None = None,
-) -> None:
-    db.execute(
+) -> bool:
+    """Close a record. Returns False when no row matched."""
+    updated = db.execute(
         """
         UPDATE idempotency_records
         SET status = :status,
@@ -73,6 +121,7 @@ def finish_idempotency(
             "completed_at": completed_at,
         },
     )
+    return bool(updated)
 
 
 # ------------------------------------------------------------ generations
@@ -238,6 +287,17 @@ def delete_generation(brand_id: UUID | str, generation_id: UUID | str) -> None:
     )
 
 
+def delete_owned_generation(user_id: str, generation_id: UUID | str) -> None:
+    """Admission compensation: delete one row by its preallocated id and owner."""
+    db.execute(
+        """
+        DELETE FROM generations
+        WHERE id = CAST(:generation_id AS uuid) AND user_id = CAST(:user_id AS uuid)
+        """,
+        {"generation_id": str(generation_id), "user_id": str(user_id)},
+    )
+
+
 def latest_for_brand(brand_id: UUID | str) -> dict[str, Any] | None:
     return db.fetch_one(
         """
@@ -255,6 +315,9 @@ __all__ = [
     "count_succeeded",
     "create_idempotency",
     "delete_generation",
+    "delete_idempotency_for_generation",
+    "delete_owned_generation",
+    "fail_idempotency_for_generation",
     "finish_idempotency",
     "get_brand_generation",
     "get_generation",
@@ -266,4 +329,5 @@ __all__ = [
     "mark_failed",
     "mark_processing",
     "mark_succeeded",
+    "save_checkpoint",
 ]

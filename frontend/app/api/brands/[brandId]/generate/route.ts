@@ -19,6 +19,9 @@ export async function POST(
   if (auth) headers['Authorization'] = auth
   const cookie = request.headers.get('cookie')
   if (cookie) headers['Cookie'] = cookie
+  // Lets the backend replay a saved outcome instead of generating twice on a retry.
+  const idempotencyKey = request.headers.get('idempotency-key')
+  if (idempotencyKey) headers['Idempotency-Key'] = idempotencyKey
 
   let upstream: Response
   try {
