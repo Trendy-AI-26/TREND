@@ -15,10 +15,10 @@ EXPECTED_REMOVED_PERCENT = {
     "instagram_story": 15.62,
     "instagram_reel_cover": 15.62,
     "facebook_post": 21.25,
-    "facebook_cover": 42.93,
+    "facebook_cover": 0.12,
     "facebook_story": 15.62,
     "twitter_post": 15.62,
-    "twitter_header": 50.0,
+    "twitter_header": 0.0,
     "linkedin_post": 21.63,
     "linkedin_banner": 62.5,
     "tiktok_video_cover": 15.62,
@@ -83,24 +83,25 @@ def test_provider_sized_image_is_center_cropped_to_exact_png(preset_id):
     assert output.format == "PNG"
     assert output.size == (width, height)
     assert output.getpixel((width // 2, height // 2)) == CENTER
-    assert output.getpixel((width // 2, 0)) == pytest.approx(
-        BACKGROUND if crop_vertical else TOP, abs=3
-    )
-    assert output.getpixel((width // 2, height - 1)) == pytest.approx(
-        BACKGROUND if crop_vertical else BOTTOM, abs=3
-    )
-    assert output.getpixel((0, height // 2)) == pytest.approx(
-        BACKGROUND if crop_horizontal else LEFT, abs=3
-    )
-    assert output.getpixel((width - 1, height // 2)) == pytest.approx(
-        BACKGROUND if crop_horizontal else RIGHT, abs=3
-    )
-
     scale = max(width / native_width, height / native_height)
     scaled_width = round(native_width * scale)
     scaled_height = round(native_height * scale)
     offset_x = (scaled_width - width) // 2
     offset_y = (scaled_height - height) // 2
+    vertical_edge_lost = offset_y >= band_y * scale
+    horizontal_edge_lost = offset_x >= band_x * scale
+    assert output.getpixel((width // 2, 0)) == pytest.approx(
+        BACKGROUND if vertical_edge_lost else TOP, abs=3
+    )
+    assert output.getpixel((width // 2, height - 1)) == pytest.approx(
+        BACKGROUND if vertical_edge_lost else BOTTOM, abs=3
+    )
+    assert output.getpixel((0, height // 2)) == pytest.approx(
+        BACKGROUND if horizontal_edge_lost else LEFT, abs=3
+    )
+    assert output.getpixel((width - 1, height // 2)) == pytest.approx(
+        BACKGROUND if horizontal_edge_lost else RIGHT, abs=3
+    )
     for position, color in INNER_MARKERS:
         if crop_vertical:
             y = round(round(native_height * position) * scale) - offset_y
