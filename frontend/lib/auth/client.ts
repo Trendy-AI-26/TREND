@@ -41,6 +41,7 @@ export const authApi = {
 
 /** Backend error codes that have a translation under the `auth` namespace. */
 const ERROR_CODE_KEYS: Record<string, string> = {
+  ACCOUNT_DISABLED: 'accountDisabled',
   INVALID_CREDENTIALS: 'errorInvalidCredentials',
   EMAIL_ALREADY_REGISTERED: 'existingAccount',
   EMAIL_NOT_VERIFIED: 'errorEmailNotVerified',

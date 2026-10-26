@@ -3,8 +3,8 @@ from datetime import datetime, timezone
 import pytest
 from fastapi import HTTPException
 
-from app.models.admin import AdminBrandListItem, AdminBrandsPage
-from app.routers.admin import _brands_range, _to_stats_response
+from app.models.admin import AdminBrand, BrandOwner, Page
+from app.routers.admin import _page_bounds, _to_stats_response
 
 
 def _make_admin_stats_row(**overrides):
@@ -57,60 +57,70 @@ def test_admin_stats_response_maps_flat_view_row_to_nested_breakdowns():
     )
 
 
-def _make_admin_brand_item(**overrides):
+def _make_admin_brand(**overrides):
     base = {
         "id": "00000000-0000-0000-0000-000000000001",
         "name": "Acme",
-        "owner_user_id": "00000000-0000-0000-0000-000000000010",
-        "owner_full_name": "Ada Lovelace",
+        "owner": BrandOwner(
+            id="00000000-0000-0000-0000-000000000010",
+            email="ada@example.com",
+            full_name="Ada Lovelace",
+        ),
         "kit_status": "complete",
+        "colors_count": 3,
+        "has_logo": True,
         "generation_count": 4,
-        "has_active_key": True,
         "created_at": datetime(2026, 6, 19, 12, 30, tzinfo=timezone.utc),
     }
     base.update(overrides)
-    return AdminBrandListItem(**base)
+    return AdminBrand(**base)
 
 
 def test_admin_brands_page_shape():
-    first = _make_admin_brand_item()
-    second = _make_admin_brand_item(
+    first = _make_admin_brand()
+    second = _make_admin_brand(
         id="00000000-0000-0000-0000-000000000002",
-        owner_full_name=None,
         generation_count=0,
-        has_active_key=False,
+        has_logo=False,
     )
 
-    page = AdminBrandsPage(items=[first, second], page=2, per_page=24, total=50)
+    page = Page[AdminBrand](items=[first, second], page=2, per_page=24, total=50)
 
     assert page.items == [first, second]
     assert page.page == 2
     assert page.per_page == 24
     assert page.total == 50
+    assert set(page.model_dump()["items"][0]) == {
+        "id", "name", "owner", "kit_status", "colors_count", "has_logo",
+        "generation_count", "created_at",
+    }
 
 
 @pytest.mark.parametrize(
     ("page", "per_page", "expected"),
     [
-        (1, 24, (0, 23)),
-        (2, 24, (24, 47)),
-        (3, 10, (20, 29)),
+        (1, 24, (0, 24)),
+        (2, 24, (24, 24)),
+        (3, 10, (20, 10)),
+        (1, 100, (0, 100)),
     ],
 )
-def test_brands_range_returns_inclusive_postgrest_range(page, per_page, expected):
-    assert _brands_range(page, per_page) == expected
+def test_page_bounds_return_offset_and_limit(page, per_page, expected):
+    assert _page_bounds(page, per_page) == expected
 
 
 @pytest.mark.parametrize(
     ("page", "per_page"),
     [
         (0, 24),
+        (-1, 24),
         (1, 0),
         (1, 101),
     ],
 )
-def test_brands_range_rejects_out_of_bounds_values(page, per_page):
+def test_page_bounds_reject_out_of_bounds_values(page, per_page):
     with pytest.raises(HTTPException) as exc:
-        _brands_range(page, per_page)
+        _page_bounds(page, per_page)
 
+    assert exc.value.status_code == 400
     assert exc.value.detail["error"]["code"] == "VALIDATION_ERROR"

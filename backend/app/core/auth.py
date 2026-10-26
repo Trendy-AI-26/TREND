@@ -8,6 +8,7 @@ from pydantic import BaseModel
 
 from app.config import settings
 from app.core.security import SESSION_COOKIE_NAME, TokenError, decode_session_token
+from app.repositories import users as users_repo
 
 logger = logging.getLogger(__name__)
 
@@ -85,6 +86,22 @@ def get_current_user(
             status.HTTP_401_UNAUTHORIZED,
             "INVALID_TOKEN",
             "Token payload missing required claims",
+        )
+
+    # Deleted and admin-disabled accounts lose access immediately, even with a
+    # token that has not expired yet.
+    account = users_repo.account_status(user_id)
+    if account == "missing":
+        raise _auth_error(
+            status.HTTP_401_UNAUTHORIZED,
+            "INVALID_TOKEN",
+            "Invalid authentication token",
+        )
+    if account == "disabled":
+        raise _auth_error(
+            status.HTTP_403_FORBIDDEN,
+            "ACCOUNT_DISABLED",
+            "This account has been disabled.",
         )
 
     return User(id=user_id, email=email, access_token=token)

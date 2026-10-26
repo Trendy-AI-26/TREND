@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { useTranslations } from 'next-intl'
@@ -17,6 +17,11 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  const [disabled, setDisabled] = useState(false)
+
+  useEffect(() => {
+    setDisabled(new URLSearchParams(window.location.search).get('disabled') === '1')
+  }, [])
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -43,6 +48,7 @@ export default function LoginPage() {
   return (
     <AuthShell eyebrow={t('loginEyebrow')} title={t('loginTitle')} subtitle={t('loginDescription')}>
       <form onSubmit={handleSubmit} className="space-y-4">
+        {disabled && !error && <div role="alert" className="rounded-xl bg-red-50 px-4 py-3 text-sm text-[#7A1521]">{t('accountDisabled')}</div>}
         {error && <div role="alert" className="rounded-xl bg-red-50 px-4 py-3 text-sm text-[#7A1521]">{error}</div>}
         <div>
           <label htmlFor="email" className="mb-2 block text-[12px] font-bold uppercase tracking-[0.04em] text-[#424242]">{t('email')}</label>
