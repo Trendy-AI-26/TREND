@@ -26,6 +26,16 @@ os.environ.update(TEST_ENV)
 from app.main import app  # noqa: E402
 
 
+@pytest.fixture(autouse=True)
+def _accounts_are_active(monkeypatch):
+    """get_current_user looks the account up on every request; unit tests have
+    no database, so every token's user counts as existing and active unless a
+    test overrides ``app.repositories.users.account_status`` itself."""
+    from app.repositories import users
+
+    monkeypatch.setattr(users, "account_status", lambda user_id: "active")
+
+
 @pytest.fixture
 def client():
     return TestClient(app)

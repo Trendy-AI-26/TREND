@@ -14,6 +14,9 @@ from threading import Barrier
 
 import pytest
 
+# Bound at import time: the autouse conftest fixture stubs the module attribute.
+from app.repositories.users import account_status as _REAL_ACCOUNT_STATUS
+
 TEST_DATABASE_URL = os.environ.get("TEST_DATABASE_URL")
 
 pytestmark = pytest.mark.skipif(
@@ -95,6 +98,7 @@ def test_baseline_applies_once_then_is_a_noop(pg):
         "0002_kit_complete_without_tone.sql",
         "0003_brand_kit_four_colors.sql",
         "0003_serialize_credit_reservation_transitions.sql",
+        "0004_admin_controls.sql",
     ]
     assert pg["second"] == []
 
@@ -714,10 +718,12 @@ def test_admin_views(pg):
 
     stats = admin.get_stats()
     assert stats["total_accounts"] >= 1 and stats["total_brands"] >= 1
-    rows, total = admin.list_brands(0, 2)
+    rows, total = admin.list_brands(offset=0, limit=2)
     assert total >= len(rows) >= 1
-    assert {"id", "name", "owner_user_id", "owner_full_name", "kit_status", "generation_count",
-            "has_active_key", "created_at"} <= set(rows[0])
+    assert {"id", "name", "owner_id", "owner_email", "owner_full_name", "kit_status",
+            "colors_count", "has_logo", "generation_count", "created_at"} <= set(rows[0])
+    rows, total = admin.list_brands(offset=0, limit=5, q="admin visible")
+    assert total >= 1 and any(r["name"] == "Admin Visible" for r in rows)
 
 
 def test_deleting_a_user_cascades(pg):
@@ -732,3 +738,301 @@ def test_deleting_a_user_cascades(pg):
     for table, column in (("profiles", "user_id"), ("brands", "owner_user_id"), ("credit_accounts", "user_id")):
         assert db.fetch_one(f"SELECT 1 AS x FROM {table} WHERE {column} = CAST(:u AS uuid)", {"u": owner}) is None
     assert db.fetch_one("SELECT 1 AS x FROM generations WHERE brand_id = CAST(:b AS uuid)", {"b": brand["id"]}) is None
+
+
+# ---------------------------------------------------------------- 0004 admin
+
+
+def _audit_for(admin_id, action, target_type="user", target_id=None, **details):
+    return {
+        "admin_user_id": admin_id,
+        "admin_email": "admin@example.com",
+        "action": action,
+        "target_type": target_type,
+        "target_id": target_id,
+        "details": details,
+    }
+
+
+def test_migration_0004_schema(pg):
+    from app import db
+
+    column = db.fetch_one(
+        """
+        SELECT data_type, is_nullable FROM information_schema.columns
+        WHERE table_name = 'users' AND column_name = 'disabled_at'
+        """
+    )
+    assert column == {"data_type": "timestamp with time zone", "is_nullable": "YES"}
+
+    columns = {
+        row["column_name"]: row
+        for row in db.fetch_all(
+            """
+            SELECT column_name, is_nullable, column_default FROM information_schema.columns
+            WHERE table_name = 'admin_audit_log'
+            """
+        )
+    }
+    assert set(columns) == {
+        "id", "admin_user_id", "admin_email", "action", "target_type", "target_id",
+        "details", "created_at",
+    }
+    assert columns["admin_user_id"]["is_nullable"] == "YES"
+    assert columns["target_id"]["is_nullable"] == "YES"
+    assert columns["admin_email"]["is_nullable"] == "NO"
+    assert "gen_random_uuid" in columns["id"]["column_default"]
+
+    fk = db.fetch_one(
+        """
+        SELECT confdeltype FROM pg_constraint
+        WHERE conrelid = 'admin_audit_log'::regclass AND contype = 'f'
+        """
+    )
+    assert fk["confdeltype"] == "n"  # ON DELETE SET NULL
+
+    indexes = {r["indexname"] for r in db.fetch_all("SELECT indexname FROM pg_indexes")}
+    assert {
+        "idx_admin_audit_log_created", "idx_generations_created_at",
+        "idx_generations_status_created", "idx_idempotency_records_generation",
+    } <= indexes
+
+    # The trend FK neither blocks nor cascades a trend delete.
+    trend_fk = db.fetch_one(
+        """
+        SELECT confdeltype FROM pg_constraint
+        WHERE conrelid = 'generations'::regclass AND contype = 'f'
+          AND confrelid = 'trends'::regclass
+        """
+    )
+    assert trend_fk["confdeltype"] == "n"
+
+
+def test_admin_grant_generations_creates_rows_like_the_quota_functions(pg):
+    from app import db
+    from app.repositories import admin
+
+    admin_id, owner = _new_user(), _new_user()
+
+    result = admin.grant_generations(
+        owner, generations=5, credits=5, idempotency_key=f"admin-grant:{uuid.uuid4()}",
+        metadata={"note": "promo"}, audit=_audit_for(admin_id, "user.grant_generations", target_id=owner),
+    )
+
+    # No rows existed: they are created with the beta defaults (42), then raised.
+    assert (result["generation_limit"], result["credit_balance"]) == (47, 47)
+    quota = db.fetch_one("SELECT * FROM user_generation_quotas WHERE user_id = CAST(:u AS uuid)", {"u": owner})
+    account = db.fetch_one("SELECT * FROM credit_accounts WHERE user_id = CAST(:u AS uuid)", {"u": owner})
+    assert (quota["generation_limit"], quota["reserved"], quota["consumed"]) == (47, 0, 0)
+    assert (account["balance"], account["reserved"]) == (47, 0)
+    ledger = db.fetch_all(
+        "SELECT * FROM credit_ledger WHERE user_id = CAST(:u AS uuid) AND operation = 'grant'", {"u": owner}
+    )
+    assert len(ledger) == 1 and ledger[0]["amount"] == 5
+    assert ledger[0]["metadata"] == {"note": "promo", "generations": 5, "credits": 5}
+    audit = db.fetch_all(
+        "SELECT * FROM admin_audit_log WHERE target_id = :t AND action = 'user.grant_generations'", {"t": owner}
+    )
+    assert len(audit) == 1 and audit[0]["admin_user_id"] == admin_id
+
+    assert admin.grant_generations(
+        str(uuid.uuid4()), generations=1, credits=1, idempotency_key="admin-grant:x",
+        metadata={}, audit=_audit_for(admin_id, "user.grant_generations"),
+    ) is None
+
+
+def test_admin_grant_generations_unblocks_an_exhausted_user(pg):
+    from app import db
+    from app.repositories import admin
+    from app.services import credits, quota
+
+    admin_id, owner = _new_user(), _new_user()
+    brand = _new_brand(owner)
+    open_generation, blocked = _new_generation(brand["id"], owner), _new_generation(brand["id"], owner)
+    # One open reservation on each side, then exhaust both the quota and the credits.
+    quota.reserve_generation_slot(user_id=owner, generation_id=open_generation["id"])
+    reservation = credits.reserve_credits(user_id=owner, generation_id=open_generation["id"])
+    db.execute(
+        "UPDATE user_generation_quotas SET consumed = generation_limit - reserved WHERE user_id = CAST(:u AS uuid)",
+        {"u": owner},
+    )
+    db.execute(
+        "UPDATE credit_accounts SET balance = reserved WHERE user_id = CAST(:u AS uuid)", {"u": owner}
+    )
+    with pytest.raises(quota.QuotaError) as limit:
+        quota.reserve_generation_slot(user_id=owner, generation_id=blocked["id"])
+    assert limit.value.code == "GENERATION_LIMIT_REACHED"
+    with pytest.raises(credits.CreditsError):
+        credits.reserve_credits(user_id=owner, generation_id=blocked["id"])
+
+    admin.grant_generations(
+        owner, generations=1, credits=1, idempotency_key=f"admin-grant:{uuid.uuid4()}",
+        metadata={}, audit=_audit_for(admin_id, "user.grant_generations", target_id=owner),
+    )
+
+    # Open reservations are untouched and still settle normally.
+    q = db.fetch_one("SELECT * FROM user_generation_quotas WHERE user_id = CAST(:u AS uuid)", {"u": owner})
+    assert q["reserved"] == 1 and q["consumed"] + q["reserved"] == q["generation_limit"] - 1
+    quota.reserve_generation_slot(user_id=owner, generation_id=blocked["id"])
+    credits.reserve_credits(user_id=owner, generation_id=blocked["id"])
+    credits.commit_credits(reservation)
+    quota.commit_generation_slot(user_id=owner, generation_id=open_generation["id"])
+    account = db.fetch_one("SELECT * FROM credit_accounts WHERE user_id = CAST(:u AS uuid)", {"u": owner})
+    assert account["balance"] - account["reserved"] == 0
+
+
+def test_admin_user_actions_in_postgres(pg):
+    from app import db
+    from app.repositories import admin, users
+    from app.services import quota
+
+    account_status = _REAL_ACCOUNT_STATUS  # conftest stubs the module attribute
+
+    admin_id, owner = _new_user(), _new_user()
+    audit = _audit_for(admin_id, "user.action", target_id=owner)
+
+    assert account_status(owner) == "active"
+    assert admin.set_user_disabled(owner, True, audit)["disabled_at"] is not None
+    assert account_status(owner) == "disabled"
+    assert users.get_user_by_id(owner)["disabled_at"] is not None
+    assert admin.list_users(offset=0, limit=100, status="disabled")[1] >= 1
+    admin.set_user_disabled(owner, False, audit)
+    assert account_status(owner) == "active"
+    assert account_status(str(uuid.uuid4())) == "missing"
+
+    assert admin.verify_user_email(owner, audit)["email_verified_at"] is not None
+
+    before = db.fetch_one("SELECT trial_ends_at FROM profiles WHERE user_id = CAST(:u AS uuid)", {"u": owner}, raw=True)
+    admin.extend_trial(owner, 10, audit)
+    after = db.fetch_one("SELECT trial_ends_at FROM profiles WHERE user_id = CAST(:u AS uuid)", {"u": owner}, raw=True)
+    assert after["trial_ends_at"] - before["trial_ends_at"] == timedelta(days=10)
+
+    brand = _new_brand(owner)
+    first, second = _new_generation(brand["id"], owner), _new_generation(brand["id"], owner)
+    quota.reserve_generation_slot(user_id=owner, generation_id=first["id"])
+    quota.commit_generation_slot(user_id=owner, generation_id=first["id"])
+    quota.reserve_generation_slot(user_id=owner, generation_id=second["id"])
+    assert admin.reset_daily_usage(owner, audit)["previous_consumed"] == 1
+    today = db.fetch_one(
+        "SELECT consumed, reserved FROM generation_daily_usage "
+        "WHERE user_id = CAST(:u AS uuid) AND usage_date = (now() AT TIME ZONE 'utc')::date",
+        {"u": owner},
+    )
+    assert (today["consumed"], today["reserved"]) == (0, 1)
+    quota.commit_generation_slot(user_id=owner, generation_id=second["id"])  # still settles
+
+    row = admin.get_user(owner)
+    assert (row["brands_count"], row["generations_count"]) == (1, 2)
+    assert row["today_limit"] == 3 and row["quota_limit"] == 42
+    count = db.fetch_one(
+        "SELECT count(*) AS n FROM admin_audit_log WHERE target_id = :t", {"t": owner}
+    )["n"]
+    assert count == 5  # disable, enable, verify, extend trial, reset daily usage
+
+
+def test_admin_lists_overview_and_needs_review(pg):
+    from app import db
+    from app.repositories import admin
+    from app.repositories import generations as gens
+
+    owner = _new_user()
+    brand = _new_brand(owner, "Review Brand")
+    stuck = _new_generation(brand["id"], owner)
+    db.execute(
+        "UPDATE generations SET created_at = now() - interval '11 minutes' WHERE id = CAST(:g AS uuid)",
+        {"g": stuck["id"]},
+    )
+    unknown = _new_generation(brand["id"], owner)
+    record = gens.create_idempotency(owner, "image_generation", f"r-{uuid.uuid4()}", "h", generation_id=unknown["id"])
+    gens.save_checkpoint(record["id"], {"phase": "outcome_unknown"})
+    failed = _new_generation(brand["id"], owner)
+    closed = gens.create_idempotency(owner, "image_generation", f"c-{uuid.uuid4()}", "h", generation_id=failed["id"])
+    gens.save_checkpoint(closed["id"], {"phase": "cleanup_pending"})
+    gens.mark_failed(failed["id"], "ERR", "boom", datetime.now(timezone.utc).isoformat())
+    gens.finish_idempotency(closed["id"], "failed", 502)  # settled: no longer needs review
+    fresh = _new_generation(brand["id"], owner)
+
+    rows, total = admin.list_generations(offset=0, limit=100, q="review brand")
+    flags = {r["id"]: r["needs_review"] for r in rows}
+    assert total == 4
+    assert flags == {stuck["id"]: True, unknown["id"]: True, failed["id"]: False, fresh["id"]: False}
+    rows, _ = admin.list_generations(offset=0, limit=100, needs_review=True, q="review brand")
+    assert {r["id"] for r in rows} == {stuck["id"], unknown["id"]}
+    rows, _ = admin.list_generations(
+        offset=0, limit=100, status="failed", q="review brand",
+        date_from=datetime.now(timezone.utc).date(), date_to=datetime.now(timezone.utc).date(),
+    )
+    assert [r["id"] for r in rows] == [failed["id"]]
+
+    counts = admin.get_overview_counts()
+    assert counts["users_total"] >= 1 and counts["generations_failed"] >= 1
+    daily = admin.get_daily_outcomes(30)
+    assert len(daily) == 30
+    assert daily[-1]["date"] == datetime.now(timezone.utc).date().isoformat()
+    assert daily[-1]["failed"] >= 1
+    assert any(r["id"] == unknown["id"] for r in admin.list_needs_review(20))
+    assert any(r["id"] == failed["id"] for r in admin.list_recent_failures(10))
+
+    users_page, users_total = admin.list_users(offset=0, limit=5)
+    assert users_total >= 1 and len(users_page) <= 5
+
+
+def test_admin_delete_user_returns_storage_paths(pg):
+    from app import db
+    from app.repositories import admin
+    from app.repositories import generations as gens
+
+    admin_id, owner = _new_user(), _new_user()
+    brand = _new_brand(owner)
+    generation = _new_generation(brand["id"], owner)
+    image = f"brands/{brand['id']}/generations/{generation['id']}.png"
+    gens.mark_succeeded(generation["id"], image, "req", datetime.now(timezone.utc).isoformat())
+
+    assert _REAL_ACCOUNT_STATUS(owner) == "active"
+    removed = admin.delete_user(owner, _audit_for(admin_id, "user.delete", target_id=owner))
+    assert _REAL_ACCOUNT_STATUS(owner) == "missing"  # their live tokens now get 401
+
+    assert image in removed["brand_files"]
+    assert db.fetch_one("SELECT 1 AS x FROM users WHERE id = CAST(:u AS uuid)", {"u": owner}) is None
+    assert db.fetch_one("SELECT 1 AS x FROM brands WHERE id = CAST(:b AS uuid)", {"b": brand["id"]}) is None
+    row = db.fetch_one("SELECT details FROM admin_audit_log WHERE action = 'user.delete' AND target_id = :t", {"t": owner})
+    assert row["details"]["brands"] == 1
+    assert admin.delete_user(owner, _audit_for(admin_id, "user.delete")) is None
+
+
+def test_admin_trend_crud_keeps_generation_snapshots(pg):
+    from app import db
+    from app.repositories import admin
+
+    admin_id, owner = _new_user(), _new_user()
+    audit = _audit_for(admin_id, "trend.create", "trend")
+    slug = f"t-{uuid.uuid4().hex[:8]}"
+    trend = admin.create_trend(
+        {"name": "Trend", "slug": slug, "keywords": ["a"], "popularity_score": 10, "status": "active"},
+        audit,
+    )
+    assert trend["keywords"] == ["a"] and trend["region"] == []
+    with pytest.raises(db.IntegrityError) as taken:
+        admin.create_trend({"name": "Other", "slug": slug}, audit)
+    assert db.is_unique_violation(taken.value)
+
+    updated = admin.update_trend(trend["id"], {"status": "inactive", "keywords": ["b"]}, audit)
+    assert (updated["status"], updated["keywords"]) == ("inactive", ["b"])
+    rows, total = admin.list_trends(offset=0, limit=10, q=slug)
+    assert total == 1 and rows[0]["id"] == trend["id"]
+
+    brand = _new_brand(owner)
+    generation = _new_generation(
+        brand["id"], owner, trend_id=trend["id"], trend_snapshot={"name": "Trend"}, trend_applied=True
+    )
+    deleted = admin.delete_trend(trend["id"], audit)
+    assert deleted["id"] == trend["id"]
+    row = db.fetch_one(
+        "SELECT trend_id, trend_snapshot FROM generations WHERE id = CAST(:g AS uuid)", {"g": generation["id"]}
+    )
+    assert row == {"trend_id": None, "trend_snapshot": {"name": "Trend"}}
+    assert admin.delete_trend(trend["id"], audit) is None
+    assert admin.update_trend(trend["id"], {"status": "active"}, audit) is None
+
+    entries, total = admin.list_audit_log(offset=0, limit=100)
+    assert total >= 3 and {"trend.create"} <= {e["action"] for e in entries}

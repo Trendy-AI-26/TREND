@@ -243,6 +243,9 @@ def login(email: str, password: str) -> dict[str, Any]:
         raise AuthError(401, "INVALID_CREDENTIALS", "Invalid email or password.")
     if not security.verify_password(password, user["password_hash"]):
         raise AuthError(401, "INVALID_CREDENTIALS", "Invalid email or password.")
+    # Checked only after the password, so it reveals nothing about unknown accounts.
+    if user.get("disabled_at") is not None:
+        raise AuthError(403, "ACCOUNT_DISABLED", "This account has been disabled.")
     if user["email_verified_at"] is None and settings.AUTH_REQUIRE_EMAIL_VERIFICATION:
         raise AuthError(
             403,

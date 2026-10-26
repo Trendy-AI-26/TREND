@@ -7,15 +7,38 @@ auth service compares timestamps.
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 from uuid import UUID
 
 from app import db
 
 _USER_COLUMNS = """
     u.id, u.email, u.password_hash, u.email_verified_at, u.created_at,
-    p.full_name
+    u.disabled_at, p.full_name
 """
+
+
+AccountStatus = Literal["active", "disabled", "missing"]
+
+
+def account_status(user_id: str | UUID) -> AccountStatus:
+    """``active``, ``disabled`` (by an admin) or ``missing`` (no such user).
+
+    One primary-key lookup; used by every authenticated request. An id that is
+    not a UUID cannot exist, so it is ``missing`` without a query.
+    """
+    try:
+        canonical = str(UUID(str(user_id)))
+    except ValueError:
+        return "missing"
+    row = db.fetch_one(
+        "SELECT disabled_at IS NOT NULL AS disabled FROM users WHERE id = CAST(:user_id AS uuid)",
+        {"user_id": canonical},
+        raw=True,
+    )
+    if row is None:
+        return "missing"
+    return "disabled" if row["disabled"] else "active"
 
 
 def get_user_by_email(email: str) -> dict[str, Any] | None:

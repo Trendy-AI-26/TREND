@@ -136,6 +136,10 @@ export async function apiRequest<T = unknown>(
         // JSON parse failed, use default message
       }
     }
+    if (response.status === 403 && code === 'ACCOUNT_DISABLED' && redirectOn401 && typeof window !== 'undefined') {
+      await logout()
+      window.location.href = '/login?disabled=1'
+    }
     throw new ApiError(message, code, requestId, response.status)
   }
 

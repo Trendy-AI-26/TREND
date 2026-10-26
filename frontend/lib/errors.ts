@@ -8,6 +8,12 @@ type Translate = (key: string) => string
 
 /** Backend `error.code` values that have a translation under `errors.codes`. */
 const CODE_KEYS: Record<string, string> = {
+  ACCOUNT_DISABLED: 'codes.ACCOUNT_DISABLED',
+  ADMIN_TARGET_FORBIDDEN: 'codes.ADMIN_TARGET_FORBIDDEN',
+  USER_NOT_FOUND: 'codes.USER_NOT_FOUND',
+  TREND_NOT_FOUND: 'codes.TREND_NOT_FOUND',
+  TREND_SLUG_TAKEN: 'codes.TREND_SLUG_TAKEN',
+  TREND_IN_USE: 'codes.TREND_IN_USE',
   VALIDATION_ERROR: 'codes.VALIDATION_ERROR',
   DATA_CONSTRAINT_VIOLATION: 'codes.DATA_CONSTRAINT_VIOLATION',
   BRAND_NOT_FOUND: 'codes.BRAND_NOT_FOUND',

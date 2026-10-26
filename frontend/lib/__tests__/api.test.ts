@@ -10,11 +10,10 @@ function json(body: unknown, status = 200) {
   })
 }
 
-// jsdom cannot navigate; replace window.location with a plain object.
-const realLocation = window.location
+// jsdom's location is non-configurable; stub window rather than redefining it.
 function stubLocation() {
   const stub = { href: 'http://localhost/dashboard' }
-  Object.defineProperty(window, 'location', { configurable: true, value: stub })
+  vi.stubGlobal('window', { location: stub })
   return stub
 }
 
@@ -25,7 +24,6 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.unstubAllGlobals()
-  Object.defineProperty(window, 'location', { configurable: true, value: realLocation })
 })
 
 describe('apiRequest', () => {
@@ -95,6 +93,33 @@ describe('apiRequest', () => {
       message: 'No access',
       requestId: 'r2',
     })
+  })
+
+  it('logs out disabled accounts and redirects with the disabled flag', async () => {
+    const location = stubLocation()
+    fetchMock
+      .mockResolvedValueOnce(json({ error: { code: 'ACCOUNT_DISABLED', message: 'Disabled' } }, 403))
+      .mockResolvedValueOnce(new Response(null, { status: 204 }))
+    await expect(apiRequest('/admin/users')).rejects.toMatchObject({ code: 'ACCOUNT_DISABLED', status: 403 })
+    expect(fetchMock.mock.calls[1]).toEqual(['/api/auth/logout', { method: 'POST', credentials: 'include' }])
+    expect(location.href).toBe('/login?disabled=1')
+  })
+
+  it('redirects disabled accounts even when logout fails', async () => {
+    const location = stubLocation()
+    fetchMock
+      .mockResolvedValueOnce(json({ error: { code: 'ACCOUNT_DISABLED', message: 'Disabled' } }, 403))
+      .mockRejectedValueOnce(new TypeError('offline'))
+    await expect(apiRequest('/brands')).rejects.toMatchObject({ code: 'ACCOUNT_DISABLED' })
+    expect(location.href).toBe('/login?disabled=1')
+  })
+
+  it('surfaces ACCOUNT_DISABLED on login without redirecting or logging out', async () => {
+    const location = stubLocation()
+    fetchMock.mockResolvedValueOnce(json({ error: { code: 'ACCOUNT_DISABLED', message: 'Disabled' } }, 403))
+    await expect(apiRequest('/auth/login', { redirectOn401: false, method: 'POST' })).rejects.toMatchObject({ code: 'ACCOUNT_DISABLED' })
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(location.href).toBe('http://localhost/dashboard')
   })
 
   it('returns null for 204 responses', async () => {
